@@ -1,0 +1,1 @@
+ALTER TABLE `reminders` ADD `repeat_rule` text DEFAULT 'none' NOT NULL;
