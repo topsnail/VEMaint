@@ -175,6 +175,28 @@ export const assetStatusLogs = sqliteTable(
   })
 );
 
+export const auditLogs = sqliteTable(
+  "audit_logs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    actorUserId: text("actor_user_id"),
+    actorUsername: text("actor_username"),
+    actorRole: text("actor_role"),
+    action: text("action").notNull(),
+    target: text("target"),
+    detail: text("detail", { mode: "json" }).$type<Record<string, unknown> | null>(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    createdIdx: index("audit_logs_created_idx").on(t.createdAt),
+    actionIdx: index("audit_logs_action_idx").on(t.action),
+  }),
+);
+
 export const vehicleLedgers = sqliteTable(
   "vehicle_ledgers",
   {

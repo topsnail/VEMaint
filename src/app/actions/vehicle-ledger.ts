@@ -4,7 +4,8 @@ import { desc, eq } from "drizzle-orm";
 import { createDb } from "@/db";
 import { vehicleLedgers } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { loadAppSettings } from "@/lib/app-settings";
+import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
 import { revalidatePath } from "next/cache";
 
 export type VehicleLedgerInput = {
@@ -77,9 +78,9 @@ export async function getVehicleLedgerById(idRaw: string) {
 }
 
 export async function createVehicleLedger(input: VehicleLedgerInput) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") return { ok: false as const, error: "只读模式不可新增" };
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式不可新增" };
   try {
     const db = createDb(DB);
     validateTruckLoad(input.vehicleType, input.ratedLoad);
@@ -137,9 +138,9 @@ export async function createVehicleLedger(input: VehicleLedgerInput) {
 export async function updateVehicleLedger(idRaw: string, input: VehicleLedgerInput) {
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") return { ok: false as const, error: "只读模式不可编辑" };
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式不可编辑" };
   try {
     const db = createDb(DB);
     validateTruckLoad(input.vehicleType, input.ratedLoad);
@@ -198,9 +199,9 @@ export async function updateVehicleLedger(idRaw: string, input: VehicleLedgerInp
 export async function deleteVehicleLedger(idRaw: string) {
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode !== "admin") return { ok: false as const, error: "仅管理员可删除" };
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canDeleteByRole(role)) return { ok: false as const, error: "仅管理员可删除" };
   const db = createDb(DB);
   await db.delete(vehicleLedgers).where(eq(vehicleLedgers.id, id));
   revalidatePath("/vehicle-ledger");

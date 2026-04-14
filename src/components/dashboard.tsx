@@ -1,17 +1,21 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { Car, Cog, Plus } from "lucide-react";
-import { importAssetsFromCsv } from "@/app/actions/assets";
+import { Car, Cog } from "lucide-react";
 import { escalateReminder, markReminderDone, postponeReminderDays } from "@/app/actions/reminders";
 import Link from "next/link";
 import { AssetCard } from "@/components/asset-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { dueRelativeLabel, relativeDueToneClass } from "@/lib/due-date-ui";
 import { nearestReminderForAsset, urgencyPercent } from "@/lib/reminder-utils";
+import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
+import { PageHeader } from "@/components/page-header";
+import { downloadExcelFromJson } from "@/lib/excel-export";
+import { AssetImportSheet } from "@/components/asset-import-sheet";
 
 export type AssetRow = {
   id: string;
@@ -76,10 +80,10 @@ function alertLevel(dueDate: string, nowIso: string): AlertLevel {
 }
 
 function alertClass(level: AlertLevel) {
-  if (level === "red") return "border-rose-300 bg-rose-50/70 text-rose-700";
-  if (level === "yellow") return "border-amber-300 bg-amber-50/70 text-amber-700";
-  if (level === "blue") return "border-blue-300 bg-blue-50/70 text-blue-700";
-  return "border-slate-200 bg-white/70 text-slate-600";
+  if (level === "red") return "border-rose-300 bg-rose-50 text-rose-700";
+  if (level === "yellow") return "border-amber-300 bg-amber-50 text-amber-700";
+  if (level === "blue") return "border-blue-300 bg-blue-50 text-blue-700";
+  return "border-slate-200 bg-white text-slate-600";
 }
 
 function alertLabel(level: AlertLevel) {
@@ -340,146 +344,58 @@ export function Dashboard({
   }, [statsRecords]);
   const statsRangeLabel = statsRange === "30d" ? "近30天" : statsRange === "90d" ? "近90天" : "全部";
 
-  function exportStatsCsv() {
-    const lines: string[] = [];
-    lines.push(`统计范围,${statsRangeLabel}`);
-    lines.push("");
-    lines.push("项目,次数,总费用");
-    for (const s of projectStats) {
-      lines.push(`${s.project},${s.count},${s.totalCost.toFixed(2)}`);
-    }
-    lines.push("");
-    lines.push("项目/子类,次数,总费用");
-    for (const s of projectChildStats) {
-      lines.push(`${s.name},${s.count},${s.totalCost.toFixed(2)}`);
-    }
-    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `maintenance-stats-${statsRange}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportAssetsExcel() {
-    const lines = ["name,type,identifier,purchaseDate,status,currentMileage,currentHours"];
-    for (const a of assets) {
-      lines.push(
-        [
-          a.name,
-          a.type,
-          a.identifier,
-          a.purchaseDate ?? "",
-          a.status ?? "",
-          a.currentMileage ?? "",
-          a.currentHours ?? "",
-        ].join(","),
-      );
-    }
-    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "application/vnd.ms-excel;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "assets-export.xls";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function importAssetsCsvPrompt() {
-    const sample = "name,type,identifier,purchaseDate,status\n轻型货车A,车辆,粤A12345,2024-01-01,active";
-    const raw = window.prompt("粘贴 CSV 内容（含表头）", sample);
-    if (!raw?.trim()) return;
-    const res = await importAssetsFromCsv(raw);
-    if (res.ok) window.alert(`导入成功：${res.created} 条`);
-    else window.alert(res.error);
-  }
-
-  async function importAssetsExcelFile(file: File) {
-    const ab = await file.arrayBuffer();
-    const wb = XLSX.read(ab);
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    if (!ws) return;
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
-    const header = ["name", "type", "identifier", "purchaseDate", "status"];
-    const lines = [header.join(",")];
-    for (const r of rows) {
-      lines.push(
-        [
-          String(r.name ?? "").trim(),
-          String(r.type ?? "").trim(),
-          String(r.identifier ?? "").trim(),
-          String(r.purchaseDate ?? "").trim(),
-          String(r.status ?? "").trim(),
-        ].join(","),
-      );
-    }
-    const res = await importAssetsFromCsv(lines.join("\n"));
-    if (res.ok) window.alert(`Excel导入成功：${res.created} 条`);
-    else window.alert(res.error);
+  function exportStatsExcel() {
+    const byProjectRows = projectStats.map((s) => ({ 统计范围: statsRangeLabel, 项目: s.project, 次数: s.count, 总费用: s.totalCost.toFixed(2) }));
+    const byProjectChildRows = projectChildStats.map((s) => ({
+      统计范围: statsRangeLabel,
+      "项目/子类": s.name,
+      次数: s.count,
+      总费用: s.totalCost.toFixed(2),
+    }));
+    downloadExcelFromJson({
+      filename: `maintenance-stats-${statsRange}.xlsx`,
+      sheets: [
+        { name: "项目汇总", rows: byProjectRows },
+        { name: "子类汇总", rows: byProjectChildRows },
+      ],
+    });
   }
 
   return (
     <div className="space-y-8">
       <div>
-        <header className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              {view === "alerts" ? "维保预警" : view === "devices" ? "设备" : "仪表盘"}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {view === "alerts"
+        <header className="mb-10">
+          <PageHeader
+            title={view === "alerts" ? "维保预警" : view === "devices" ? "设备" : "仪表盘"}
+            subtitle={
+              view === "alerts"
                 ? "最近到期的维保任务（首页摘要最多 5 条）"
                 : view === "devices"
                   ? "搜索、筛选与管理台账设备"
-                  : "最近到期的维保预警与设备总览"}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild className="h-8 border border-slate-200 bg-white/80 px-3 text-xs text-slate-800 shadow-sm hover:bg-slate-50">
-              <Link href="/devices/new">
-                <Plus className="h-4 w-4" aria-hidden />
-                新增设备
-              </Link>
-            </Button>
-            <Button asChild className="h-8 border border-slate-200 bg-white/80 px-3 text-xs text-slate-800 shadow-sm hover:bg-slate-50">
-              <Link href="/reminders/new">
-                <Plus className="h-4 w-4" aria-hidden />
-                新增预警
-              </Link>
-            </Button>
-            <Button type="button" className="h-8 border border-slate-200 bg-white/80 px-3 text-xs text-slate-800 shadow-sm hover:bg-slate-50" onClick={exportAssetsExcel}>
-              导出Excel
-            </Button>
-            <Button type="button" className="h-8 border border-slate-200 bg-white/80 px-3 text-xs text-slate-800 shadow-sm hover:bg-slate-50" onClick={importAssetsCsvPrompt}>
-              导入CSV
-            </Button>
-            <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-slate-200 bg-white/80 px-3 text-xs text-slate-800 shadow-sm hover:bg-slate-50">
-              导入Excel
-              <input
-                type="file"
-                className="hidden"
-                accept=".xlsx,.xls"
-                onChange={(e) => {
-                  const f = e.currentTarget.files?.[0];
-                  if (!f) return;
-                  void importAssetsExcelFile(f);
-                  e.currentTarget.value = "";
-                }}
-              />
-            </label>
-          </div>
+                  : "最近到期的维保预警与设备总览"
+            }
+            actions={
+              view === "devices" ? (
+                <>
+                  <Button asChild className="h-8 border border-border bg-card text-xs text-slate-700">
+                    <Link href="/devices/new">新增设备</Link>
+                  </Button>
+                  <AssetImportSheet />
+                </>
+              ) : null
+            }
+          />
         </header>
 
         {view === "full" ? (
           <section className="mb-10 space-y-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-xs text-slate-500">总资产概览</p>
                 <p className="mt-1 text-2xl font-semibold text-slate-900">{assets.length}</p>
                 <p className="mt-1 text-xs text-slate-600">车辆 {assets.filter((a) => a.type === "车辆").length} · 机械 {assets.filter((a) => a.type === "机械").length}</p>
               </div>
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-xs text-slate-500">状态分布</p>
                 <div className="mt-2 flex items-center gap-3">
                   <div
@@ -493,11 +409,11 @@ export function Dashboard({
                   </p>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-xs text-slate-500">本月支出监控</p>
                 <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.monthSpend.toFixed(2)}</p>
               </div>
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-xs text-slate-500">异常指标（逾期）</p>
                 <p className="mt-1 text-2xl font-semibold text-rose-600">{metrics.overdue}</p>
                 <p className="mt-1 text-xs text-slate-600">30天内 {metrics.warning30} · 60天内 {metrics.warning60}</p>
@@ -505,16 +421,16 @@ export function Dashboard({
             </div>
 
             <div className="grid gap-4 xl:grid-cols-3">
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl xl:col-span-2">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm xl:col-span-2">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-800">智能维保时间轴（未来30天）</p>
                   <div className="flex gap-2">
-                    <Button asChild className="h-8 border border-slate-200 bg-white/90 text-xs text-slate-700">
+                    <Button asChild className="h-8 border border-border bg-card text-xs text-slate-700">
                       <Link href="/reminders/new">上传新保单</Link>
                     </Button>
                     <Button
                       type="button"
-                      className="h-8 border border-slate-200 bg-white/90 text-xs text-slate-700"
+                      className="h-8 border border-border bg-card text-xs text-slate-700"
                       onClick={() => {
                         if (!assets[0]) return;
                         router.push(`/devices/${assets[0].id}?entry=maintenance`);
@@ -524,7 +440,7 @@ export function Dashboard({
                     </Button>
                     <Button
                       type="button"
-                      className="h-8 border border-slate-200 bg-white/90 text-xs text-slate-700"
+                      className="h-8 border border-border bg-card text-xs text-slate-700"
                       onClick={() => {
                         if (!assets[0]) return;
                         router.push(`/devices/${assets[0].id}?entry=maintenance`);
@@ -534,7 +450,78 @@ export function Dashboard({
                     </Button>
                   </div>
                 </div>
-                <ul className="space-y-2">
+                <div className="hidden max-h-[min(52vh,440px)] overflow-auto md:block">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                      <TableRow>
+                        <TableHead className="text-xs">设备</TableHead>
+                        <TableHead className="text-xs">任务</TableHead>
+                        <TableHead className="text-xs">到期</TableHead>
+                        <TableHead className="text-xs">剩余</TableHead>
+                        <TableHead className="text-xs">紧急度</TableHead>
+                        <TableHead className="w-[7rem] text-right text-xs">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {forecast30.slice(0, 8).map((r, i) => {
+                        const level = alertLevel(r.dueDate, todayIso);
+                        const a = assets.find((x) => x.id === r.assetId);
+                        const rel = dueRelativeLabel(r.dueDate, todayIso);
+                        const relTone = relativeDueToneClass(level);
+                        return (
+                          <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                            <TableCell className="max-w-[8rem] truncate text-xs font-medium text-slate-900" title={a?.name ?? ""}>
+                              {a?.name ?? "未知设备"}
+                            </TableCell>
+                            <TableCell className="max-w-[7rem] truncate text-xs text-slate-700" title={r.taskType}>
+                              {r.taskType}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-xs text-slate-700">{r.dueDate}</TableCell>
+                            <TableCell className={"whitespace-nowrap text-xs " + relTone}>{rel}</TableCell>
+                            <TableCell className="text-xs">
+                              <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px]">{alertLabel(level)}</span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-wrap justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  disabled={quickPending}
+                                  className="h-7 border border-primary/25 bg-primary px-2 text-[11px] text-primary-foreground hover:bg-primary/90"
+                                  onClick={async () => {
+                                    setQuickPending(true);
+                                    try {
+                                      await markReminderDone(r.id);
+                                    } finally {
+                                      setQuickPending(false);
+                                    }
+                                  }}
+                                >
+                                  完成
+                                </Button>
+                                <Button
+                                  type="button"
+                                  disabled={quickPending}
+                                  className="h-7 border border-border bg-card px-2 text-[11px] text-slate-700"
+                                  onClick={async () => {
+                                    setQuickPending(true);
+                                    try {
+                                      await postponeReminderDays(r.id, 7);
+                                    } finally {
+                                      setQuickPending(false);
+                                    }
+                                  }}
+                                >
+                                  延期7天
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <ul className="space-y-2 md:hidden">
                   {forecast30.slice(0, 8).map((r) => {
                     const overdue = r.dueDate < todayIso;
                     const level = alertLevel(r.dueDate, todayIso);
@@ -546,12 +533,13 @@ export function Dashboard({
                             <span className="font-medium text-slate-900">{a?.name ?? "未知设备"}</span>
                             <span className="ml-2 text-slate-600">{r.taskType} · {r.dueDate}</span>
                             <span className="ml-2 rounded-full border px-1.5 py-0.5 text-[10px]">{alertLabel(level)}</span>
+                            <span className="mt-1 block text-[11px] text-slate-500">{dueRelativeLabel(r.dueDate, todayIso)}</span>
                           </div>
                           <div className="flex gap-2">
                             <Button
                               type="button"
                               disabled={quickPending}
-                              className="h-7 border border-emerald-200 bg-emerald-600 px-2 text-[11px] text-white"
+                              className="h-7 border border-primary/25 bg-primary px-2 text-[11px] text-primary-foreground hover:bg-primary/90"
                               onClick={async () => {
                                 setQuickPending(true);
                                 try {
@@ -566,7 +554,7 @@ export function Dashboard({
                             <Button
                               type="button"
                               disabled={quickPending}
-                              className="h-7 border border-slate-200 bg-white/90 px-2 text-[11px] text-slate-700"
+                              className="h-7 border border-border bg-card px-2 text-[11px] text-slate-700"
                               onClick={async () => {
                                 setQuickPending(true);
                                 try {
@@ -585,11 +573,33 @@ export function Dashboard({
                   })}
                 </ul>
               </div>
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="mb-3 text-sm font-medium text-slate-800">最近动态</p>
-                <ul className="space-y-2 text-xs text-slate-600">
+                <div className="hidden overflow-x-auto md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                        <TableHead className="h-8 text-xs text-slate-600">日期</TableHead>
+                        <TableHead className="h-8 text-xs text-slate-600">类型</TableHead>
+                        <TableHead className="h-8 text-xs text-slate-600">项目</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentActivities.map((r, i) => (
+                        <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                          <TableCell className="whitespace-nowrap px-2 py-2 text-xs text-slate-700">{r.date}</TableCell>
+                          <TableCell className="px-2 py-2 text-xs text-slate-800">{r.type}</TableCell>
+                          <TableCell className="max-w-[12rem] truncate px-2 py-2 text-xs text-slate-600" title={r.project ?? ""}>
+                            {r.project ? `${r.project}${r.projectChild ? `/${r.projectChild}` : ""}` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <ul className="space-y-2 text-xs text-slate-600 md:hidden">
                   {recentActivities.map((r) => (
-                    <li key={r.id} className="rounded-md bg-white/70 px-2 py-1">
+                    <li key={r.id} className="rounded-md bg-slate-50 px-2 py-1">
                       {r.date} · {r.type}
                       {r.project ? ` · ${r.project}${r.projectChild ? `/${r.projectChild}` : ""}` : ""}
                     </li>
@@ -599,7 +609,7 @@ export function Dashboard({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="mb-3 text-sm font-medium text-slate-800">费用构成图（本月）</p>
                 <div className="flex items-center gap-4">
                   <div className="h-28 w-28 rounded-full" style={{ background: `conic-gradient(#0f172a 0 ${monthPie[0]?.pct ?? 0}%, #2563eb 0 ${(monthPie[0]?.pct ?? 0) + (monthPie[1]?.pct ?? 0)}%, #10b981 0 ${(monthPie[0]?.pct ?? 0) + (monthPie[1]?.pct ?? 0) + (monthPie[2]?.pct ?? 0)}%, #f59e0b 0 100%)` }} />
@@ -610,51 +620,51 @@ export function Dashboard({
                   </ul>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="mb-3 text-sm font-medium text-slate-800">维保趋势图（近6个月）</p>
                 <div className="flex h-28 items-end gap-2">
                   {monthTrend.map((m) => (
                     <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
-                      <div className="w-full rounded-t bg-slate-800/80" style={{ height: `${Math.max(8, m.count * 12)}px` }} />
+                      <div className="w-full rounded-t bg-primary" style={{ height: `${Math.max(8, m.count * 12)}px` }} />
                       <span className="text-[10px] text-slate-500">{m.month.slice(5)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
               <p className="mb-3 text-sm font-medium text-slate-800">逾期风险报表（30/60/90天）</p>
               {riskReport.length === 0 ? (
                 <p className="text-xs text-slate-500">暂无高风险资产</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-slate-600">
-                        <th className="px-2 py-2">资产</th>
-                        <th className="px-2 py-2">标识</th>
-                        <th className="px-2 py-2">30天</th>
-                        <th className="px-2 py-2">60天</th>
-                        <th className="px-2 py-2">90天</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {riskReport.map((r) => (
-                        <tr key={r.id} className="border-b border-slate-100 last:border-b-0">
-                          <td className="px-2 py-2 text-slate-800">{r.name}</td>
-                          <td className="px-2 py-2 text-slate-600">{r.identifier}</td>
-                          <td className="px-2 py-2 text-rose-700">{r.due30}</td>
-                          <td className="px-2 py-2 text-amber-700">{r.due60}</td>
-                          <td className="px-2 py-2 text-blue-700">{r.due90}</td>
-                        </tr>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">资产</TableHead>
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">标识</TableHead>
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">30天</TableHead>
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">60天</TableHead>
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">90天</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {riskReport.map((r, i) => (
+                        <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                          <TableCell className="px-2 py-2 text-xs text-slate-800">{r.name}</TableCell>
+                          <TableCell className="px-2 py-2 text-xs text-slate-600">{r.identifier}</TableCell>
+                          <TableCell className="px-2 py-2 text-xs text-rose-700">{r.due30}</TableCell>
+                          <TableCell className="px-2 py-2 text-xs text-amber-700">{r.due60}</TableCell>
+                          <TableCell className="px-2 py-2 text-xs text-blue-700">{r.due90}</TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>
-            <div className="rounded-2xl border border-white/40 bg-white/40 p-4 shadow-sm backdrop-blur-xl">
-              <p className="mb-2 text-sm font-medium text-slate-800">维保质量评价 / MTBF</p>
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <p className="mb-2 text-sm font-medium text-slate-800">维保质量评价 / 平均故障间隔</p>
               <p className="text-xs text-slate-600">
                 按时完成率 {qualityMetrics.onTimeRate}% · 返修率 {qualityMetrics.reworkRate}% · 已关闭故障 {qualityMetrics.resolvedFaults}
               </p>
@@ -670,46 +680,116 @@ export function Dashboard({
             {alertList.length === 0 ? (
               <p className="text-sm text-slate-500">暂无预警，点击「新增预警」或稍后在数据库中维护。</p>
             ) : (
-              alertList.map((r) => {
-                const asset = assets.find((a) => a.id === r.assetId);
-                const pct = urgencyPercent(r.dueDate, reminderWindowDays);
-                const level = alertLevel(r.dueDate, todayIso);
-                const lead = leadDaysForTask(r.taskType, reminderLeadDaysByType);
-                return (
-                  <div
-                    key={r.id}
-                    className={"rounded-xl border p-4 shadow-sm backdrop-blur-md " + alertClass(level)}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <span className="text-slate-900">{asset?.name ?? "未知设备"}</span>
-                      <span className="text-slate-500">
-                        {r.taskType} · {r.dueDate}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs">
-                      <span className="rounded-full border px-1.5 py-0.5">{alertLabel(level)}</span>
-                      <span className="ml-2 rounded-full border px-1.5 py-0.5">提前 {lead} 天</span>
-                      {r.isEscalated ? <span className="ml-2 rounded-full border border-rose-300 px-1.5 py-0.5 text-rose-700">已升级</span> : null}
-                    </div>
-                    <div className="mt-3">
-                      <Progress value={pct} />
-                    </div>
-                    {!r.isNotified && !r.isEscalated ? (
-                      <div className="mt-3">
-                        <Button
-                          type="button"
-                          className="h-7 border border-rose-200 bg-white/90 px-2 text-xs text-rose-700"
-                          onClick={async () => {
-                            await escalateReminder(r.id);
-                          }}
-                        >
-                          升级通知
-                        </Button>
+              <>
+                <div className="hidden max-h-[min(60vh,480px)] overflow-auto rounded-2xl border border-border bg-card p-3 shadow-sm md:block">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                      <TableRow>
+                        <TableHead className="text-xs text-slate-600">设备</TableHead>
+                        <TableHead className="text-xs text-slate-600">任务</TableHead>
+                        <TableHead className="text-xs text-slate-600">到期</TableHead>
+                        <TableHead className="text-xs text-slate-600">剩余</TableHead>
+                        <TableHead className="text-xs text-slate-600">紧急度</TableHead>
+                        <TableHead className="text-xs text-slate-600">提醒策略</TableHead>
+                        <TableHead className="w-24 text-xs text-slate-600">进度</TableHead>
+                        <TableHead className="w-[6.5rem] text-right text-xs text-slate-600">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {alertList.map((r, i) => {
+                        const asset = assets.find((a) => a.id === r.assetId);
+                        const pct = urgencyPercent(r.dueDate, reminderWindowDays);
+                        const level = alertLevel(r.dueDate, todayIso);
+                        const lead = leadDaysForTask(r.taskType, reminderLeadDaysByType);
+                        const rel = dueRelativeLabel(r.dueDate, todayIso);
+                        const relTone = relativeDueToneClass(level);
+                        return (
+                          <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                            <TableCell className="max-w-[9rem] truncate text-xs font-medium text-slate-900" title={asset?.name ?? ""}>
+                              {asset?.name ?? "未知设备"}
+                            </TableCell>
+                            <TableCell className="max-w-[8rem] truncate text-xs text-slate-800" title={r.taskType}>
+                              {r.taskType}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-xs text-slate-700">{r.dueDate}</TableCell>
+                            <TableCell className={"whitespace-nowrap text-xs " + relTone}>{rel}</TableCell>
+                            <TableCell className="text-xs">
+                              <span className="rounded-full border border-slate-200 px-1.5 py-0.5">{alertLabel(level)}</span>
+                            </TableCell>
+                            <TableCell className="max-w-[10rem] text-xs text-slate-600">
+                              提前 {lead} 天
+                              {r.isEscalated ? <span className="ml-1 text-rose-600">·已升级</span> : null}
+                            </TableCell>
+                            <TableCell>
+                              <Progress value={pct} className="h-1.5 w-full max-w-[4.5rem]" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {!r.isNotified && !r.isEscalated ? (
+                                <Button
+                                  type="button"
+                                  className="h-7 border border-rose-200 bg-white px-2 text-[11px] text-rose-700"
+                                  onClick={async () => {
+                                    await escalateReminder(r.id);
+                                  }}
+                                >
+                                  升级通知
+                                </Button>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="space-y-4 md:hidden">
+                  {alertList.map((r) => {
+                    const asset = assets.find((a) => a.id === r.assetId);
+                    const pct = urgencyPercent(r.dueDate, reminderWindowDays);
+                    const level = alertLevel(r.dueDate, todayIso);
+                    const lead = leadDaysForTask(r.taskType, reminderLeadDaysByType);
+                    return (
+                      <div
+                        key={r.id}
+                        className={"rounded-xl border p-4 shadow-sm " + alertClass(level)}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <span className="text-slate-900">{asset?.name ?? "未知设备"}</span>
+                          <span className="text-slate-500">
+                            {r.taskType} · {r.dueDate}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-600">{dueRelativeLabel(r.dueDate, todayIso)}</p>
+                        <div className="mt-1 text-xs">
+                          <span className="rounded-full border px-1.5 py-0.5">{alertLabel(level)}</span>
+                          <span className="ml-2 rounded-full border px-1.5 py-0.5">提前 {lead} 天</span>
+                          {r.isEscalated ? (
+                            <span className="ml-2 rounded-full border border-rose-300 px-1.5 py-0.5 text-rose-700">已升级</span>
+                          ) : null}
+                        </div>
+                        <div className="mt-3">
+                          <Progress value={pct} />
+                        </div>
+                        {!r.isNotified && !r.isEscalated ? (
+                          <div className="mt-3">
+                            <Button
+                              type="button"
+                              className="h-7 border border-rose-200 bg-white px-2 text-xs text-rose-700"
+                              onClick={async () => {
+                                await escalateReminder(r.id);
+                              }}
+                            >
+                              升级通知
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })
+                    );
+                  })}
+                </div>
+              </>
             )}
           </section>
         )}
@@ -719,59 +799,79 @@ export function Dashboard({
           {view === "full" ? <h2 className="mb-6 text-lg font-medium text-slate-900">设备</h2> : null}
           {records.length > 0 ? (
             <div className="mb-6 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+              <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium text-slate-800">维保项目汇总（{statsRangeLabel}）</p>
                   <div className="flex flex-wrap gap-1">
                     <Button
                       type="button"
-                      className={"h-7 px-2 text-xs " + (statsRange === "30d" ? "bg-slate-900 text-white" : "bg-white/90 text-slate-700")}
+                      className={"h-7 px-2 text-xs " + (statsRange === "30d" ? "bg-primary text-primary-foreground" : "bg-card text-slate-700")}
                       onClick={() => setStatsRange("30d")}
                     >
                       30天
                     </Button>
                     <Button
                       type="button"
-                      className={"h-7 px-2 text-xs " + (statsRange === "90d" ? "bg-slate-900 text-white" : "bg-white/90 text-slate-700")}
+                      className={"h-7 px-2 text-xs " + (statsRange === "90d" ? "bg-primary text-primary-foreground" : "bg-card text-slate-700")}
                       onClick={() => setStatsRange("90d")}
                     >
                       90天
                     </Button>
                     <Button
                       type="button"
-                      className={"h-7 px-2 text-xs " + (statsRange === "all" ? "bg-slate-900 text-white" : "bg-white/90 text-slate-700")}
+                      className={"h-7 px-2 text-xs " + (statsRange === "all" ? "bg-primary text-primary-foreground" : "bg-card text-slate-700")}
                       onClick={() => setStatsRange("all")}
                     >
                       全部
                     </Button>
-                    <Button type="button" className="h-7 border border-slate-200 bg-white/90 px-2 text-xs text-slate-700" onClick={exportStatsCsv}>
-                      导出CSV
+                    <Button type="button" className="h-7 border border-border bg-card px-2 text-xs text-slate-700" onClick={exportStatsExcel}>
+                      导出Excel
                     </Button>
                   </div>
                 </div>
-                <ul className="space-y-1.5 text-xs text-slate-600">
-                  {projectStats.slice(0, 6).map((s) => (
-                    <li key={s.project} className="flex items-center justify-between gap-2">
-                      <span className="truncate">{s.project}</span>
-                      <span className="shrink-0 text-slate-700">
-                        {s.count} 次 · {s.totalCost.toFixed(2)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="max-h-52 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">维保项目</TableHead>
+                        <TableHead className="h-8 px-2 text-right text-xs text-slate-600">次数 / 费用</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projectStats.slice(0, 6).map((s, i) => (
+                        <TableRow key={s.project} className={zebraTableRowClass(i)}>
+                          <TableCell className="max-w-[10rem] truncate px-2 py-2 text-xs font-medium text-slate-800">{s.project}</TableCell>
+                          <TableCell className="whitespace-nowrap px-2 py-2 text-right text-xs text-slate-700">
+                            {s.count} 次 · {s.totalCost.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
-              <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md">
-                <p className="mb-2 text-sm font-medium text-slate-800">子类汇总（Top 6）</p>
-                <ul className="space-y-1.5 text-xs text-slate-600">
-                  {projectChildStats.map((s) => (
-                    <li key={s.name} className="flex items-center justify-between gap-2">
-                      <span className="truncate">{s.name}</span>
-                      <span className="shrink-0 text-slate-700">
-                        {s.count} 次 · {s.totalCost.toFixed(2)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+              <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <p className="mb-2 text-sm font-medium text-slate-800">子类汇总（前 6 项）</p>
+                <div className="max-h-52 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                        <TableHead className="h-8 px-2 text-xs text-slate-600">子类</TableHead>
+                        <TableHead className="h-8 px-2 text-right text-xs text-slate-600">次数 / 费用</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projectChildStats.map((s, i) => (
+                        <TableRow key={s.name} className={zebraTableRowClass(i)}>
+                          <TableCell className="max-w-[10rem] truncate px-2 py-2 text-xs font-medium text-slate-800">{s.name}</TableCell>
+                          <TableCell className="whitespace-nowrap px-2 py-2 text-right text-xs text-slate-700">
+                            {s.count} 次 · {s.totalCost.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
           ) : null}
@@ -792,7 +892,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (typeFilter === "all" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setTypeFilter("all")}
@@ -802,7 +902,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (typeFilter === "车辆" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setTypeFilter("车辆")}
@@ -812,7 +912,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (typeFilter === "机械" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setTypeFilter("机械")}
@@ -824,7 +924,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (statusFilter === "all" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setStatusFilter("all")}
@@ -834,7 +934,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (statusFilter === "active" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setStatusFilter("active")}
@@ -844,7 +944,7 @@ export function Dashboard({
                   <Button
                     type="button"
                     className={
-                      "h-9 border border-slate-200 bg-white/80 px-3 text-sm text-slate-700 hover:bg-slate-50 " +
+                      "h-8 border border-border bg-card px-3 text-sm text-slate-700 hover:bg-slate-50 " +
                       (statusFilter === "inactive" ? "ring-1 ring-slate-300/60" : "")
                     }
                     onClick={() => setStatusFilter("inactive")}
@@ -857,32 +957,80 @@ export function Dashboard({
               {filteredAssets.length === 0 ? (
                 <p className="text-sm text-slate-500">没有匹配的设备。</p>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {pagedAssets.map((a) => {
-                const nextR = nearestReminderForAsset(a.id, remindersByAsset);
-                const last = (recordsByAsset.get(a.id) ?? [])[0] ?? null;
-                return (
-                  <AssetCard
-                    key={a.id}
-                    asset={a}
-                    nextReminder={nextR}
-                    lastMaintenance={
-                      last
-                        ? { type: last.type, date: last.date, project: last.project, projectChild: last.projectChild }
-                        : null
-                    }
-                    icon={a.type === "车辆" ? <Car className="h-5 w-5" /> : <Cog className="h-5 w-5" />}
-                    reminderWindowDays={reminderWindowDays}
-                  />
-                );
-                  })}
-                </div>
+                <>
+                  <div className={`hidden max-h-[min(72vh,560px)] overflow-auto md:block ${glassPanelClass}`}>
+                    <Table>
+                      <TableHeader className="sticky top-0 z-20 border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                        <TableRow>
+                          <TableHead className="min-w-[6rem]">名称</TableHead>
+                          <TableHead className="min-w-[3.5rem]">类型</TableHead>
+                          <TableHead className="min-w-[5rem]">标识</TableHead>
+                          <TableHead className="min-w-[3.5rem]">状态</TableHead>
+                          <TableHead className="min-w-[9rem]">下次预警</TableHead>
+                          <TableHead className="min-w-[9rem]">最近维保</TableHead>
+                          <TableHead className="w-[7rem] text-right">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pagedAssets.map((a, i) => {
+                          const nextR = nearestReminderForAsset(a.id, remindersByAsset);
+                          const last = (recordsByAsset.get(a.id) ?? [])[0] ?? null;
+                          const nextText = nextR ? `${nextR.taskType} · ${nextR.dueDate}` : "—";
+                          const lastText = last
+                            ? `${last.type} · ${last.date}${last.project ? ` · ${last.project}` : ""}`
+                            : "—";
+                          return (
+                            <TableRow key={a.id} className={zebraTableRowClass(i)}>
+                              <TableCell className="max-w-[10rem] truncate font-medium text-slate-900" title={a.name}>
+                                {a.name}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-slate-700">{a.type}</TableCell>
+                              <TableCell className="whitespace-nowrap text-slate-600">{a.identifier}</TableCell>
+                              <TableCell className="text-slate-600">{a.status}</TableCell>
+                              <TableCell className="max-w-[12rem] truncate text-xs text-slate-600" title={nextText}>
+                                {nextText}
+                              </TableCell>
+                              <TableCell className="max-w-[14rem] truncate text-xs text-slate-600" title={lastText}>
+                                {lastText}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button asChild type="button" variant="outline" size="sm" className="h-8 border-slate-200 px-2 text-xs">
+                                  <Link href={`/devices/${a.id}`}>详情</Link>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:hidden xl:grid-cols-2">
+                    {pagedAssets.map((a) => {
+                      const nextR = nearestReminderForAsset(a.id, remindersByAsset);
+                      const last = (recordsByAsset.get(a.id) ?? [])[0] ?? null;
+                      return (
+                        <AssetCard
+                          key={a.id}
+                          asset={a}
+                          nextReminder={nextR}
+                          lastMaintenance={
+                            last
+                              ? { type: last.type, date: last.date, project: last.project, projectChild: last.projectChild }
+                              : null
+                          }
+                          icon={a.type === "车辆" ? <Car className="h-5 w-5" /> : <Cog className="h-5 w-5" />}
+                          reminderWindowDays={reminderWindowDays}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
               )}
               {filteredAssets.length > 0 ? (
                 <div className="mt-3 flex items-center justify-end gap-2">
-                  <Button type="button" className="h-8 border border-slate-200 bg-white/90 px-3 text-xs text-slate-700" disabled={assetPage <= 1} onClick={() => setAssetPage((p) => Math.max(1, p - 1))}>上一页</Button>
+                  <Button type="button" className="h-8 border border-border bg-card px-3 text-xs text-slate-700" disabled={assetPage <= 1} onClick={() => setAssetPage((p) => Math.max(1, p - 1))}>上一页</Button>
                   <span className="text-xs text-slate-500">{assetPage}/{assetPageCount}</span>
-                  <Button type="button" className="h-8 border border-slate-200 bg-white/90 px-3 text-xs text-slate-700" disabled={assetPage >= assetPageCount} onClick={() => setAssetPage((p) => Math.min(assetPageCount, p + 1))}>下一页</Button>
+                  <Button type="button" className="h-8 border border-border bg-card px-3 text-xs text-slate-700" disabled={assetPage >= assetPageCount} onClick={() => setAssetPage((p) => Math.min(assetPageCount, p + 1))}>下一页</Button>
                 </div>
               ) : null}
             </div>

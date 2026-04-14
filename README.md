@@ -6,16 +6,16 @@
 - 部署平台：Cloudflare Pages
 
 ## 🛠 技术栈
-- 前端技术：Next.js 15（App Router）、React 18、Tailwind CSS、shadcn/ui、Lucide Icons
+- 前端技术：Next.js 15（应用路由）、React 18、Tailwind CSS、shadcn/ui、Lucide 图标
 - 云服务：Cloudflare Pages、Cloudflare Workers（Edge Runtime）、Cloudflare D1（数据库）、Cloudflare KV（应用设置）、Cloudflare R2（附件存储）
 - 开发工具：Git、Node.js（LTS）、npm、Wrangler、Drizzle ORM/Drizzle Kit
 - 其他依赖：`@cloudflare/next-on-pages`、`xlsx`
 
 ## 📁 项目目录结构
-```plain text
-wx
+```text
+VEMaint
 ├── src/
-│   ├── app/                         # Next.js 路由与 Server Actions
+│   ├── app/                         # Next.js 路由与服务端动作
 │   │   ├── actions/                 # 资产/维保/提醒/设置等服务端动作
 │   │   ├── page.tsx                 # 仪表盘首页
 │   │   ├── records/page.tsx         # 维保记录页
@@ -49,7 +49,7 @@ wx
 1. 克隆项目到本地  
    `git clone <你的仓库地址>`
 2. 进入项目目录  
-   `cd wx`
+   `cd VEMaint`
 3. 安装项目依赖  
    `npm install`
 4. 执行本地数据库迁移  
@@ -90,7 +90,7 @@ wx
 - 资产管理：车辆/设备资产新增、编辑、状态变更记录、快速复制资产档案
 - 维保管理：维保记录新增/编辑/删除、项目/子类、执行人/维保单位/下次计划、附件上传
 - 预警管理：到期预警、完成确认、延期、升级通知、30/60/90 天风险报表
-- 统计分析：维保费用趋势、项目费用构成、月度汇总、CSV 导出
+- 统计分析：维保费用趋势、项目费用构成、月度汇总、电子表格导出
 - 车辆台账：独立车辆台账页，覆盖基础信息、保险、年检、里程保养、易损件、车辆状态
 - 系统设置：维保类型、维保项目及子类、提醒推荐类型、提醒提前规则、轻量权限模式
 
@@ -121,8 +121,8 @@ wx
    - 强制刷新浏览器缓存（`Ctrl + F5`）
    - 确认当前访问端口与 dev 终端输出一致
 4. 服务端函数或动作不生效
-   - 检查是否使用了 Server Action（`"use server"`）
-   - 检查 Edge Runtime 下不兼容 Node 原生 API 的调用
+   - 检查是否使用了服务端动作（`"use server"`）
+   - 检查边缘运行环境下不兼容 Node 原生 API 的调用
 5. 环境变量/绑定不生效
    - 检查 Cloudflare 后台绑定是否完成
    - 变更后重新部署

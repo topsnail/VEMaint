@@ -1,6 +1,6 @@
 import { getVehicleLedgerById } from "@/app/actions/vehicle-ledger";
 import { VehicleLedgerDetailBlock } from "@/components/vehicle-ledger-detail-block";
-import { Button } from "@/components/ui/button";
+import { VehicleLedgerEditNavButton } from "@/components/vehicle-ledger-edit-button";
 import { vehicleLedgerRowFromDb } from "@/lib/vehicle-ledger-dto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,12 +26,12 @@ export default async function VehicleLedgerDetailPage({ params }: { params: Prom
                 {row.plateNo} · {row.brandModel}
               </p>
             </div>
-            <Button asChild className="h-9">
-              <Link href={`/vehicle-ledger/${row.id}/edit`}>编辑</Link>
-            </Button>
+            <VehicleLedgerEditNavButton editHref={`/vehicle-ledger/${row.id}/edit`} className="h-8">
+              编辑
+            </VehicleLedgerEditNavButton>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md md:p-6">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
           <VehicleLedgerDetailBlock row={row} />
         </div>
     </div>

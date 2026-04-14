@@ -3,14 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  /* 灰白色页面底 + 浅蓝主色 */
+  --background: 214 28% 96%;
+  --foreground: 222 38% 16%;
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --muted: 210 40% 96%;
+  --card-foreground: 222 38% 16%;
+  --muted: 214 24% 93%;
   --muted-foreground: 215 16% 42%;
-  --border: 214 32% 88%;
-  --radius: 0.75rem;
+  --border: 214 22% 86%;
+  --primary: 204 72% 46%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 204 72% 46%;
+  --radius: 6px;
 }
 
 body {

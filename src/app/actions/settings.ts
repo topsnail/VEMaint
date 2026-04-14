@@ -1,6 +1,9 @@
 "use server";
 
 import { getCloudflareEnv } from "@/lib/cf-env";
+import { canEditSettings } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
+import { writeAuditLog } from "@/lib/audit";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_LEDGER_USAGE_NATURES,
@@ -41,6 +44,10 @@ export type UpdateAppSettingsInput = {
 };
 
 export async function updateAppSettingsAction(input: UpdateAppSettingsInput) {
+  const role = await getCurrentUserRole();
+  if (!canEditSettings(role)) {
+    return { ok: false as const, error: "仅管理员可修改系统设置" };
+  }
   const { KV } = getCloudflareEnv();
   const kinds = input.maintenanceKindsText
     .split(/[,，\n]/)
@@ -105,6 +112,18 @@ export async function updateAppSettingsAction(input: UpdateAppSettingsInput) {
   };
 
   await KV.put(KV_APP_SETTINGS_KEY, serializeAppSettings(next));
+  await writeAuditLog({
+    action: "settings.update",
+    target: KV_APP_SETTINGS_KEY,
+    detail: {
+      maintenanceKindsCount: next.maintenanceKinds.length,
+      maintenanceProjectsCount: next.maintenanceProjects.length,
+      reminderWindowDays: next.reminderWindowDays,
+      roleModeFallback: next.roleMode,
+      ledgerVehicleTypesCount: next.ledgerVehicleTypes.length,
+      ledgerUsageNaturesCount: next.ledgerUsageNatures.length,
+    },
+  });
   revalidatePath("/");
   revalidatePath("/settings");
   revalidatePath("/vehicle-ledger");

@@ -3,7 +3,8 @@
 import { createDb } from "@/db";
 import { reminders } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { loadAppSettings } from "@/lib/app-settings";
+import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -15,9 +16,9 @@ export type CreateReminderInput = {
 };
 
 export async function createReminder(input: CreateReminderInput) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增预警" };
   }
   const db = createDb(DB);
@@ -31,7 +32,7 @@ export async function createReminder(input: CreateReminderInput) {
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-    return { ok: false as const, error: "到期日格式须为 YYYY-MM-DD" };
+    return { ok: false as const, error: "到期日格式须为 例如 2026-01-31" };
   }
 
   const repeatRule = (input.repeatRule ?? "none").trim() || "none";
@@ -60,9 +61,9 @@ export async function markReminderDone(reminderId: string) {
   const id = reminderId?.trim();
   if (!id) return { ok: false as const, error: "无效 ID" };
 
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
   }
   const db = createDb(DB);
@@ -77,9 +78,9 @@ export async function deleteReminder(reminderId: string) {
   const id = reminderId?.trim();
   if (!id) return { ok: false as const, error: "无效 ID" };
 
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode !== "admin") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canDeleteByRole(role)) {
     return { ok: false as const, error: "仅管理员可删除预警" };
   }
   const db = createDb(DB);
@@ -96,9 +97,9 @@ export async function postponeReminderDays(reminderId: string, days = 7) {
   const d = Number(days);
   const safeDays = Number.isFinite(d) && d > 0 ? Math.min(90, Math.round(d)) : 7;
 
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
   }
   const db = createDb(DB);
@@ -120,9 +121,9 @@ export async function postponeReminderDays(reminderId: string, days = 7) {
 export async function escalateReminder(reminderId: string) {
   const id = reminderId?.trim();
   if (!id) return { ok: false as const, error: "无效 ID" };
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
   }
   const db = createDb(DB);

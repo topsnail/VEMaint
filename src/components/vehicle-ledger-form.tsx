@@ -216,13 +216,15 @@ export function VehicleLedgerForm({
         >
           ← 返回车辆台账
         </button>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">
-          {mode === "edit" ? "编辑车辆" : "新增车辆"}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">车辆台账基础档案维护</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {mode === "edit" ? "编辑车辆" : "新增车辆"}
+          </h1>
+          <p className="text-sm text-slate-500">车辆台账基础档案维护</p>
+        </div>
       </div>
 
-      <div className="space-y-6 rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md md:p-6">
+      <div className="space-y-6 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
         <div>
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">登记信息（与行驶证字段顺序一致）</p>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">

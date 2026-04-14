@@ -3,7 +3,9 @@
 import { createDb } from "@/db";
 import { assetStatusLogs, assets } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { loadAppSettings } from "@/lib/app-settings";
+import { canWriteByRole } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
+import { writeAuditLog } from "@/lib/audit";
 import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -53,9 +55,9 @@ export type UpdateAssetInput = {
 };
 
 export async function createAsset(input: CreateAssetInput) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增" };
   }
   const db = createDb(DB);
@@ -71,7 +73,7 @@ export async function createAsset(input: CreateAssetInput) {
 
   const metadata = parseMetadata(input.metadataJson);
   if (input.metadataJson?.trim() && metadata === null) {
-    return { ok: false as const, error: "metadata 须为合法 JSON 对象" };
+    return { ok: false as const, error: "扩展信息必须是合法的结构化对象" };
   }
 
   const id = crypto.randomUUID();
@@ -100,9 +102,9 @@ export async function createAsset(input: CreateAssetInput) {
 }
 
 export async function updateAsset(input: UpdateAssetInput) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑" };
   }
   const db = createDb(DB);
@@ -110,7 +112,7 @@ export async function updateAsset(input: UpdateAssetInput) {
   const id = input.id?.trim();
   const name = input.name?.trim();
   const identifier = input.identifier?.trim();
-  if (!id) return { ok: false as const, error: "无效 ID" };
+  if (!id) return { ok: false as const, error: "无效编号" };
   if (!name || !identifier) return { ok: false as const, error: "名称与标识必填" };
   if (input.type !== "车辆" && input.type !== "机械") {
     return { ok: false as const, error: "类型须为「车辆」或「机械」" };
@@ -121,7 +123,7 @@ export async function updateAsset(input: UpdateAssetInput) {
   const prevStatus = prev[0]?.status ?? status;
   const metadata = parseMetadata(input.metadataJson);
   if (input.metadataJson?.trim() && metadata === null) {
-    return { ok: false as const, error: "metadata 须为合法 JSON 对象" };
+    return { ok: false as const, error: "扩展信息必须是合法的结构化对象" };
   }
 
   await db
@@ -171,50 +173,97 @@ export async function listAssetStatusLogs(assetIdRaw: string) {
 }
 
 export async function importAssetsFromCsv(csvRaw: string) {
-  const { KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止导入" };
   }
-  const text = csvRaw?.trim();
-  if (!text) return { ok: false as const, error: "CSV 内容为空" };
-  const rows = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (rows.length < 2) return { ok: false as const, error: "至少需要表头+1行数据" };
-  const header = rows[0].split(",").map((s) => s.trim());
-  const idx = {
-    name: header.indexOf("name"),
-    type: header.indexOf("type"),
-    identifier: header.indexOf("identifier"),
-    purchaseDate: header.indexOf("purchaseDate"),
-    status: header.indexOf("status"),
-  };
-  if (idx.name < 0 || idx.type < 0 || idx.identifier < 0) {
-    return { ok: false as const, error: "表头至少包含 name,type,identifier" };
-  }
+  void csvRaw;
+  return { ok: false as const, error: "导入仅支持电子表格（.xlsx）格式，请使用电子表格文件导入。" };
+}
+
+export type ImportAssetRow = {
+  name: string;
+  type: string;
+  identifier: string;
+  purchaseDate?: string;
+  status?: string;
+};
+
+function isIsoDate(v: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+export async function importAssetsFromExcelRows(rows: ImportAssetRow[]) {
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) return { ok: false as const, error: "当前为只读访客模式，禁止导入" };
+  if (!Array.isArray(rows) || rows.length === 0) return { ok: false as const, error: "电子表格数据为空" };
+  if (rows.length > 2000) return { ok: false as const, error: "单次导入最多 2000 行" };
 
   const { DB } = getCloudflareEnv();
   const db = createDb(DB);
-  let created = 0;
-  for (const line of rows.slice(1)) {
-    const cols = line.split(",").map((s) => s.trim());
-    const name = cols[idx.name] ?? "";
-    const type = cols[idx.type] ?? "车辆";
-    const identifier = cols[idx.identifier] ?? "";
-    if (!name || !identifier) continue;
-    await db.insert(assets).values({
+
+  const errors: { row: number; error: string }[] = [];
+  const inserts: (typeof assets.$inferInsert)[] = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i] ?? ({} as ImportAssetRow);
+    const name = String(r.name ?? "").trim();
+    const identifier = String(r.identifier ?? "").trim();
+    const typeRaw = String(r.type ?? "").trim();
+    const type = typeRaw === "机械" ? "机械" : typeRaw === "车辆" ? "车辆" : "";
+    const purchaseDate = String(r.purchaseDate ?? "").trim();
+    const status = String(r.status ?? "").trim() || "active";
+
+    if (!name) {
+      errors.push({ row: i + 2, error: "名称必填" });
+      continue;
+    }
+    if (!identifier) {
+      errors.push({ row: i + 2, error: "标识必填" });
+      continue;
+    }
+    if (!type) {
+      errors.push({ row: i + 2, error: "类型仅支持 车辆/机械" });
+      continue;
+    }
+    if (purchaseDate && !isIsoDate(purchaseDate)) {
+      errors.push({ row: i + 2, error: "购置日期格式须为 例如 2026-01-31" });
+      continue;
+    }
+
+    inserts.push({
       id: crypto.randomUUID(),
       name,
-      type: type === "机械" ? "机械" : "车辆",
       identifier,
-      purchaseDate: idx.purchaseDate >= 0 ? cols[idx.purchaseDate] || null : null,
-      status: idx.status >= 0 ? cols[idx.status] || "active" : "active",
+      type,
+      purchaseDate: purchaseDate || null,
+      status,
+      insuranceExpiry: null,
+      inspectionExpiry: null,
+      operatingPermitExpiry: null,
+      lastMaintenanceDate: null,
+      nextMaintenanceMileage: null,
+      currentMileage: null,
+      currentHours: null,
+      metadata: null,
     });
+  }
+
+  if (inserts.length === 0) return { ok: false as const, error: "无可导入行", errors };
+
+  // 简单按行插入，避免单批超限制；后续可优化为 chunk/事务
+  let created = 0;
+  for (const v of inserts) {
+    await db.insert(assets).values(v);
     created += 1;
   }
+
   revalidatePath("/");
   revalidatePath("/devices", "layout");
-  return { ok: true as const, created };
+  await writeAuditLog({
+    action: "assets.import_excel",
+    target: "assets",
+    detail: { inputRows: rows.length, created, skipped: errors.length },
+  });
+  return { ok: true as const, created, errors };
 }

@@ -2,17 +2,17 @@
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Bell,
-  BellPlus,
   BookOpen,
-  CarFront,
   ClipboardList,
   LayoutDashboard,
   LogOut,
   Menu,
+  Plus,
   Search,
   Settings,
   UserRound,
@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { logoutAction } from "@/app/actions/auth";
+import { canWriteByRole } from "@/lib/authz";
 
 export type AppShellSearchAsset = { id: string; name: string; identifier: string };
 export type AppShellSearchRecord = {
@@ -38,6 +40,7 @@ type AppShellProps = {
   searchAssets: AppShellSearchAsset[];
   searchRecords: AppShellSearchRecord[];
   pendingReminderCount: number;
+  currentUser: { username: string; role: "admin" | "employee" | "viewer" } | null;
   children: React.ReactNode;
 };
 
@@ -52,8 +55,6 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   match: (p: string) => boolean;
-  /** 侧栏「快捷新建」：略强调，与列表类区分 */
-  variant?: "default" | "create";
   /** 与顶栏铃铛一致，展示待处理预警数 */
   showReminderBadge?: boolean;
 };
@@ -65,26 +66,6 @@ const navSections: NavSection[] = [
     id: "overview",
     title: "概览",
     items: [{ href: "/", label: "仪表盘", icon: LayoutDashboard, match: (p) => p === "/" }],
-  },
-  {
-    id: "quick",
-    title: "快捷新建",
-    items: [
-      {
-        href: "/devices/new",
-        label: "新增设备",
-        icon: CarFront,
-        match: (p) => p === "/devices/new",
-        variant: "create",
-      },
-      {
-        href: "/reminders/new",
-        label: "新增预警",
-        icon: BellPlus,
-        match: (p) => p === "/reminders/new",
-        variant: "create",
-      },
-    ],
   },
   {
     id: "ops",
@@ -133,24 +114,59 @@ function ReminderCountBadge({ count }: { count: number }) {
 function SidebarNav({
   onNavigate,
   pendingReminderCount,
+  currentUser,
 }: {
   onNavigate?: () => void;
   pendingReminderCount: number;
+  currentUser: { username: string; role: "admin" | "employee" | "viewer" } | null;
 }) {
   const pathname = usePathname();
+  const canCreate = currentUser ? canWriteByRole(currentUser.role) : false;
   return (
     <nav className="flex flex-col gap-1 p-3" aria-label="主导航">
+      {canCreate ? (
+        <div className="mb-2 space-y-2">
+          <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            快捷新建
+          </p>
+          <div className="grid gap-1.5">
+            <Link
+              href="/devices/new"
+              onClick={onNavigate}
+              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Plus className="h-4 w-4 opacity-80" aria-hidden />
+              新增设备
+            </Link>
+            <Link
+              href="/reminders/new"
+              onClick={onNavigate}
+              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Plus className="h-4 w-4 opacity-80" aria-hidden />
+              新增预警
+            </Link>
+            <Link
+              href="/vehicle-ledger/new"
+              onClick={onNavigate}
+              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Plus className="h-4 w-4 opacity-80" aria-hidden />
+              新增车辆
+            </Link>
+          </div>
+          <div className="my-2 border-t border-border" role="presentation" />
+        </div>
+      ) : null}
       {navSections.map((section, si) => (
         <div key={section.id}>
-          {si > 0 ? <div className="my-2 border-t border-slate-200/70" role="presentation" /> : null}
+          {si > 0 ? <div className="my-2 border-t border-border" role="presentation" /> : null}
           <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {section.title}
           </p>
           <div className="flex flex-col gap-0.5">
-            {section.items.map(
-              ({ href, label, icon: Icon, match, variant = "default", showReminderBadge }) => {
+            {section.items.map(({ href, label, icon: Icon, match, showReminderBadge }) => {
                 const active = match(pathname);
-                const isCreate = variant === "create";
                 return (
                   <Link
                     key={href}
@@ -159,12 +175,8 @@ function SidebarNav({
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
-                      isCreate && !active && "border border-emerald-200/45 bg-emerald-50/35 text-slate-800 hover:border-emerald-200/70 hover:bg-emerald-50/55",
-                      isCreate && active && "border border-emerald-200/60 bg-white/85 font-medium text-slate-900 shadow-sm backdrop-blur-md",
-                      !isCreate && !active && "text-slate-600 hover:bg-white/50 hover:text-slate-900",
-                      !isCreate &&
-                        active &&
-                        "border border-slate-200/80 bg-white/80 font-medium text-slate-900 shadow-sm backdrop-blur-md",
+                      !active && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                      active && "border border-border bg-card font-medium text-slate-900 shadow-sm",
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
@@ -174,8 +186,7 @@ function SidebarNav({
                     {showReminderBadge ? <ReminderCountBadge count={pendingReminderCount} /> : null}
                   </Link>
                 );
-              },
-            )}
+            })}
           </div>
         </div>
       ))}
@@ -183,7 +194,7 @@ function SidebarNav({
   );
 }
 
-export function AppShell({ searchAssets, searchRecords, pendingReminderCount, children }: AppShellProps) {
+export function AppShell({ searchAssets, searchRecords, pendingReminderCount, currentUser, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [q, setQ] = useState("");
@@ -231,13 +242,27 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
 
   function handleLogout() {
     setUserOpen(false);
-    router.push("/");
-    router.refresh();
+    void (async () => {
+      await logoutAction();
+      router.push("/login");
+      router.refresh();
+    })();
+  }
+
+  if (pathname === "/login") {
+    return <div className="min-h-screen bg-[hsl(var(--background))]">{children}</div>;
+  }
+
+  function roleText(role: "admin" | "employee" | "viewer" | undefined) {
+    if (role === "admin") return "管理员";
+    if (role === "employee") return "员工";
+    if (role === "viewer") return "访客";
+    return "未知角色";
   }
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
-      <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-slate-200/70 bg-white/80 shadow-sm backdrop-blur-xl">
+      <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-border bg-card shadow-sm">
         <div className="mx-auto flex h-full w-full max-w-[1920px] items-center gap-3 px-3 sm:px-4">
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild>
@@ -251,19 +276,23 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent className="inset-y-0 left-0 right-auto h-full w-[min(100%,280px)] max-w-xs border-l-0 border-r border-slate-200/80 p-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-xs">
-              <SheetHeader className="border-b border-slate-200/80 px-4 py-3 text-left">
+            <SheetContent className="inset-y-0 left-0 right-auto h-full w-[min(100%,280px)] max-w-xs border-l-0 border-r border-border p-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-xs">
+              <SheetHeader className="border-b border-border px-4 py-3 text-left">
                 <SheetTitle className="text-base font-semibold">导航</SheetTitle>
               </SheetHeader>
-              <SidebarNav onNavigate={() => setMobileNavOpen(false)} pendingReminderCount={pendingReminderCount} />
+              <SidebarNav
+                onNavigate={() => setMobileNavOpen(false)}
+                pendingReminderCount={pendingReminderCount}
+                currentUser={currentUser}
+              />
             </SheetContent>
           </Sheet>
 
           <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-lg pr-2 text-slate-900">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-600 text-sm font-bold text-white shadow-sm">
-              V
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/50 bg-transparent text-white shadow-sm">
+              <Image src="/favicon.svg" alt="维保系统" width={20} height={20} className="h-5 w-5" />
             </span>
-            <span className="hidden font-semibold tracking-tight sm:inline">VEMaint</span>
+            <span className="hidden font-semibold tracking-tight sm:inline">维保系统</span>
           </Link>
 
           <div ref={searchRef} className="mx-auto min-w-0 max-w-xl flex-1 md:mx-auto">
@@ -274,11 +303,11 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
                 onChange={(e) => setQ(e.target.value)}
                 onFocus={() => q.trim() && results.length > 0 && setSearchOpen(true)}
                 placeholder="搜索车牌、设备、维保记录…"
-                className="h-9 border-slate-200/90 bg-white/90 pl-9 pr-3 text-sm shadow-sm backdrop-blur-md"
+                className="h-8 border-border bg-card pl-9 pr-3 text-sm text-foreground shadow-sm"
                 aria-label="全局搜索"
               />
               {searchOpen && results.length > 0 ? (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-xl border border-slate-200/80 bg-white/95 py-1 shadow-lg backdrop-blur-xl">
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-card py-1 shadow-lg">
                   {results.map((it) => (
                     <button
                       key={it.key}
@@ -303,11 +332,11 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
                 onChange={(e) => setQ(e.target.value)}
                 onFocus={() => q.trim() && results.length > 0 && setSearchOpen(true)}
                 placeholder="搜索…"
-                className="h-9 w-full min-w-[120px] max-w-[200px] border-slate-200/90 bg-white/90 pl-8 text-xs"
+                className="h-8 w-full min-w-[120px] max-w-[200px] border-border bg-card pl-8 text-xs text-foreground"
                 aria-label="全局搜索"
               />
               {searchOpen && results.length > 0 ? (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-xl border border-slate-200/80 bg-white py-1 shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-xl border border-border bg-card py-1 shadow-xl">
                   {results.map((it) => (
                     <button
                       key={it.key}
@@ -350,13 +379,15 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
                 aria-haspopup="true"
               >
                 <UserRound className="h-5 w-5 shrink-0" />
-                <span className="hidden text-sm sm:inline">用户</span>
+                <span className="hidden text-sm sm:inline">{currentUser?.username ?? "用户"}</span>
               </Button>
               {userOpen ? (
                 <>
                   <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="关闭菜单" onClick={() => setUserOpen(false)} />
-                  <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-slate-200/80 bg-white/95 py-1 shadow-lg backdrop-blur-xl">
-                    <p className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500">本地部署 · 无账号体系</p>
+                  <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-border bg-card py-1 shadow-lg">
+                    <p className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500">
+                      {currentUser ? `${currentUser.username} · ${roleText(currentUser.role)}` : "未登录"}
+                    </p>
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
@@ -375,11 +406,11 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, ch
 
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-14 z-30 hidden overflow-y-auto border-r border-slate-200/70 bg-white/50 backdrop-blur-xl md:block",
+          "fixed bottom-0 left-0 top-14 z-30 hidden overflow-y-auto border-r border-border bg-card md:block",
           SIDEBAR_W,
         )}
       >
-        <SidebarNav pendingReminderCount={pendingReminderCount} />
+        <SidebarNav pendingReminderCount={pendingReminderCount} currentUser={currentUser} />
       </aside>
 
       <main

@@ -4,6 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { createDb } from "@/db";
 import { assets, maintenanceRecords } from "@/db/schema";
 import { loadAppSettings } from "@/lib/app-settings";
+import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
 import { getCloudflareEnv } from "@/lib/cf-env";
 import { DEFAULT_MAINTENANCE_KINDS } from "@/lib/kv-settings";
 import { revalidatePath } from "next/cache";
@@ -59,9 +61,9 @@ function parsePartsJson(raw: string): { name: string; cost?: string; qty?: strin
 }
 
 export async function createMaintenanceRecordFromForm(formData: FormData) {
-  const { DB, R2, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB, R2 } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增记录" };
   }
   const db = createDb(DB);
@@ -86,7 +88,7 @@ export async function createMaintenanceRecordFromForm(formData: FormData) {
     return { ok: false as const, error: "设备与日期必填" };
   }
   if (!isIsoDate(date)) {
-    return { ok: false as const, error: "日期格式须为 YYYY-MM-DD" };
+    return { ok: false as const, error: "日期格式须为 例如 2026-01-31" };
   }
 
   const kinds = await allowedKinds();
@@ -96,7 +98,7 @@ export async function createMaintenanceRecordFromForm(formData: FormData) {
 
   const partsJson = parsePartsJson(partsJsonRaw);
   if (partsJsonRaw && !partsJson) {
-    return { ok: false as const, error: "零件明细 JSON 格式不正确" };
+    return { ok: false as const, error: "零件明细结构化格式不正确" };
   }
 
   let r2Key: string | null = null;
@@ -159,6 +161,7 @@ export async function createMaintenanceRecordFromForm(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/devices", "layout");
+  revalidatePath("/records");
   return { ok: true as const, id, r2Key, fileSize, fileType };
 }
 
@@ -181,9 +184,9 @@ export type UpdateMaintenanceInput = {
 };
 
 export async function updateMaintenanceRecord(input: UpdateMaintenanceInput) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑记录" };
   }
   const db = createDb(DB);
@@ -193,10 +196,10 @@ export async function updateMaintenanceRecord(input: UpdateMaintenanceInput) {
   const type = input.type?.trim();
   const date = input.date?.trim();
   if (!id || !assetId || !type || !date) return { ok: false as const, error: "字段不完整" };
-  if (!isIsoDate(date)) return { ok: false as const, error: "日期格式须为 YYYY-MM-DD" };
+  if (!isIsoDate(date)) return { ok: false as const, error: "日期格式须为 例如 2026-01-31" };
   const parsedParts = parsePartsJson(input.partsJson ?? "");
   if ((input.partsJson ?? "").trim() && !parsedParts) {
-    return { ok: false as const, error: "零件明细 JSON 格式不正确" };
+    return { ok: false as const, error: "零件明细结构化格式不正确" };
   }
 
   await db
@@ -220,22 +223,24 @@ export async function updateMaintenanceRecord(input: UpdateMaintenanceInput) {
 
   revalidatePath("/");
   revalidatePath("/devices", "layout");
+  revalidatePath("/records");
   return { ok: true as const };
 }
 
 export async function deleteMaintenanceRecord(idRaw: string, assetIdRaw: string) {
   const id = idRaw?.trim();
   const assetId = assetIdRaw?.trim();
-  if (!id || !assetId) return { ok: false as const, error: "无效 ID" };
+  if (!id || !assetId) return { ok: false as const, error: "无效编号" };
 
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode !== "admin") {
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canDeleteByRole(role)) {
     return { ok: false as const, error: "仅管理员可删除维保记录" };
   }
   const db = createDb(DB);
   await db.delete(maintenanceRecords).where(and(eq(maintenanceRecords.id, id), eq(maintenanceRecords.assetId, assetId)));
   revalidatePath("/");
   revalidatePath("/devices", "layout");
+  revalidatePath("/records");
   return { ok: true as const };
 }

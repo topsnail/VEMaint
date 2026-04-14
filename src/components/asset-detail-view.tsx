@@ -19,8 +19,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { dueRelativeLabel, relativeDueToneClass } from "@/lib/due-date-ui";
+import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 type AlertLevel = "red" | "yellow" | "blue" | "normal";
 function alertLevel(dueDate: string, nowIso: string): AlertLevel {
@@ -62,8 +65,8 @@ function TabButton({
       className={
         "rounded-full border px-3 py-1 text-xs font-medium transition " +
         (active
-          ? "border-slate-300 bg-slate-900/5 text-slate-900"
-          : "border-slate-200 bg-white/70 text-slate-600 hover:bg-slate-50")
+          ? "border-slate-300 bg-primary/10 text-slate-900"
+          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")
       }
     >
       {children}
@@ -247,6 +250,22 @@ export function AssetDetailView({
     const projectPass = recordProjectFilter === "all" || (r.project ?? "") === recordProjectFilter;
     return typePass && projectPass;
   });
+  const [wideTimelineUi, setWideTimelineUi] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const apply = () => setWideTimelineUi(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  const sortedReminders = useMemo(
+    () =>
+      [...reminders].sort((a, b) => {
+        if (a.isNotified !== b.isNotified) return a.isNotified ? 1 : -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      }),
+    [reminders],
+  );
   const metaEntries = Object.entries(asset?.metadata ?? {}).filter(([k, v]) => k && v !== undefined);
   metaEntries.sort(([a], [b]) => a.localeCompare(b, "zh-CN"));
 
@@ -360,9 +379,146 @@ export function AssetDetailView({
     });
   }
 
+  function renderMaintenanceEditForm() {
+    if (!editRecordId) return null;
+    return (
+      <form
+        className="mt-3 space-y-2 rounded-lg border border-border bg-card p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setRecMsg(null);
+          startTransition(async () => {
+            const res = await updateMaintenanceRecord({
+              id: editRecordId,
+              assetId: asset.id,
+              type: recType,
+              project: recProject || undefined,
+              projectChild: recProjectChild || undefined,
+              date: recDate,
+              value: recValue || undefined,
+              cost: recCost || undefined,
+              operator: recOperator || undefined,
+              assignee: recAssignee || undefined,
+              vendor: recVendor || undefined,
+              nextPlanDate: recNextPlanDate || undefined,
+              nextPlanValue: recNextPlanValue || undefined,
+              partsJson: recPartsJson || undefined,
+              description: recDescription || undefined,
+            });
+            if (res.ok) {
+              setRecMsg("已保存");
+              setEditRecordId(null);
+            } else {
+              setRecMsg(res.error);
+            }
+          });
+        }}
+      >
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-1">
+            <Label>类型</Label>
+            <Input value={recType} onChange={(e) => setRecType(e.target.value)} required />
+          </div>
+          <div className="grid gap-1">
+            <Label>维保项目</Label>
+            <Select value={recProject || "__none__"} onValueChange={(v) => setRecProject(v === "__none__" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="可选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">不填写</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label>子分类</Label>
+            <Select value={recProjectChild || "__none__"} onValueChange={(v) => setRecProjectChild(v === "__none__" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="可选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">不填写</SelectItem>
+                {(projectChildren[recProject] ?? []).map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label>日期</Label>
+            <Input type="date" value={recDate} onChange={(e) => setRecDate(e.target.value)} required />
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-1">
+            <Label>里程/小时</Label>
+            <Input value={recValue} onChange={(e) => setRecValue(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>费用</Label>
+            <Input value={recCost} onChange={(e) => setRecCost(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>经办人</Label>
+            <Input value={recOperator} onChange={(e) => setRecOperator(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-1">
+            <Label>执行人</Label>
+            <Input value={recAssignee} onChange={(e) => setRecAssignee(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>维保单位</Label>
+            <Input value={recVendor} onChange={(e) => setRecVendor(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>下次计划日期</Label>
+            <Input type="date" value={recNextPlanDate} onChange={(e) => setRecNextPlanDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-1">
+            <Label>下次计划里程/工时</Label>
+            <Input value={recNextPlanValue} onChange={(e) => setRecNextPlanValue(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>零件明细（结构化文本）</Label>
+            <Input value={recPartsJson} onChange={(e) => setRecPartsJson(e.target.value)} placeholder='[{"name":"机油","cost":"120"}]' />
+          </div>
+        </div>
+        <div className="grid gap-1">
+          <Label>说明</Label>
+          <Textarea value={recDescription} onChange={(e) => setRecDescription(e.target.value)} rows={2} />
+        </div>
+        {recMsg ? <p className="text-xs text-amber-800">{recMsg}</p> : null}
+        <div className="flex gap-2">
+          <Button type="submit" disabled={pending} className="h-8 px-3 text-xs">
+            保存
+          </Button>
+          <Button
+            type="button"
+            disabled={pending}
+            className="h-8 border border-border bg-card px-3 text-xs text-slate-700 hover:bg-slate-50"
+            onClick={() => setEditRecordId(null)}
+          >
+            取消
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <header className="border-b border-slate-200/80 pb-4">
+      <header className="border-b border-slate-200 pb-4">
         <h1 className="text-xl font-semibold text-slate-900">{asset.name}</h1>
         <p className="mt-1 text-sm text-slate-500">
           {asset.type} · {asset.identifier}
@@ -370,12 +526,12 @@ export function AssetDetailView({
       </header>
 
       <div className="space-y-6">
-          <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-slate-800">设备信息</h3>
               <Button
                 type="button"
-                className="h-8 border border-slate-200 bg-white/90 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                className="h-8 border border-border bg-card px-3 text-xs text-slate-700 hover:bg-slate-50"
                 onClick={() => {
                   setAssetMsg(null);
                   setEditOpen((v) => !v);
@@ -491,11 +647,11 @@ export function AssetDetailView({
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label>状态（active / inactive）</Label>
-                  <Input value={assetStatus} onChange={(e) => setAssetStatus(e.target.value)} placeholder="active" />
+                  <Label>状态（启用 / 停用）</Label>
+                  <Input value={assetStatus} onChange={(e) => setAssetStatus(e.target.value)} placeholder="启用" />
                 </div>
                 <div className="grid gap-2">
-                  <Label>metadata（JSON 对象，可选）</Label>
+                  <Label>扩展参数（结构化对象，可选）</Label>
                   <Textarea
                     value={assetMetadataJson}
                     onChange={(e) => setAssetMetadataJson(e.target.value)}
@@ -505,8 +661,8 @@ export function AssetDetailView({
                   />
                 </div>
                 {assetFieldDefs.length ? (
-                  <div className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm backdrop-blur-md">
-                    <p className="mb-3 text-xs font-medium text-slate-700">动态字段（来自 KV）</p>
+                  <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+                    <p className="mb-3 text-xs font-medium text-slate-700">动态字段（来自配置）</p>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {assetFieldDefs.map((f) => (
                         <div key={f.key} className="grid gap-1">
@@ -524,7 +680,7 @@ export function AssetDetailView({
                         </div>
                       ))}
                     </div>
-                    <p className="mt-3 text-xs text-slate-500">会合并写入 metadata（JSON）。</p>
+                    <p className="mt-3 text-xs text-slate-500">会合并写入扩展参数（结构化对象）。</p>
                   </div>
                 ) : null}
                 {assetMsg ? <p className="text-xs text-amber-800">{assetMsg}</p> : null}
@@ -535,7 +691,7 @@ export function AssetDetailView({
                   <Button
                     type="button"
                     disabled={assetPending}
-                    className="w-full border border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50"
+                    className="w-full border border-border bg-card text-slate-700 hover:bg-slate-50"
                     onClick={() => {
                       setAssetStatus("inactive");
                     }}
@@ -555,7 +711,7 @@ export function AssetDetailView({
                 <p className="text-xs text-slate-500">状态</p>
                 <div className="mt-1">
                   {asset.status === "active" ? (
-                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">
                       启用
                     </span>
                   ) : (
@@ -580,25 +736,31 @@ export function AssetDetailView({
             </div>
 
             <div className="mt-4">
-              <p className="text-xs text-slate-500">扩展参数（metadata）</p>
+              <p className="text-xs text-slate-500">扩展参数</p>
               {metaEntries.length === 0 ? (
                 <p className="mt-1 text-sm text-slate-500">—</p>
               ) : (
-                <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white/80">
-                  <table className="w-full text-left text-sm">
-                    <tbody>
-                      {metaEntries.map(([k, v]) => (
-                        <tr key={k} className="border-b border-slate-100 last:border-b-0">
-                          <td className="w-32 px-3 py-2 text-xs font-medium text-slate-600">{k}</td>
-                          <td className="px-3 py-2 text-sm text-slate-900">
+                <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border bg-card">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-[1] border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                      <TableRow>
+                        <TableHead className="w-36">字段</TableHead>
+                        <TableHead>值</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {metaEntries.map(([k, v], i) => (
+                        <TableRow key={k} className={zebraTableRowClass(i)}>
+                          <TableCell className="px-3 py-2 text-xs font-medium text-slate-600">{k}</TableCell>
+                          <TableCell className="px-3 py-2 text-sm text-slate-900">
                             {typeof v === "string" || typeof v === "number" || typeof v === "boolean"
                               ? String(v)
                               : JSON.stringify(v)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>
@@ -607,13 +769,26 @@ export function AssetDetailView({
               {statusLogs.length === 0 ? (
                 <p className="mt-1 text-sm text-slate-500">—</p>
               ) : (
-                <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                  {statusLogs.slice(0, 6).map((l) => (
-                    <li key={l.id}>
-                      {l.createdAt}：{l.fromStatus} → {l.toStatus}
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-2 overflow-hidden rounded-lg border border-border bg-card">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                        <TableHead className="text-xs text-slate-600">时间</TableHead>
+                        <TableHead className="text-xs text-slate-600">变更</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {statusLogs.slice(0, 6).map((l, i) => (
+                        <TableRow key={l.id} className={zebraTableRowClass(i)}>
+                          <TableCell className="whitespace-nowrap text-xs text-slate-600">{l.createdAt}</TableCell>
+                          <TableCell className="text-xs text-slate-800">
+                            {l.fromStatus} → {l.toStatus}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </div>
             </>
@@ -630,7 +805,7 @@ export function AssetDetailView({
           </div>
 
           {tab === "reminders" ? (
-            <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <h3 className="mb-3 text-sm font-medium text-slate-800">预警</h3>
               {reminders.length === 0 ? (
                 <p className="text-sm text-slate-500">
@@ -640,69 +815,137 @@ export function AssetDetailView({
                   </Link>
                   ）。
                 </p>
+              ) : wideTimelineUi ? (
+                <div className="mt-2 max-h-[min(50vh,420px)] overflow-auto rounded-lg border border-border bg-card">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                      <TableRow>
+                        <TableHead className="min-w-[6rem]">任务类型</TableHead>
+                        <TableHead className="min-w-[6rem]">到期日</TableHead>
+                        <TableHead className="min-w-[6rem]">剩余</TableHead>
+                        <TableHead className="min-w-[4rem]">状态</TableHead>
+                        <TableHead className="min-w-[4rem]">紧急度</TableHead>
+                        <TableHead className="w-[9rem] text-right">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedReminders.map((r, i) => {
+                        const level = alertLevel(r.dueDate, todayIso);
+                        const rel = dueRelativeLabel(r.dueDate, todayIso);
+                        const relTone = relativeDueToneClass(level);
+                        return (
+                          <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                            <TableCell className="max-w-[14rem] truncate font-medium text-slate-900" title={r.taskType}>
+                              {r.taskType}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-slate-700">{r.dueDate}</TableCell>
+                            <TableCell className={"whitespace-nowrap text-xs " + relTone}>{rel}</TableCell>
+                            <TableCell className="text-xs">
+                              {r.isNotified ? (
+                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800">已完成</span>
+                              ) : (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">待处理</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <span className={"rounded-full px-2 py-0.5 " + alertPill(level)}>{alertLabel(level)}</span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-wrap justify-end gap-1">
+                                {!r.isNotified ? (
+                                  <Button
+                                    type="button"
+                                    disabled={reminderPending}
+                                    className="h-8 border border-primary/25 bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
+                                    onClick={() =>
+                                      startReminderTransition(async () => {
+                                        await markReminderDone(r.id);
+                                      })
+                                    }
+                                  >
+                                    完成
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  disabled={reminderPending}
+                                  variant="outline"
+                                  className="h-8 border-slate-200 px-2 text-xs"
+                                  onClick={() =>
+                                    startReminderTransition(async () => {
+                                      await deleteReminder(r.id);
+                                    })
+                                  }
+                                >
+                                  删除
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
                 <ul className="space-y-2">
-                  {[...reminders]
-                    .sort((a, b) => {
-                      if (a.isNotified !== b.isNotified) return a.isNotified ? 1 : -1;
-                      return a.dueDate.localeCompare(b.dueDate);
-                    })
-                    .map((r) => {
-                      const level = alertLevel(r.dueDate, todayIso);
-                      return (
-                        <li
-                          key={r.id}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm text-slate-900">
-                              {r.taskType}
-                              {r.isNotified ? (
-                                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                                  已完成
-                                </span>
-                              ) : (
-                                <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
-                                  待处理
-                                </span>
-                              )}
-                              <span className={"ml-2 rounded-full px-2 py-0.5 text-xs " + alertPill(level)}>
-                                {alertLabel(level)}
+                  {sortedReminders.map((r) => {
+                    const level = alertLevel(r.dueDate, todayIso);
+                    return (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-slate-900">
+                            {r.taskType}
+                            {r.isNotified ? (
+                              <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
+                                已完成
                               </span>
-                            </p>
-                            <p className="mt-0.5 text-xs text-slate-500">到期：{r.dueDate}</p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            {!r.isNotified ? (
-                              <Button
-                                type="button"
-                                disabled={reminderPending}
-                                className="h-8 border border-emerald-200 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-500"
-                                onClick={() =>
-                                  startReminderTransition(async () => {
-                                    await markReminderDone(r.id);
-                                  })
-                                }
-                              >
-                                完成
-                              </Button>
-                            ) : null}
+                            ) : (
+                              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                                待处理
+                              </span>
+                            )}
+                            <span className={"ml-2 rounded-full px-2 py-0.5 text-xs " + alertPill(level)}>
+                              {alertLabel(level)}
+                            </span>
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500">到期：{r.dueDate}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">{dueRelativeLabel(r.dueDate, todayIso)}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!r.isNotified ? (
                             <Button
                               type="button"
                               disabled={reminderPending}
-                              className="h-8 border border-slate-200 bg-white/90 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                              className="h-8 border border-primary/25 bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90"
                               onClick={() =>
                                 startReminderTransition(async () => {
-                                  await deleteReminder(r.id);
+                                  await markReminderDone(r.id);
                                 })
                               }
                             >
-                              删除
+                              完成
                             </Button>
-                          </div>
-                        </li>
-                      );
-                    })}
+                          ) : null}
+                          <Button
+                            type="button"
+                            disabled={reminderPending}
+                            className="h-8 border border-border bg-card px-3 text-xs text-slate-700 hover:bg-slate-50"
+                            onClick={() =>
+                              startReminderTransition(async () => {
+                                await deleteReminder(r.id);
+                              })
+                            }
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -729,13 +972,101 @@ export function AssetDetailView({
                   </TabButton>
                 ))}
               </div>
+              {wideTimelineUi ? (
+                <>
+                  <div className={`max-h-[min(60vh,480px)] overflow-auto ${glassPanelClass}`}>
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted [&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
+                        <TableRow>
+                          <TableHead>类型</TableHead>
+                          <TableHead>日期</TableHead>
+                          <TableHead>项目</TableHead>
+                          <TableHead>费用</TableHead>
+                          <TableHead className="text-right">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredRecords.length === 0 ? (
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell className="py-6 text-center text-sm text-slate-500" colSpan={5}>
+                              暂无记录
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredRecords.map((r, i) => {
+                            const proj = r.project ? `${r.project}${r.projectChild ? ` / ${r.projectChild}` : ""}` : "—";
+                            return (
+                              <TableRow key={r.id} className={zebraTableRowClass(i)}>
+                                <TableCell className="font-medium text-slate-900">{r.type}</TableCell>
+                                <TableCell className="whitespace-nowrap text-slate-700">{r.date}</TableCell>
+                                <TableCell className="max-w-[12rem] truncate text-sm text-slate-600" title={proj}>
+                                  {proj}
+                                </TableCell>
+                                <TableCell className="text-sm text-slate-600">{r.cost ?? "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="h-8 px-2 text-xs text-slate-700"
+                                      onClick={() => {
+                                        setEditRecordId(r.id);
+                                        setRecType(r.type);
+                                        setRecProject(r.project ?? "");
+                                        setRecProjectChild(r.projectChild ?? "");
+                                        setRecDate(r.date);
+                                        setRecValue(r.value ?? "");
+                                        setRecCost(r.cost ?? "");
+                                        setRecOperator(r.operator ?? "");
+                                        setRecAssignee(r.assignee ?? "");
+                                        setRecVendor(r.vendor ?? "");
+                                        setRecNextPlanDate(r.nextPlanDate ?? "");
+                                        setRecNextPlanValue(r.nextPlanValue ?? "");
+                                        setRecPartsJson(r.partsJson ? JSON.stringify(r.partsJson, null, 2) : "");
+                                        setRecDescription(r.description ?? "");
+                                        setRecMsg(null);
+                                      }}
+                                    >
+                                      编辑
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="h-8 px-2 text-xs text-rose-600"
+                                      disabled={pending}
+                                      onClick={() =>
+                                        startTransition(async () => {
+                                          await deleteMaintenanceRecord(r.id, asset.id);
+                                          if (editRecordId === r.id) setEditRecordId(null);
+                                        })
+                                      }
+                                    >
+                                      删除
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {editRecordId && wideTimelineUi ? (
+                    <div className="mt-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+                      <p className="mb-3 text-sm font-medium text-slate-800">编辑维保记录</p>
+                      {renderMaintenanceEditForm()}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
               <ol className="relative border-l border-slate-200 pl-4">
                 {filteredRecords.length === 0 ? (
                   <li className="text-sm text-slate-400">暂无记录</li>
                 ) : (
                   filteredRecords.map((r) => (
                     <li key={r.id} className="relative mb-6 ml-1">
-                      <div className="absolute -left-1.5 mt-1.5 h-2.5 w-2.5 rounded-full border border-emerald-300 bg-emerald-500" />
+                      <div className="absolute -left-1.5 mt-1.5 h-2.5 w-2.5 rounded-full border border-sky-400 bg-primary" />
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-sm text-slate-900">
                             {r.type} · {r.date}
@@ -795,7 +1126,7 @@ export function AssetDetailView({
                       ) : null}
                       {r.r2Key ? (
                         <p className="mt-1 text-xs">
-                          <span className="mr-2 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-[10px] text-slate-600">
+                          <span className="mr-2 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-slate-600">
                             {r.r2Key.toLowerCase().endsWith(".pdf") ? "PDF" : "图片/文件"}
                           </span>
                           <Link
@@ -808,146 +1139,12 @@ export function AssetDetailView({
                         </p>
                       ) : null}
 
-                        {editRecordId === r.id ? (
-                          <form
-                            className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white/70 p-3"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              setRecMsg(null);
-                              startTransition(async () => {
-                                const res = await updateMaintenanceRecord({
-                                  id: r.id,
-                                  assetId: asset.id,
-                                  type: recType,
-                                  project: recProject || undefined,
-                                  projectChild: recProjectChild || undefined,
-                                  date: recDate,
-                                  value: recValue || undefined,
-                                  cost: recCost || undefined,
-                                  operator: recOperator || undefined,
-                                  assignee: recAssignee || undefined,
-                                  vendor: recVendor || undefined,
-                                  nextPlanDate: recNextPlanDate || undefined,
-                                  nextPlanValue: recNextPlanValue || undefined,
-                                  partsJson: recPartsJson || undefined,
-                                  description: recDescription || undefined,
-                                });
-                                if (res.ok) {
-                                  setRecMsg("已保存");
-                                  setEditRecordId(null);
-                                } else {
-                                  setRecMsg(res.error);
-                                }
-                              });
-                            }}
-                          >
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                              <div className="grid gap-1">
-                                <Label>类型</Label>
-                                <Input value={recType} onChange={(e) => setRecType(e.target.value)} required />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>维保项目</Label>
-                                <Select value={recProject || "__none__"} onValueChange={(v) => setRecProject(v === "__none__" ? "" : v)}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="可选" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">不填写</SelectItem>
-                                    {projects.map((p) => (
-                                      <SelectItem key={p} value={p}>
-                                        {p}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>子分类</Label>
-                                <Select
-                                  value={recProjectChild || "__none__"}
-                                  onValueChange={(v) => setRecProjectChild(v === "__none__" ? "" : v)}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="可选" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">不填写</SelectItem>
-                                    {(projectChildren[recProject] ?? []).map((c) => (
-                                      <SelectItem key={c} value={c}>
-                                        {c}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>日期</Label>
-                                <Input type="date" value={recDate} onChange={(e) => setRecDate(e.target.value)} required />
-                              </div>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <div className="grid gap-1">
-                                <Label>里程/小时</Label>
-                                <Input value={recValue} onChange={(e) => setRecValue(e.target.value)} />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>费用</Label>
-                                <Input value={recCost} onChange={(e) => setRecCost(e.target.value)} />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>经办人</Label>
-                                <Input value={recOperator} onChange={(e) => setRecOperator(e.target.value)} />
-                              </div>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <div className="grid gap-1">
-                                <Label>执行人</Label>
-                                <Input value={recAssignee} onChange={(e) => setRecAssignee(e.target.value)} />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>维保单位</Label>
-                                <Input value={recVendor} onChange={(e) => setRecVendor(e.target.value)} />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>下次计划日期</Label>
-                                <Input type="date" value={recNextPlanDate} onChange={(e) => setRecNextPlanDate(e.target.value)} />
-                              </div>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <div className="grid gap-1">
-                                <Label>下次计划里程/工时</Label>
-                                <Input value={recNextPlanValue} onChange={(e) => setRecNextPlanValue(e.target.value)} />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label>零件明细 JSON</Label>
-                                <Input value={recPartsJson} onChange={(e) => setRecPartsJson(e.target.value)} placeholder='[{"name":"机油","cost":"120"}]' />
-                              </div>
-                            </div>
-                            <div className="grid gap-1">
-                              <Label>说明</Label>
-                              <Textarea value={recDescription} onChange={(e) => setRecDescription(e.target.value)} rows={2} />
-                            </div>
-                            {recMsg ? <p className="text-xs text-amber-800">{recMsg}</p> : null}
-                            <div className="flex gap-2">
-                              <Button type="submit" disabled={pending} className="h-8 px-3 text-xs">
-                                保存
-                              </Button>
-                              <Button
-                                type="button"
-                                disabled={pending}
-                                className="h-8 border border-slate-200 bg-white/90 px-3 text-xs text-slate-700 hover:bg-slate-50"
-                                onClick={() => setEditRecordId(null)}
-                              >
-                                取消
-                              </Button>
-                            </div>
-                          </form>
-                        ) : null}
+                        {editRecordId === r.id && !wideTimelineUi ? renderMaintenanceEditForm() : null}
                     </li>
                   ))
                 )}
               </ol>
+              )}
             </div>
           )}
 
@@ -955,7 +1152,7 @@ export function AssetDetailView({
             key={asset.id}
             onSubmit={handleSubmit}
             encType="multipart/form-data"
-            className="space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 backdrop-blur-md"
+            className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
           >
             <h3 className="text-sm font-medium text-slate-800">新增维保记录</h3>
             <input type="hidden" name="assetId" value={asset.id} />
@@ -1077,7 +1274,7 @@ export function AssetDetailView({
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="m-parts">费用明细/零件 JSON（可选）</Label>
+              <Label htmlFor="m-parts">费用明细/零件（结构化文本，可选）</Label>
               <Input id="m-parts" name="partsJson" value={partsJson} onChange={(e) => setPartsJson(e.target.value)} placeholder='[{"name":"机油","qty":"1","cost":"120"}]' />
             </div>
             <div className="grid gap-2">
@@ -1091,7 +1288,7 @@ export function AssetDetailView({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="m-file">附件（发票 / 照片 / PDF，最大 10MB）</Label>
+              <Label htmlFor="m-file">附件（发票 / 照片 / 文档，最大 10MB）</Label>
               <Input
                 id="m-file"
                 name="file"
@@ -1111,7 +1308,7 @@ export function AssetDetailView({
               {pending ? "提交中…" : "提交记录"}
             </Button>
           </form>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 backdrop-blur-md">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-medium text-slate-800">违章/事故</h3>
             <form
               className="mt-3 grid gap-2 sm:grid-cols-2"
@@ -1139,16 +1336,35 @@ export function AssetDetailView({
                 新增事件
               </Button>
             </form>
-            <ul className="mt-3 space-y-1 text-xs text-slate-600">
-              {incidents.slice(0, 5).map((i) => (
-                <li key={i.id}>
-                  {i.eventDate} · {i.kind} · {i.detail ?? "—"}
-                </li>
-              ))}
-            </ul>
+            {incidents.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">暂无记录</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-lg border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                      <TableHead className="text-xs">日期</TableHead>
+                      <TableHead className="text-xs">类型</TableHead>
+                      <TableHead className="text-xs">说明</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {incidents.slice(0, 5).map((inc, idx) => (
+                      <TableRow key={inc.id} className={zebraTableRowClass(idx)}>
+                        <TableCell className="whitespace-nowrap text-xs text-slate-700">{inc.eventDate}</TableCell>
+                        <TableCell className="text-xs text-slate-800">{inc.kind}</TableCell>
+                        <TableCell className="max-w-[14rem] truncate text-xs text-slate-600" title={inc.detail ?? ""}>
+                          {inc.detail ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 backdrop-blur-md">
-            <h3 className="text-sm font-medium text-slate-800">故障代码记录（MTBF基础）</h3>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-medium text-slate-800">故障代码记录（平均故障间隔基础）</h3>
             <form
               className="mt-3 grid gap-2 sm:grid-cols-2"
               onSubmit={(e) => {
@@ -1181,13 +1397,30 @@ export function AssetDetailView({
                 新增故障
               </Button>
             </form>
-            <ul className="mt-3 space-y-1 text-xs text-slate-600">
-              {faults.slice(0, 5).map((f) => (
-                <li key={f.id}>
-                  {f.eventDate} · {f.faultCode} {f.isRework ? "·返修" : ""}
-                </li>
-              ))}
-            </ul>
+            {faults.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">暂无记录</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-lg border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                      <TableHead className="text-xs">日期</TableHead>
+                      <TableHead className="text-xs">代码</TableHead>
+                      <TableHead className="text-xs">备注</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {faults.slice(0, 5).map((f, idx) => (
+                      <TableRow key={f.id} className={zebraTableRowClass(idx)}>
+                        <TableCell className="whitespace-nowrap text-xs text-slate-700">{f.eventDate}</TableCell>
+                        <TableCell className="text-xs text-slate-800">{f.faultCode}</TableCell>
+                        <TableCell className="text-xs text-slate-600">{f.isRework ? "返修" : "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         </div>
       </div>

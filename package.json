@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "set NEXT_DISABLE_TRACE=1&& next dev",
+    "dev": "set NEXT_DISABLE_TRACE=1&& next dev -p 3000",
     "test": "npm run test:local",
     "test:local": "npm run db:migrate:local && npm run db:seed:local && npm run dev",
     "build": "next build",

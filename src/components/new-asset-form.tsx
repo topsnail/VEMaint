@@ -160,10 +160,12 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
         <Link href="/devices" className="text-sm text-slate-500 hover:text-slate-900">
           ← 设备列表
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">新增设备</h1>
-        <p className="mt-1 text-sm text-slate-500">写入 D1 台账，类型限定为车辆或工程机械。</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新增设备</h1>
+          <p className="text-sm text-slate-500">写入资产台账，类型限定为车辆或工程机械。</p>
+        </div>
       </div>
-      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md md:p-6">
+      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
         <div className="grid gap-2">
           <Label>从已有资产复制（可选）</Label>
           <Select value={templateId} onValueChange={setTemplateId}>
@@ -280,10 +282,10 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
         </div>
         <div className="grid gap-2 sm:max-w-xs">
           <Label htmlFor="na-st">状态</Label>
-          <Input id="na-st" value={status} onChange={(e) => setStatus(e.target.value)} placeholder="active" />
+          <Input id="na-st" value={status} onChange={(e) => setStatus(e.target.value)} placeholder="启用" />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="na-meta">扩展参数（JSON 对象，可选）</Label>
+          <Label htmlFor="na-meta">扩展参数（结构化对象，可选）</Label>
           <Textarea
             id="na-meta"
             value={metadataJson}
@@ -294,8 +296,8 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
           />
         </div>
         {fieldDefs.length ? (
-          <div className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm backdrop-blur-md">
-            <p className="mb-3 text-xs font-medium text-slate-700">动态字段（来自 KV）</p>
+          <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+            <p className="mb-3 text-xs font-medium text-slate-700">动态字段（来自配置）</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {fieldDefs.map((f) => (
                 <div key={f.key} className="grid gap-1">
@@ -313,7 +315,7 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-xs text-slate-500">会合并写入 metadata（JSON）。</p>
+            <p className="mt-3 text-xs text-slate-500">会合并写入扩展参数（结构化对象）。</p>
           </div>
         ) : null}
         {msg ? <p className="text-xs text-amber-800">{msg}</p> : null}

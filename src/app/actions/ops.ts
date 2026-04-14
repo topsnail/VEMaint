@@ -3,7 +3,8 @@
 import { createDb } from "@/db";
 import { faultEvents, incidents } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { loadAppSettings } from "@/lib/app-settings";
+import { canWriteByRole } from "@/lib/authz";
+import { getCurrentUserRole } from "@/lib/auth-session";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -12,16 +13,16 @@ function isIsoDate(v: string) {
 }
 
 export async function createIncidentFromForm(formData: FormData) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") return { ok: false as const, error: "只读模式禁止新增" };
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   const assetId = String(formData.get("assetId") ?? "").trim();
   const kind = String(formData.get("kind") ?? "").trim();
   const eventDate = String(formData.get("eventDate") ?? "").trim();
   if (!assetId || !kind || !eventDate) return { ok: false as const, error: "资产、类型、日期必填" };
-  if (kind !== "violation" && kind !== "accident") return { ok: false as const, error: "类型仅支持 violation 或 accident" };
-  if (!isIsoDate(eventDate)) return { ok: false as const, error: "日期格式须为 YYYY-MM-DD" };
+  if (kind !== "violation" && kind !== "accident") return { ok: false as const, error: "类型仅支持「违章」或「事故」" };
+  if (!isIsoDate(eventDate)) return { ok: false as const, error: "日期格式须为 例如 2026-01-31" };
   await db.insert(incidents).values({
     id: crypto.randomUUID(),
     assetId,
@@ -47,14 +48,14 @@ export async function createFaultEvent(input: {
   resolvedDate?: string;
   isRework?: boolean;
 }) {
-  const { DB, KV } = getCloudflareEnv();
-  const app = await loadAppSettings(KV);
-  if (app.roleMode === "viewer") return { ok: false as const, error: "只读模式禁止新增" };
+  const { DB } = getCloudflareEnv();
+  const role = await getCurrentUserRole();
+  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   if (!input.assetId?.trim() || !input.faultCode?.trim() || !input.eventDate?.trim()) {
     return { ok: false as const, error: "资产、故障代码、日期必填" };
   }
-  if (!isIsoDate(input.eventDate.trim())) return { ok: false as const, error: "日期格式须为 YYYY-MM-DD" };
+  if (!isIsoDate(input.eventDate.trim())) return { ok: false as const, error: "日期格式须为 例如 2026-01-31" };
   await db.insert(faultEvents).values({
     id: crypto.randomUUID(),
     assetId: input.assetId.trim(),

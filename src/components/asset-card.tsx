@@ -43,7 +43,7 @@ export function AssetCard({
       <Card className="h-full border-slate-200/80 transition hover:border-slate-300/90">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900/5 text-slate-800">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-slate-800">
               {icon}
             </span>
             <div>
@@ -84,7 +84,7 @@ export function AssetCard({
           <div className="flex gap-2 pt-1">
             <button
               type="button"
-              className="rounded-md border border-slate-200 bg-white/90 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
               onClick={(e) => {
                 e.stopPropagation();
                 router.push(`${base}?entry=profile`);
@@ -94,7 +94,7 @@ export function AssetCard({
             </button>
             <button
               type="button"
-              className="rounded-md border border-slate-200 bg-white/90 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
               onClick={(e) => {
                 e.stopPropagation();
                 router.push(`${base}?entry=maintenance`);

@@ -63,13 +63,15 @@ export function NewReminderForm({ assets }: { assets: AssetOption[] }) {
         <Link href="/alerts" className="text-sm text-slate-500 hover:text-slate-900">
           ← 预警统计
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">新增预警</h1>
-        <p className="mt-1 text-sm text-slate-500">为指定设备添加到期任务，用于仪表盘进度提醒。</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新增预警</h1>
+          <p className="text-sm text-slate-500">为指定设备添加到期任务，用于仪表盘进度提醒。</p>
+        </div>
       </div>
       {assets.length === 0 ? (
         <p className="text-sm text-slate-500">请先新增至少一台设备。</p>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-md md:p-6">
+        <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
           <div className="grid gap-2">
             <Label>设备</Label>
             <Select value={assetId || firstId} onValueChange={setAssetId}>
