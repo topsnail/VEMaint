@@ -1,8 +1,7 @@
 "use server";
 
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { canEditSettings } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
 import { writeAuditLog } from "@/lib/audit";
 import {
   DEFAULT_APP_SETTINGS,
@@ -44,8 +43,7 @@ export type UpdateAppSettingsInput = {
 };
 
 export async function updateAppSettingsAction(input: UpdateAppSettingsInput) {
-  const role = await getCurrentUserRole();
-  if (!canEditSettings(role)) {
+  if (!(await hasCurrentUserPermission("settings.write"))) {
     return { ok: false as const, error: "仅管理员可修改系统设置" };
   }
   const { KV } = getCloudflareEnv();

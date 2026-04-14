@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { dueRelativeLabel, relativeDueToneClass } from "@/lib/due-date-ui";
 import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
+import { compactActionButtonClass, pageContainerClass } from "@/lib/ui-style";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
@@ -59,18 +60,15 @@ function TabButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
-      className={
-        "rounded-full border px-3 py-1 text-xs font-medium transition " +
-        (active
-          ? "border-slate-300 bg-primary/10 text-slate-900"
-          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")
-      }
+      variant="outline"
+      size="sm"
+      className={active ? "border-slate-300 bg-primary/10 text-slate-900" : "text-slate-600"}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -517,7 +515,7 @@ export function AssetDetailView({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageContainerClass}>
       <header className="border-b border-slate-200 pb-4">
         <h1 className="text-xl font-semibold text-slate-900">{asset.name}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -525,13 +523,14 @@ export function AssetDetailView({
         </p>
       </header>
 
-      <div className="space-y-6">
+      <div className="space-y-5">
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-slate-800">设备信息</h3>
               <Button
                 type="button"
-                className="h-8 border border-border bg-card px-3 text-xs text-slate-700 hover:bg-slate-50"
+                variant="outline"
+                className={compactActionButtonClass}
                 onClick={() => {
                   setAssetMsg(null);
                   setEditOpen((v) => !v);
@@ -691,7 +690,8 @@ export function AssetDetailView({
                   <Button
                     type="button"
                     disabled={assetPending}
-                    className="w-full border border-border bg-card text-slate-700 hover:bg-slate-50"
+                    variant="outline"
+                    className="w-full"
                     onClick={() => {
                       setAssetStatus("inactive");
                     }}
@@ -1078,9 +1078,11 @@ export function AssetDetailView({
                             </p>
                           ) : null}
                           <div className="flex shrink-0 gap-2">
-                            <button
+                            <Button
                               type="button"
-                              className="text-xs text-slate-600 hover:text-slate-900"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-slate-600 hover:text-slate-900"
                               onClick={() => {
                                 setEditRecordId(r.id);
                                 setRecType(r.type);
@@ -1100,10 +1102,12 @@ export function AssetDetailView({
                               }}
                             >
                               编辑
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
-                              className="text-xs text-rose-600 hover:text-rose-700"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700"
                               onClick={() =>
                                 startTransition(async () => {
                                   await deleteMaintenanceRecord(r.id, asset.id);
@@ -1112,7 +1116,7 @@ export function AssetDetailView({
                               }
                             >
                               删除
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       {r.description ? <p className="mt-1 text-xs text-slate-500">{r.description}</p> : null}

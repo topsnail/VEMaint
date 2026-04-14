@@ -2,6 +2,7 @@
 
 import { createReminder } from "@/app/actions/reminders";
 import { getAppSettingsAction } from "@/app/actions/settings";
+import { PageContainer } from "@/components/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,12 +59,9 @@ export function NewReminderForm({ assets }: { assets: AssetOption[] }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 pb-12 md:p-8">
+    <PageContainer size="form" className="space-y-6 p-4 pb-12 md:p-8">
       <div>
-        <Link href="/alerts" className="text-sm text-slate-500 hover:text-slate-900">
-          ← 预警统计
-        </Link>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新增预警</h1>
           <p className="text-sm text-slate-500">为指定设备添加到期任务，用于仪表盘进度提醒。</p>
         </div>
@@ -149,6 +147,6 @@ export function NewReminderForm({ assets }: { assets: AssetOption[] }) {
           </div>
         </form>
       )}
-    </div>
+    </PageContainer>
   );
 }

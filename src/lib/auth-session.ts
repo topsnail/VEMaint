@@ -3,9 +3,9 @@
 import { cookies } from "next/headers";
 import { loadAppSettings } from "@/lib/app-settings";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { hasAuthUsers } from "@/lib/auth-users";
+import { hasAuthUsers, listAuthUsers } from "@/lib/auth-users";
 import { verifySessionToken, SESSION_COOKIE_KEY, type AuthSession } from "@/lib/auth-token";
-import type { UserRole } from "@/lib/authz";
+import { hasPermission, resolveEffectivePermissions, type PermissionKey, type UserRole } from "@/lib/authz";
 
 export async function getCurrentAuthSession(): Promise<AuthSession | null> {
   const store = await cookies();
@@ -21,5 +21,28 @@ export async function getCurrentUserRole(): Promise<UserRole> {
   const { KV } = getCloudflareEnv();
   const app = await loadAppSettings(KV);
   return app.roleMode;
+}
+
+export async function getCurrentUserPermissions(): Promise<PermissionKey[]> {
+  const session = await getCurrentAuthSession();
+  if (session) {
+    const users = await listAuthUsers();
+    const current = users.find((u) => u.id === session.userId);
+    return resolveEffectivePermissions(session.role, current?.permissions);
+  }
+  if (await hasAuthUsers()) return resolveEffectivePermissions("viewer");
+  const role = await getCurrentUserRole();
+  return resolveEffectivePermissions(role);
+}
+
+export async function hasCurrentUserPermission(permission: PermissionKey): Promise<boolean> {
+  const session = await getCurrentAuthSession();
+  if (session) {
+    const users = await listAuthUsers();
+    const current = users.find((u) => u.id === session.userId);
+    return hasPermission(permission, session.role, current?.permissions);
+  }
+  const role = await getCurrentUserRole();
+  return hasPermission(permission, role);
 }
 

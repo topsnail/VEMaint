@@ -22,6 +22,14 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
+import {
+  compactActionButtonClass,
+  compactMobileActionButtonClass,
+  compactPaginationButtonClass,
+  compactSheetFooterButtonClass,
+  filterPanelGridClass,
+  pageContainerClass,
+} from "@/lib/ui-style";
 import { PageHeader } from "@/components/page-header";
 import { downloadExcelFromJson } from "@/lib/excel-export";
 import { useRouter } from "next/navigation";
@@ -172,7 +180,7 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className={pageContainerClass}>
       <PageHeader
         title="维保记录"
         subtitle="跨车辆与设备统一查看、筛选、编辑和导出。"
@@ -192,14 +200,14 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
           >
             按月份汇总
           </Button>
-          <Button type="button" className="h-8 border border-slate-200 bg-white text-slate-700" onClick={exportExcel}>
+          <Button type="button" variant="outline" className={compactActionButtonClass} onClick={exportExcel}>
             导出 Excel
           </Button>
           </>
         }
       />
 
-      <div className={`grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 ${glassPanelClass}`}>
+      <div className={`${filterPanelGridClass} sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 ${glassPanelClass}`}>
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索设备/机号/类型/项目" />
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger>
@@ -241,7 +249,7 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
           </SelectContent>
         </Select>
       </div>
-      <div className={`grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-4 ${glassPanelClass}`}>
+      <div className={`${filterPanelGridClass} sm:grid-cols-2 lg:grid-cols-4 ${glassPanelClass}`}>
         <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         <Input value={minCost} onChange={(e) => setMinCost(e.target.value)} placeholder="最小费用" />
@@ -370,12 +378,13 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
                     <p className="mt-1 text-xs text-slate-500">费用 {r.cost ?? "—"} · {r.vendor ?? "无单位"}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" className="h-11 w-full border border-slate-200 bg-white text-sm text-slate-800" onClick={() => openEdit(r)}>
+                    <Button type="button" variant="outline" className={compactMobileActionButtonClass} onClick={() => openEdit(r)}>
                       编辑
                     </Button>
                     <Button
                       type="button"
-                      className="h-11 w-full border border-rose-200 bg-white text-sm text-rose-700"
+                      variant="outline"
+                      className={`${compactMobileActionButtonClass} border-rose-200 text-rose-700`}
                       disabled={pending}
                       onClick={() =>
                         startTransition(async () => {
@@ -399,7 +408,8 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
             <div className="flex items-center justify-end gap-2">
               <Button
                 type="button"
-                className="h-9 min-w-[4.5rem] border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                variant="outline"
+                className={compactPaginationButtonClass}
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
@@ -410,7 +420,8 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
               </span>
               <Button
                 type="button"
-                className="h-9 min-w-[4.5rem] border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                variant="outline"
+                className={compactPaginationButtonClass}
                 disabled={page >= pageCount}
                 onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
               >
@@ -542,14 +553,14 @@ export function MaintenanceRecordsPage({ assets, records, maintenanceKinds }: Ma
                 </div>
               </div>
               <div className="flex shrink-0 gap-2 border-t border-slate-200 bg-white px-6 py-4">
-                <Button type="submit" disabled={pending} className="h-10 min-w-[5rem]">
+                <Button type="submit" disabled={pending} className={compactSheetFooterButtonClass + " min-w-[5rem]"}>
                   保存
                 </Button>
                 <Button
                   type="button"
                   disabled={pending}
                   variant="outline"
-                  className="h-10 border-slate-200 bg-white"
+                  className={compactSheetFooterButtonClass}
                   onClick={() => {
                     setEditingRow(null);
                     setForm(emptyForm());

@@ -3,8 +3,7 @@
 import { createDb } from "@/db";
 import { reminders } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -17,8 +16,7 @@ export type CreateReminderInput = {
 
 export async function createReminder(input: CreateReminderInput) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("reminders.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增预警" };
   }
   const db = createDb(DB);
@@ -62,8 +60,7 @@ export async function markReminderDone(reminderId: string) {
   if (!id) return { ok: false as const, error: "无效 ID" };
 
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("reminders.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
   }
   const db = createDb(DB);
@@ -79,8 +76,7 @@ export async function deleteReminder(reminderId: string) {
   if (!id) return { ok: false as const, error: "无效 ID" };
 
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canDeleteByRole(role)) {
+  if (!(await hasCurrentUserPermission("reminders.delete"))) {
     return { ok: false as const, error: "仅管理员可删除预警" };
   }
   const db = createDb(DB);
@@ -98,8 +94,7 @@ export async function postponeReminderDays(reminderId: string, days = 7) {
   const safeDays = Number.isFinite(d) && d > 0 ? Math.min(90, Math.round(d)) : 7;
 
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("reminders.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
   }
   const db = createDb(DB);
@@ -122,9 +117,8 @@ export async function escalateReminder(reminderId: string) {
   const id = reminderId?.trim();
   if (!id) return { ok: false as const, error: "无效 ID" };
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
-    return { ok: false as const, error: "当前为只读访客模式，禁止操作" };
+  if (!(await hasCurrentUserPermission("reminders.escalate"))) {
+    return { ok: false as const, error: "当前账号无升级通知权限" };
   }
   const db = createDb(DB);
   await db.update(reminders).set({ isEscalated: true, severity: "critical" }).where(eq(reminders.id, id));

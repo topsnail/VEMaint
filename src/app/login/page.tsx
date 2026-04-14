@@ -1,11 +1,12 @@
 import { LoginForm } from "@/components/login-form";
+import { PageContainer } from "@/components/page-container";
 
 export const runtime = "edge";
 
 export default function LoginPage() {
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-6xl items-center justify-center">
+    <PageContainer size="standard" className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
       <LoginForm />
-    </div>
+    </PageContainer>
   );
 }

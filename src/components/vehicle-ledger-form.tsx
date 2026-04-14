@@ -2,6 +2,7 @@
 
 import { createVehicleLedger, updateVehicleLedger, type VehicleLedgerInput } from "@/app/actions/vehicle-ledger";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/page-container";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -207,16 +208,9 @@ export function VehicleLedgerForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 pb-12 md:p-8">
+    <PageContainer size="standard" className="space-y-6 p-4 pb-12 md:p-8">
       <div>
-        <button
-          type="button"
-          onClick={tryNavigateBack}
-          className="text-left text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← 返回车辆台账
-        </button>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             {mode === "edit" ? "编辑车辆" : "新增车辆"}
           </h1>
@@ -355,6 +349,6 @@ export function VehicleLedgerForm({
       <p className="text-center text-xs text-slate-400 md:hidden">
         <Link href="/vehicle-ledger" className="text-slate-500 hover:text-slate-700">返回列表</Link>
       </p>
-    </div>
+    </PageContainer>
   );
 }

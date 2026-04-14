@@ -1,5 +1,5 @@
 import { getCloudflareEnv } from "@/lib/cf-env";
-import type { UserRole } from "@/lib/authz";
+import { normalizePermissionKeys, type PermissionKey, type UserRole } from "@/lib/authz";
 import { b64urlDecode, b64urlEncode } from "@/lib/base64url";
 
 const AUTH_USERS_KEY = "auth:users:v1";
@@ -15,6 +15,7 @@ export type AuthUser = {
   passwordHash: string;
   createdAt: string;
   updatedAt: string;
+  permissions?: PermissionKey[] | null;
 };
 
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -24,11 +25,15 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return new Uint8Array(bytes).buffer;
+}
+
 async function derivePasswordHash(password: string, saltBytes: Uint8Array): Promise<Uint8Array> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: HASH_ALGO, salt: saltBytes, iterations: PASSWORD_ITERATIONS },
+    { name: "PBKDF2", hash: HASH_ALGO, salt: toArrayBuffer(saltBytes), iterations: PASSWORD_ITERATIONS },
     key,
     256,
   );
@@ -73,6 +78,9 @@ function parseUsers(raw: string | null): AuthUser[] {
         username: normalizeUsername(x.username),
         role: x.role === "admin" || x.role === "employee" || x.role === "viewer" ? x.role : "viewer",
         disabled: Boolean(x.disabled),
+        permissions: Array.isArray((x as { permissions?: unknown }).permissions)
+          ? normalizePermissionKeys((x as { permissions?: unknown[] }).permissions)
+          : null,
       }));
   } catch {
     return [];
@@ -95,7 +103,12 @@ export async function hasAuthUsers(): Promise<boolean> {
   return users.length > 0;
 }
 
-export async function createAuthUser(input: { username: string; password: string; role: UserRole }): Promise<AuthUser> {
+export async function createAuthUser(input: {
+  username: string;
+  password: string;
+  role: UserRole;
+  permissions?: PermissionKey[] | null;
+}): Promise<AuthUser> {
   const users = await listAuthUsers();
   const username = normalizeUsername(input.username);
   if (!username) throw new Error("用户名不能为空");
@@ -111,6 +124,7 @@ export async function createAuthUser(input: { username: string; password: string
     passwordHash: hash,
     createdAt: now,
     updatedAt: now,
+    permissions: Array.isArray(input.permissions) ? normalizePermissionKeys(input.permissions) : null,
   };
   await saveUsers([...users, user]);
   return user;
@@ -146,5 +160,18 @@ export async function setAuthUserDisabled(userId: string, disabled: boolean) {
   const idx = users.findIndex((u) => u.id === id);
   if (idx < 0) throw new Error("用户不存在");
   users[idx] = { ...users[idx], disabled, updatedAt: new Date().toISOString() };
+  await saveUsers(users);
+}
+
+export async function updateAuthUserPermissions(userId: string, permissions: PermissionKey[] | null) {
+  const users = await listAuthUsers();
+  const id = userId.trim();
+  const idx = users.findIndex((u) => u.id === id);
+  if (idx < 0) throw new Error("用户不存在");
+  users[idx] = {
+    ...users[idx],
+    permissions: Array.isArray(permissions) ? normalizePermissionKeys(permissions) : null,
+    updatedAt: new Date().toISOString(),
+  };
   await saveUsers(users);
 }

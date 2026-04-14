@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { uiLayout } from "@/lib/ui-style";
 import { logoutAction } from "@/app/actions/auth";
 import { canWriteByRole } from "@/lib/authz";
 
@@ -122,70 +123,127 @@ function SidebarNav({
 }) {
   const pathname = usePathname();
   const canCreate = currentUser ? canWriteByRole(currentUser.role) : false;
+  const [overviewSection, ...restSections] = navSections;
   return (
-    <nav className="flex flex-col gap-1 p-3" aria-label="主导航">
-      {canCreate ? (
-        <div className="mb-2 space-y-2">
+    <nav className="flex flex-col gap-1 p-2.5" aria-label="主导航">
+      {overviewSection ? (
+        <div key={overviewSection.id}>
           <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            快捷新建
+            {overviewSection.title}
           </p>
-          <div className="grid gap-1.5">
-            <Link
-              href="/devices/new"
-              onClick={onNavigate}
-              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Plus className="h-4 w-4 opacity-80" aria-hidden />
-              新增设备
-            </Link>
-            <Link
-              href="/reminders/new"
-              onClick={onNavigate}
-              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Plus className="h-4 w-4 opacity-80" aria-hidden />
-              新增预警
-            </Link>
-            <Link
-              href="/vehicle-ledger/new"
-              onClick={onNavigate}
-              className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Plus className="h-4 w-4 opacity-80" aria-hidden />
-              新增车辆
-            </Link>
+          <div className="flex flex-col gap-0.5">
+            {overviewSection.items.map(({ href, label, icon: Icon, match, showReminderBadge }) => {
+              const active = match(pathname);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
+                    !active && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    active && "border border-border bg-card font-medium text-slate-900 shadow-sm",
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  <span className="inline-block w-[4em] shrink-0 whitespace-nowrap text-left leading-tight">
+                    {label}
+                  </span>
+                  {showReminderBadge ? <ReminderCountBadge count={pendingReminderCount} /> : null}
+                </Link>
+              );
+            })}
           </div>
-          <div className="my-2 border-t border-border" role="presentation" />
         </div>
       ) : null}
-      {navSections.map((section, si) => (
+
+      <div className="my-2 border-t border-border" role="presentation" />
+      <div className="mb-2 space-y-2">
+        <p className="px-1 pb-0.5 text-xs font-semibold text-slate-600">
+          快捷新增
+        </p>
+        <div className="grid gap-1.5 rounded-xl border border-slate-200 bg-slate-50/60 p-2">
+          <Link
+            href="/devices/new"
+            onClick={onNavigate}
+            aria-disabled={!canCreate}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm shadow-sm transition",
+              canCreate ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-400 opacity-70",
+            )}
+          >
+            <Plus className="h-4 w-4 opacity-80" aria-hidden />
+            新增设备
+          </Link>
+          <Link
+            href="/records"
+            onClick={onNavigate}
+            aria-disabled={!canCreate}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm shadow-sm transition",
+              canCreate ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-400 opacity-70",
+            )}
+          >
+            <Plus className="h-4 w-4 opacity-80" aria-hidden />
+            新增维保记录
+          </Link>
+          <Link
+            href="/reminders/new"
+            onClick={onNavigate}
+            aria-disabled={!canCreate}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm shadow-sm transition",
+              canCreate ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-400 opacity-70",
+            )}
+          >
+            <Plus className="h-4 w-4 opacity-80" aria-hidden />
+            新增预警
+          </Link>
+          <Link
+            href="/vehicle-ledger/new"
+            onClick={onNavigate}
+            aria-disabled={!canCreate}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm shadow-sm transition",
+              canCreate ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-400 opacity-70",
+            )}
+          >
+            <Plus className="h-4 w-4 opacity-80" aria-hidden />
+            新增车辆
+          </Link>
+        </div>
+        {!canCreate ? <p className="px-1 text-xs text-slate-500">当前账号为只读权限，无法新增。</p> : null}
+      </div>
+
+      {restSections.map((section, si) => (
         <div key={section.id}>
-          {si > 0 ? <div className="my-2 border-t border-border" role="presentation" /> : null}
+          <div className="my-2 border-t border-border" role="presentation" />
           <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {section.title}
           </p>
           <div className="flex flex-col gap-0.5">
             {section.items.map(({ href, label, icon: Icon, match, showReminderBadge }) => {
-                const active = match(pathname);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
-                      !active && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                      active && "border border-border bg-card font-medium text-slate-900 shadow-sm",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                    <span className="inline-block w-[4em] shrink-0 whitespace-nowrap text-left leading-tight">
-                      {label}
-                    </span>
-                    {showReminderBadge ? <ReminderCountBadge count={pendingReminderCount} /> : null}
-                  </Link>
-                );
+              const active = match(pathname);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
+                    !active && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    active && "border border-border bg-card font-medium text-slate-900 shadow-sm",
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  <span className="inline-block w-[4em] shrink-0 whitespace-nowrap text-left leading-tight">
+                    {label}
+                  </span>
+                  {showReminderBadge ? <ReminderCountBadge count={pendingReminderCount} /> : null}
+                </Link>
+              );
             })}
           </div>
         </div>
@@ -249,7 +307,7 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, cu
     })();
   }
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname.startsWith("/share/")) {
     return <div className="min-h-screen bg-[hsl(var(--background))]">{children}</div>;
   }
 
@@ -263,7 +321,7 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, cu
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
       <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-border bg-card shadow-sm">
-        <div className="mx-auto flex h-full w-full max-w-[1920px] items-center gap-3 px-3 sm:px-4">
+        <div className={cn("mx-auto flex h-full w-full items-center gap-3 px-3 sm:px-4", uiLayout.contentWidth.wide)}>
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild>
               <Button
@@ -418,7 +476,7 @@ export function AppShell({ searchAssets, searchRecords, pendingReminderCount, cu
           "min-h-[calc(100vh-3.5rem)] pt-14 transition-[padding] md:pl-56",
         )}
       >
-        <div className="mx-auto w-full max-w-[1920px] px-4 py-6 sm:px-6 md:py-8">{children}</div>
+        <div className={cn("mx-auto w-full px-4 py-5 sm:px-6 md:py-6", uiLayout.contentWidth.wide)}>{children}</div>
       </main>
     </div>
   );

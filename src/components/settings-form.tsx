@@ -5,9 +5,11 @@ import {
   createUserAction,
   listUsersAction,
   setUserDisabledAction,
+  setUserPermissionsAction,
   setUserPasswordAction,
   setUserRoleAction,
 } from "@/app/actions/auth";
+import { defaultPermissionsByRole, type PermissionKey } from "@/lib/authz";
 import type { AppSettings } from "@/lib/kv-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,14 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { listAuditLogsAction, type AuditLogRow } from "@/app/actions/audit";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  compactActionButtonClass,
+  compactPaginationButtonClass,
+  compactSheetFooterButtonClass,
+  compactTinyButtonClass,
+  pageFormShellClass,
+  sectionCardClass,
+} from "@/lib/ui-style";
 
 function splitList(text: string): string[] {
   return text
@@ -32,6 +42,7 @@ type SettingsFormProps = {
 };
 
 type SettingsTab = "roles" | "maintenance" | "reminders" | "ledger" | "io";
+type PermissionGroup = { id: string; title: string; keys: PermissionKey[] };
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "roles", label: "权限与角色", hint: "权限策略与当前模式" },
@@ -39,6 +50,14 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "reminders", label: "提醒配置", hint: "预警窗口与提前规则" },
   { key: "ledger", label: "车辆台账", hint: "车辆类型与使用性质" },
   { key: "io", label: "导入导出", hint: "Excel 规则与使用说明" },
+];
+
+const PERMISSION_GROUPS: PermissionGroup[] = [
+  { id: "assets", title: "资产管理", keys: ["assets.read", "assets.write", "assets.delete", "assets.import", "assets.export"] },
+  { id: "maintenance", title: "维保管理", keys: ["maintenance.read", "maintenance.write", "maintenance.delete"] },
+  { id: "reminders", title: "预警管理", keys: ["reminders.read", "reminders.write", "reminders.delete", "reminders.escalate"] },
+  { id: "ledger", title: "车辆台账", keys: ["ledger.read", "ledger.write", "ledger.delete"] },
+  { id: "system", title: "系统与审计", keys: ["settings.read", "settings.write", "users.manage", "audit.read"] },
 ];
 
 function SectionCard({
@@ -51,7 +70,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-5 rounded-xl border border-border bg-background/40 p-4 md:p-5">
+    <section className="space-y-4 rounded-xl border border-border bg-background/40 p-4 md:p-5">
       <div className="space-y-1">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         <p className="text-xs leading-5 text-slate-500">{desc}</p>
@@ -86,13 +105,23 @@ export function SettingsForm({ initial }: SettingsFormProps) {
   const [ledgerUsageNaturesText, setLedgerUsageNaturesText] = useState(initial.ledgerUsageNatures.join("，"));
   const [msg, setMsg] = useState<string | null>(null);
   const [users, setUsers] = useState<
-    { id: string; username: string; role: "admin" | "employee" | "viewer"; disabled: boolean; createdAt: string; updatedAt: string }[]
+    {
+      id: string;
+      username: string;
+      role: "admin" | "employee" | "viewer";
+      disabled: boolean;
+      createdAt: string;
+      updatedAt: string;
+      permissions: PermissionKey[] | null;
+    }[]
   >([]);
   const [userMsg, setUserMsg] = useState<string | null>(null);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "employee" | "viewer">("viewer");
+  const [newPermissions, setNewPermissions] = useState<PermissionKey[] | null>(null);
   const [resetPwdByUserId, setResetPwdByUserId] = useState<Record<string, string>>({});
+  const [editPermissionsByUserId, setEditPermissionsByUserId] = useState<Record<string, PermissionKey[] | null>>({});
   const [auditRows, setAuditRows] = useState<AuditLogRow[]>([]);
   const [auditQ, setAuditQ] = useState("");
   const [auditOffset, setAuditOffset] = useState(0);
@@ -116,8 +145,48 @@ export function SettingsForm({ initial }: SettingsFormProps) {
       "users.set_role": "修改用户角色",
       "users.reset_password": "重置用户密码",
       "users.set_disabled": "启用/禁用用户",
+      "users.set_permissions": "修改用户权限",
     };
     return map[action] ?? `未分类操作（${action}）`;
+  }
+
+  const permissionLabelMap: Record<PermissionKey, string> = {
+    "assets.read": "资产查看",
+    "assets.write": "资产新增/编辑",
+    "assets.delete": "资产删除",
+    "assets.import": "资产导入",
+    "assets.export": "资产导出",
+    "maintenance.read": "维保查看",
+    "maintenance.write": "维保新增/编辑",
+    "maintenance.delete": "维保删除",
+    "reminders.read": "预警查看",
+    "reminders.write": "预警新增/处理",
+    "reminders.delete": "预警删除",
+    "reminders.escalate": "预警升级通知",
+    "ledger.read": "车辆台账查看",
+    "ledger.write": "车辆台账新增/编辑",
+    "ledger.delete": "车辆台账删除",
+    "settings.read": "系统设置查看",
+    "settings.write": "系统设置修改",
+    "users.manage": "用户管理",
+    "audit.read": "操作日志查看",
+  };
+
+  function togglePermission(list: PermissionKey[], key: PermissionKey) {
+    return list.includes(key) ? list.filter((x) => x !== key) : [...list, key];
+  }
+
+  function hasAllGroupPermissions(list: PermissionKey[], keys: PermissionKey[]) {
+    return keys.every((k) => list.includes(k));
+  }
+
+  function applyGroupPermissions(list: PermissionKey[], keys: PermissionKey[], checked: boolean) {
+    if (checked) return Array.from(new Set([...list, ...keys]));
+    return list.filter((k) => !keys.includes(k));
+  }
+
+  function effectivePermissions(role: "admin" | "employee" | "viewer", override: PermissionKey[] | null | undefined) {
+    return Array.isArray(override) ? override : defaultPermissionsByRole(role);
   }
 
   const projectParents = useMemo(() => splitList(projectsText), [projectsText]);
@@ -184,7 +253,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
   return (
     <form
       onSubmit={onSubmit}
-      className="w-full space-y-8 rounded-xl border border-border bg-card p-6 shadow-sm md:p-8"
+      className={pageFormShellClass}
     >
       <div className="space-y-4">
         <div className="rounded-xl border border-border bg-background/60 p-2">
@@ -239,13 +308,13 @@ export function SettingsForm({ initial }: SettingsFormProps) {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-lg border border-slate-200 p-4">
+            <div className={sectionCardClass}>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium text-slate-900">用户与登录权限（管理员）</p>
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 border-slate-200 bg-white text-xs"
+                  className={compactActionButtonClass}
                   onClick={async () => {
                     const res = await listUsersAction();
                     if (res.ok) {
@@ -297,6 +366,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                         username: newUsername,
                         password: newPassword,
                         role: newRole,
+                        permissions: newPermissions,
                       });
                       if (!res.ok) {
                         setUserMsg(res.error);
@@ -304,6 +374,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                       }
                       setNewUsername("");
                       setNewPassword("");
+                      setNewPermissions(null);
                       const listRes = await listUsersAction();
                       if (listRes.ok) setUsers(listRes.users);
                       setUserMsg("用户创建成功");
@@ -311,6 +382,65 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                   >
                     新增用户
                   </Button>
+                </div>
+                <div className="space-y-2 lg:col-span-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs">初始权限（未设置具体权限时将使用角色默认）</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={compactTinyButtonClass}
+                        onClick={() => setNewPermissions(defaultPermissionsByRole(newRole))}
+                      >
+                        套用{roleLabel(newRole)}模板
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={compactTinyButtonClass}
+                        onClick={() => setNewPermissions(null)}
+                      >
+                        清空（改用默认）
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    {PERMISSION_GROUPS.map((group) => {
+                      const current = effectivePermissions(newRole, newPermissions);
+                      return (
+                      <div key={group.id} className="rounded-md border border-slate-200 bg-white p-2">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-xs font-medium text-slate-800">{group.title}</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-6 px-2 text-[10px]"
+                            onClick={() =>
+                              setNewPermissions(
+                                applyGroupPermissions(current, group.keys, !hasAllGroupPermissions(current, group.keys)),
+                              )
+                            }
+                          >
+                            {hasAllGroupPermissions(current, group.keys) ? "清空本组" : "全选本组"}
+                          </Button>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          {group.keys.map((perm) => (
+                            <label key={perm} className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                className="h-3.5 w-3.5"
+                                checked={current.includes(perm)}
+                                onChange={() => setNewPermissions(togglePermission(current, perm))}
+                              />
+                              <span>{permissionLabelMap[perm]}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )})}
+                  </div>
                 </div>
               </div>
 
@@ -364,7 +494,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-slate-200 bg-white"
+                          className={compactActionButtonClass}
                           onClick={async () => {
                             const pwd = resetPwdByUserId[u.id] ?? "";
                             const res = await setUserPasswordAction({ userId: u.id, password: pwd });
@@ -405,6 +535,105 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                         {u.disabled ? "已禁用（点此启用）" : "已启用（点此禁用）"}
                       </Button>
                     </div>
+                    <div className="space-y-2 lg:col-span-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label className="text-[11px] text-slate-500">具体权限（未设置具体权限时将使用角色默认）</Label>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={compactTinyButtonClass}
+                            onClick={() =>
+                              setEditPermissionsByUserId((prev) => ({
+                                ...prev,
+                                [u.id]: defaultPermissionsByRole(u.role),
+                              }))
+                            }
+                          >
+                            套用{roleLabel(u.role)}模板
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={compactTinyButtonClass}
+                            onClick={() =>
+                              setEditPermissionsByUserId((prev) => ({ ...prev, [u.id]: null }))
+                            }
+                          >
+                            清空（改用默认）
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                        {PERMISSION_GROUPS.map((group) => {
+                          const current = effectivePermissions(u.role, editPermissionsByUserId[u.id] ?? u.permissions);
+                          return (
+                            <div key={`${u.id}-${group.id}`} className="rounded-md border border-slate-200 bg-white p-2">
+                              <div className="mb-2 flex items-center justify-between">
+                                <p className="text-xs font-medium text-slate-800">{group.title}</p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() =>
+                                    setEditPermissionsByUserId((prev) => ({
+                                      ...prev,
+                                      [u.id]: applyGroupPermissions(
+                                        current,
+                                        group.keys,
+                                        !hasAllGroupPermissions(current, group.keys),
+                                      ),
+                                    }))
+                                  }
+                                >
+                                  {hasAllGroupPermissions(current, group.keys) ? "清空本组" : "全选本组"}
+                                </Button>
+                              </div>
+                              <div className="grid gap-2 md:grid-cols-3">
+                                {group.keys.map((perm) => (
+                                  <label
+                                    key={`${u.id}-${perm}`}
+                                    className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-slate-700"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={current.includes(perm)}
+                                      onChange={() =>
+                                        setEditPermissionsByUserId((prev) => ({
+                                          ...prev,
+                                          [u.id]: togglePermission(current, perm),
+                                        }))
+                                      }
+                                    />
+                                    <span>{permissionLabelMap[perm]}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={compactActionButtonClass}
+                          onClick={async () => {
+                            const current = (editPermissionsByUserId[u.id] ?? u.permissions) ?? null;
+                            const res = await setUserPermissionsAction({ userId: u.id, permissions: current });
+                            if (!res.ok) {
+                              setUserMsg(res.error);
+                              return;
+                            }
+                            setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, permissions: current } : x)));
+                            setUserMsg(`已更新 ${u.username} 的具体权限`);
+                          }}
+                        >
+                          保存具体权限
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ))}
                 {users.length === 0 ? (
@@ -416,7 +645,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
               {userMsg ? <p className="text-xs text-primary">{userMsg}</p> : null}
             </div>
 
-            <div className="space-y-4 rounded-lg border border-slate-200 p-4">
+            <div className={sectionCardClass}>
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-slate-900">操作日志</p>
@@ -435,7 +664,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-8 border-slate-200 bg-white text-xs"
+                    className={compactActionButtonClass}
                     onClick={async () => {
                       const res = await listAuditLogsAction({ q: auditQ, limit: auditLimit, offset: auditOffset });
                       if (res.ok) {
@@ -483,7 +712,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-7 border-slate-200 bg-white px-2 text-[11px]"
+                            className={compactTinyButtonClass}
                             onClick={() => {
                               setSelectedAudit(r);
                               setAuditDetailOpen(true);
@@ -509,7 +738,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 border-slate-200 bg-white px-3 text-xs"
+                  className={compactPaginationButtonClass}
                   disabled={auditOffset <= 0}
                   onClick={() => setAuditOffset((v) => Math.max(0, v - auditLimit))}
                 >
@@ -519,7 +748,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 border-slate-200 bg-white px-3 text-xs"
+                  className={compactPaginationButtonClass}
                   disabled={auditRows.length < auditLimit}
                   onClick={() => setAuditOffset((v) => v + auditLimit)}
                 >
@@ -573,7 +802,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-8 border-slate-200 bg-white text-xs"
+                            className={compactActionButtonClass}
                             onClick={async () => {
                               const text = selectedAudit.detail ? JSON.stringify(selectedAudit.detail, null, 2) : "";
                               try {
@@ -597,7 +826,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                   )}
                 </div>
                 <div className="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
-                  <Button type="button" variant="outline" className="border-slate-200 bg-white" onClick={() => setAuditDetailOpen(false)}>
+                  <Button type="button" variant="outline" className={compactSheetFooterButtonClass} onClick={() => setAuditDetailOpen(false)}>
                     关闭
                   </Button>
                 </div>

@@ -3,6 +3,7 @@
 import { createAsset } from "@/app/actions/assets";
 import { getAppSettingsAction, getAssetFieldsConfigAction } from "@/app/actions/settings";
 import type { AssetRow } from "@/components/dashboard";
+import { PageContainer } from "@/components/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -155,12 +156,9 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 pb-12 md:p-8">
+    <PageContainer size="narrow" className="space-y-6 p-4 pb-12 md:p-8">
       <div>
-        <Link href="/devices" className="text-sm text-slate-500 hover:text-slate-900">
-          ← 设备列表
-        </Link>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新增设备</h1>
           <p className="text-sm text-slate-500">写入资产台账，类型限定为车辆或工程机械。</p>
         </div>
@@ -328,6 +326,6 @@ export function NewAssetForm({ templates }: { templates: AssetRow[] }) {
           </Button>
         </div>
       </form>
-    </div>
+    </PageContainer>
   );
 }

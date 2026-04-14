@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { dueRelativeLabel, relativeDueToneClass } from "@/lib/due-date-ui";
 import { nearestReminderForAsset, urgencyPercent } from "@/lib/reminder-utils";
 import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
+import { compactActionButtonClass, pageHeaderWrapClass, pageSectionClass } from "@/lib/ui-style";
 import { PageHeader } from "@/components/page-header";
 import { downloadExcelFromJson } from "@/lib/excel-export";
 import { AssetImportSheet } from "@/components/asset-import-sheet";
@@ -362,9 +363,9 @@ export function Dashboard({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <header className="mb-10">
+        <header className={pageHeaderWrapClass}>
           <PageHeader
             title={view === "alerts" ? "维保预警" : view === "devices" ? "设备" : "仪表盘"}
             subtitle={
@@ -377,7 +378,7 @@ export function Dashboard({
             actions={
               view === "devices" ? (
                 <>
-                  <Button asChild className="h-8 border border-border bg-card text-xs text-slate-700">
+                  <Button asChild variant="outline" className={compactActionButtonClass}>
                     <Link href="/devices/new">新增设备</Link>
                   </Button>
                   <AssetImportSheet />
@@ -388,7 +389,7 @@ export function Dashboard({
         </header>
 
         {view === "full" ? (
-          <section className="mb-10 space-y-6">
+          <section className={pageSectionClass}>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-xs text-slate-500">总资产概览</p>

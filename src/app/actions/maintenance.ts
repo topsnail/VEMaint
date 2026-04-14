@@ -4,8 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { createDb } from "@/db";
 import { assets, maintenanceRecords } from "@/db/schema";
 import { loadAppSettings } from "@/lib/app-settings";
-import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
 import { getCloudflareEnv } from "@/lib/cf-env";
 import { DEFAULT_MAINTENANCE_KINDS } from "@/lib/kv-settings";
 import { revalidatePath } from "next/cache";
@@ -62,8 +61,7 @@ function parsePartsJson(raw: string): { name: string; cost?: string; qty?: strin
 
 export async function createMaintenanceRecordFromForm(formData: FormData) {
   const { DB, R2 } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("maintenance.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增记录" };
   }
   const db = createDb(DB);
@@ -185,8 +183,7 @@ export type UpdateMaintenanceInput = {
 
 export async function updateMaintenanceRecord(input: UpdateMaintenanceInput) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("maintenance.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑记录" };
   }
   const db = createDb(DB);
@@ -233,8 +230,7 @@ export async function deleteMaintenanceRecord(idRaw: string, assetIdRaw: string)
   if (!id || !assetId) return { ok: false as const, error: "无效编号" };
 
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canDeleteByRole(role)) {
+  if (!(await hasCurrentUserPermission("maintenance.delete"))) {
     return { ok: false as const, error: "仅管理员可删除维保记录" };
   }
   const db = createDb(DB);

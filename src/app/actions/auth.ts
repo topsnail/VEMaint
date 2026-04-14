@@ -2,8 +2,8 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { canManageUsers, parseUserRole, type UserRole } from "@/lib/authz";
-import { getCurrentAuthSession } from "@/lib/auth-session";
+import { hasPermission, normalizePermissionKeys, parseUserRole, type UserRole } from "@/lib/authz";
+import { getCurrentAuthSession, hasCurrentUserPermission } from "@/lib/auth-session";
 import { SESSION_COOKIE_KEY, signSession } from "@/lib/auth-token";
 import { writeAuditLog } from "@/lib/audit";
 import {
@@ -13,6 +13,7 @@ import {
   normalizeUsername,
   setAuthUserDisabled,
   updateAuthUserPassword,
+  updateAuthUserPermissions,
   updateAuthUserRole,
   verifyPassword,
 } from "@/lib/auth-users";
@@ -31,7 +32,19 @@ function safeUserRows(rows: Awaited<ReturnType<typeof listAuthUsers>>) {
     disabled: u.disabled,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    permissions: Array.isArray(u.permissions) ? u.permissions : null,
   }));
+}
+
+function canManageByUserRow(user: { role: UserRole; permissions?: string[] | null; disabled: boolean }) {
+  if (user.disabled) return false;
+  const permissions = Array.isArray(user.permissions) ? normalizePermissionKeys(user.permissions) : undefined;
+  return hasPermission("users.manage", user.role, permissions);
+}
+
+function ensureAtLeastOneManager(users: Awaited<ReturnType<typeof listAuthUsers>>) {
+  if (users.some((u) => canManageByUserRow(u))) return;
+  throw new Error("至少需要保留 1 个可用的用户管理账号");
 }
 
 export async function loginAction(input: { username: string; password: string }) {
@@ -73,26 +86,27 @@ export async function authBootstrapStatusAction() {
 }
 
 export async function listUsersAction() {
-  const session = await getCurrentAuthSession();
-  if (!session || !canManageUsers(session.role)) return { ok: false as const, error: "仅管理员可查看用户列表" };
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (!canManage) return { ok: false as const, error: "仅管理员可查看用户列表" };
   const rows = await listAuthUsers();
   return { ok: true as const, users: safeUserRows(rows) };
 }
 
-export async function createUserAction(input: { username: string; password: string; role: string }) {
+export async function createUserAction(input: { username: string; password: string; role: string; permissions?: string[] | null }) {
   const role = mapRole(input.role);
   if (!role) return { ok: false as const, error: "无效角色" };
   const usersExist = await hasAuthUsers();
-  const session = await getCurrentAuthSession();
-  if (usersExist && (!session || !canManageUsers(session.role))) {
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (usersExist && !canManage) {
     return { ok: false as const, error: "仅管理员可新增用户" };
   }
   try {
-    const created = await createAuthUser({ username: input.username, password: input.password, role });
+    const permissions = Array.isArray(input.permissions) ? normalizePermissionKeys(input.permissions) : null;
+    const created = await createAuthUser({ username: input.username, password: input.password, role, permissions });
     await writeAuditLog({
       action: "users.create",
       target: created.id,
-      detail: { username: created.username, role: created.role },
+      detail: { username: created.username, role: created.role, permissions },
     });
     revalidatePath("/settings");
     return { ok: true as const };
@@ -102,11 +116,14 @@ export async function createUserAction(input: { username: string; password: stri
 }
 
 export async function setUserRoleAction(input: { userId: string; role: string }) {
-  const session = await getCurrentAuthSession();
-  if (!session || !canManageUsers(session.role)) return { ok: false as const, error: "仅管理员可修改角色" };
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (!canManage) return { ok: false as const, error: "仅管理员可修改角色" };
   const role = mapRole(input.role);
   if (!role) return { ok: false as const, error: "无效角色" };
   try {
+    const users = await listAuthUsers();
+    const next = users.map((u) => (u.id === input.userId ? { ...u, role } : u));
+    ensureAtLeastOneManager(next);
     await updateAuthUserRole(input.userId, role);
     await writeAuditLog({
       action: "users.set_role",
@@ -121,8 +138,8 @@ export async function setUserRoleAction(input: { userId: string; role: string })
 }
 
 export async function setUserPasswordAction(input: { userId: string; password: string }) {
-  const session = await getCurrentAuthSession();
-  if (!session || !canManageUsers(session.role)) return { ok: false as const, error: "仅管理员可重置密码" };
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (!canManage) return { ok: false as const, error: "仅管理员可重置密码" };
   try {
     await updateAuthUserPassword(input.userId, input.password);
     await writeAuditLog({
@@ -138,9 +155,12 @@ export async function setUserPasswordAction(input: { userId: string; password: s
 }
 
 export async function setUserDisabledAction(input: { userId: string; disabled: boolean }) {
-  const session = await getCurrentAuthSession();
-  if (!session || !canManageUsers(session.role)) return { ok: false as const, error: "仅管理员可启停用户" };
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (!canManage) return { ok: false as const, error: "仅管理员可启停用户" };
   try {
+    const users = await listAuthUsers();
+    const next = users.map((u) => (u.id === input.userId ? { ...u, disabled: input.disabled } : u));
+    ensureAtLeastOneManager(next);
     await setAuthUserDisabled(input.userId, input.disabled);
     await writeAuditLog({
       action: "users.set_disabled",
@@ -151,5 +171,26 @@ export async function setUserDisabledAction(input: { userId: string; disabled: b
     return { ok: true as const };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "更新用户状态失败" };
+  }
+}
+
+export async function setUserPermissionsAction(input: { userId: string; permissions: string[] | null }) {
+  const canManage = await hasCurrentUserPermission("users.manage");
+  if (!canManage) return { ok: false as const, error: "仅管理员可修改权限" };
+  try {
+    const permissions = Array.isArray(input.permissions) ? normalizePermissionKeys(input.permissions) : null;
+    const users = await listAuthUsers();
+    const next = users.map((u) => (u.id === input.userId ? { ...u, permissions } : u));
+    ensureAtLeastOneManager(next);
+    await updateAuthUserPermissions(input.userId, permissions);
+    await writeAuditLog({
+      action: "users.set_permissions",
+      target: input.userId,
+      detail: { permissions },
+    });
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "修改权限失败" };
   }
 }

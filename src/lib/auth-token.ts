@@ -33,6 +33,10 @@ async function importHmacKey() {
   return hmacKeyPromise;
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return new Uint8Array(bytes).buffer;
+}
+
 export async function signSession(session: AuthSession): Promise<string> {
   const key = await importHmacKey();
   const payload = b64urlEncode(new TextEncoder().encode(JSON.stringify(session)));
@@ -44,10 +48,10 @@ export async function verifySessionToken(token: string): Promise<AuthSession | n
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
   const key = await importHmacKey();
-  const ok = await crypto.subtle.verify("HMAC", key, b64urlDecode(sig), new TextEncoder().encode(payload));
+  const ok = await crypto.subtle.verify("HMAC", key, toArrayBuffer(b64urlDecode(sig)), new TextEncoder().encode(payload));
   if (!ok) return null;
   try {
-    const parsed = JSON.parse(new TextDecoder().decode(b64urlDecode(payload))) as Partial<AuthSession>;
+    const parsed = JSON.parse(new TextDecoder().decode(toArrayBuffer(b64urlDecode(payload)))) as Partial<AuthSession>;
     const role = parseUserRole(parsed.role);
     if (!parsed.userId || !parsed.username || !role || !parsed.exp) return null;
     if (parsed.exp * 1000 < Date.now()) return null;

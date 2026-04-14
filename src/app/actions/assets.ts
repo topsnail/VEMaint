@@ -3,8 +3,7 @@
 import { createDb } from "@/db";
 import { assetStatusLogs, assets } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { canWriteByRole } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
 import { writeAuditLog } from "@/lib/audit";
 import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -56,8 +55,7 @@ export type UpdateAssetInput = {
 
 export async function createAsset(input: CreateAssetInput) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("assets.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增" };
   }
   const db = createDb(DB);
@@ -103,8 +101,7 @@ export async function createAsset(input: CreateAssetInput) {
 
 export async function updateAsset(input: UpdateAssetInput) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("assets.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑" };
   }
   const db = createDb(DB);
@@ -173,8 +170,7 @@ export async function listAssetStatusLogs(assetIdRaw: string) {
 }
 
 export async function importAssetsFromCsv(csvRaw: string) {
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) {
+  if (!(await hasCurrentUserPermission("assets.import"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止导入" };
   }
   void csvRaw;
@@ -194,8 +190,7 @@ function isIsoDate(v: string) {
 }
 
 export async function importAssetsFromExcelRows(rows: ImportAssetRow[]) {
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) return { ok: false as const, error: "当前为只读访客模式，禁止导入" };
+  if (!(await hasCurrentUserPermission("assets.import"))) return { ok: false as const, error: "当前为只读访客模式，禁止导入" };
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false as const, error: "电子表格数据为空" };
   if (rows.length > 2000) return { ok: false as const, error: "单次导入最多 2000 行" };
 

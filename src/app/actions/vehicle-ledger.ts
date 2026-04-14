@@ -1,11 +1,12 @@
 "use server";
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { createDb } from "@/db";
 import { vehicleLedgers } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { canDeleteByRole, canWriteByRole } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
+import { signVehicleShareToken } from "@/lib/share-token";
+import { vehicleLedgerRowFromDb } from "@/lib/vehicle-ledger-dto";
 import { revalidatePath } from "next/cache";
 
 export type VehicleLedgerInput = {
@@ -68,6 +69,72 @@ export async function listVehicleLedgers() {
   return db.select().from(vehicleLedgers).orderBy(desc(vehicleLedgers.createdAt));
 }
 
+export async function listVehicleLedgerDepartmentsAction() {
+  if (!(await hasCurrentUserPermission("ledger.read"))) {
+    return { ok: false as const, error: "无权查看车辆台账" };
+  }
+  const { DB } = getCloudflareEnv();
+  const db = createDb(DB);
+  const rows = await db
+    .selectDistinct({ department: vehicleLedgers.department })
+    .from(vehicleLedgers)
+    .orderBy(vehicleLedgers.department);
+  const options = rows
+    .map((r) => (r.department ?? "").trim())
+    .filter((v) => !!v);
+  return { ok: true as const, options };
+}
+
+export async function queryVehicleLedgersAction(input: {
+  q?: string;
+  department?: string;
+  usageStatus?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  if (!(await hasCurrentUserPermission("ledger.read"))) {
+    return { ok: false as const, error: "无权查看车辆台账" };
+  }
+  const q = (input.q ?? "").trim();
+  const department = (input.department ?? "all").trim();
+  const usageStatus = (input.usageStatus ?? "all").trim();
+  const pageSize = Math.min(100, Math.max(5, Math.floor(input.pageSize ?? 24)));
+  const page = Math.max(1, Math.floor(input.page ?? 1));
+  const offset = (page - 1) * pageSize;
+
+  const where = and(
+    department !== "all" ? eq(vehicleLedgers.department, department) : undefined,
+    usageStatus !== "all" ? eq(vehicleLedgers.usageStatus, usageStatus) : undefined,
+    q
+      ? or(
+          sql`lower(${vehicleLedgers.plateNo}) like ${"%" + q.toLowerCase() + "%"}`,
+          sql`lower(${vehicleLedgers.internalNo}) like ${"%" + q.toLowerCase() + "%"}`,
+          sql`lower(${vehicleLedgers.brandModel}) like ${"%" + q.toLowerCase() + "%"}`,
+          sql`lower(${vehicleLedgers.ownerName}) like ${"%" + q.toLowerCase() + "%"}`,
+          sql`lower(${vehicleLedgers.archiveNo}) like ${"%" + q.toLowerCase() + "%"}`,
+          sql`lower(${vehicleLedgers.defaultDriver}) like ${"%" + q.toLowerCase() + "%"}`,
+        )
+      : undefined,
+  );
+
+  const { DB } = getCloudflareEnv();
+  const db = createDb(DB);
+  const totalRow = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(vehicleLedgers)
+    .where(where);
+  const total = totalRow[0]?.count ?? 0;
+  const rows = await db
+    .select()
+    .from(vehicleLedgers)
+    .where(where)
+    .orderBy(desc(vehicleLedgers.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  return { ok: true as const, total, rows: rows.map((r) => vehicleLedgerRowFromDb(r)), page, pageSize };
+}
+
 export async function getVehicleLedgerById(idRaw: string) {
   const id = idRaw?.trim();
   if (!id) return null;
@@ -77,10 +144,21 @@ export async function getVehicleLedgerById(idRaw: string) {
   return rows[0] ?? null;
 }
 
+export async function createVehicleShareLinkAction(idRaw: string) {
+  if (!(await hasCurrentUserPermission("ledger.read"))) {
+    return { ok: false as const, error: "无权生成分享链接" };
+  }
+  const id = idRaw?.trim();
+  if (!id) return { ok: false as const, error: "无效编号" };
+  const row = await getVehicleLedgerById(id);
+  if (!row) return { ok: false as const, error: "车辆不存在" };
+  const token = await signVehicleShareToken(id);
+  return { ok: true as const, path: `/share/vehicle/${id}?token=${encodeURIComponent(token)}` };
+}
+
 export async function createVehicleLedger(input: VehicleLedgerInput) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式不可新增" };
+  if (!(await hasCurrentUserPermission("ledger.write"))) return { ok: false as const, error: "只读模式不可新增" };
   try {
     const db = createDb(DB);
     validateTruckLoad(input.vehicleType, input.ratedLoad);
@@ -139,8 +217,7 @@ export async function updateVehicleLedger(idRaw: string, input: VehicleLedgerInp
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式不可编辑" };
+  if (!(await hasCurrentUserPermission("ledger.write"))) return { ok: false as const, error: "只读模式不可编辑" };
   try {
     const db = createDb(DB);
     validateTruckLoad(input.vehicleType, input.ratedLoad);
@@ -200,8 +277,7 @@ export async function deleteVehicleLedger(idRaw: string) {
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canDeleteByRole(role)) return { ok: false as const, error: "仅管理员可删除" };
+  if (!(await hasCurrentUserPermission("ledger.delete"))) return { ok: false as const, error: "仅管理员可删除" };
   const db = createDb(DB);
   await db.delete(vehicleLedgers).where(eq(vehicleLedgers.id, id));
   revalidatePath("/vehicle-ledger");

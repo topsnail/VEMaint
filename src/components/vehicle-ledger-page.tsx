@@ -1,12 +1,23 @@
 "use client";
 
-import { deleteVehicleLedger } from "@/app/actions/vehicle-ledger";
+import {
+  createVehicleShareLinkAction,
+  deleteVehicleLedger,
+  queryVehicleLedgersAction,
+} from "@/app/actions/vehicle-ledger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RowActions } from "@/components/row-actions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { VehicleLedgerRow } from "@/lib/vehicle-ledger-dto";
 import { glassPanelClass, zebraTableRowClass } from "@/lib/table-ui";
+import {
+  compactActionButtonClass,
+  compactPaginationButtonClass,
+  filterPanelGridClass,
+  pageContainerClass,
+} from "@/lib/ui-style";
 import { USAGE_STATUS } from "@/lib/vehicle-ledger";
 import { promptVehicleLedgerPin } from "@/lib/vehicle-ledger-pin";
 import { PageHeader } from "@/components/page-header";
@@ -15,12 +26,26 @@ import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
 export function VehicleLedgerPage({
-  initial,
+  initialRows,
+  initialTotal,
+  deptOptions,
+  canWrite,
+  canDelete,
+  initialError,
 }: {
-  initial: VehicleLedgerRow[];
+  initialRows: VehicleLedgerRow[];
+  initialTotal: number;
+  deptOptions: string[];
+  canWrite: boolean;
+  canDelete: boolean;
+  initialError?: string;
 }) {
-  const [rows, setRows] = useState<VehicleLedgerRow[]>(initial);
-  const [msg, setMsg] = useState<string>("");
+  const [rows, setRows] = useState<VehicleLedgerRow[]>(initialRows);
+  const [total, setTotal] = useState<number>(initialTotal);
+  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(
+    initialError ? { kind: "error", text: initialError } : null,
+  );
+  const [lastShareUrl, setLastShareUrl] = useState<string>("");
   const [q, setQ] = useState("");
   const qDeferred = useDeferredValue(q);
   const [deptFilter, setDeptFilter] = useState("all");
@@ -30,41 +55,87 @@ export function VehicleLedgerPage({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  const deptOptions = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.department?.trim()).filter((v): v is string => !!v))).sort(),
-    [rows],
-  );
-  const filteredRows = useMemo(() => {
-    const qq = qDeferred.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (deptFilter !== "all" && (r.department ?? "") !== deptFilter) return false;
-      if (statusFilter !== "all" && r.usageStatus !== statusFilter) return false;
-      if (!qq) return true;
-      const hay = `${r.plateNo} ${r.internalNo} ${r.brandModel} ${r.ownerName ?? ""} ${r.archiveNo ?? ""} ${r.defaultDriver ?? ""}`.toLowerCase();
-      return hay.includes(qq);
-    });
-  }, [rows, qDeferred, deptFilter, statusFilter]);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  async function shareVehicleLink(id: string, plateNo: string) {
+    // 先同步打开新标签页（保留用户手势），避免异步后被弹窗拦截
+    // 注意：部分浏览器在使用 noopener 时会让返回句柄不可控，导致后续跳转失败
+    const opened = window.open("about:blank", "_blank");
+    try {
+      opened?.document.write(
+        `<meta charset="utf-8" /><title>正在打开分享页…</title><div style="font-family: ui-sans-serif, system-ui; padding: 16px;">正在打开分享页…</div>`,
+      );
+      opened?.document.close();
+    } catch {
+      // ignore
+    }
+    const share = await createVehicleShareLinkAction(id);
+    if (!share.ok) {
+      if (opened) opened.close();
+      setMsg({ kind: "error", text: share.error });
+      return;
+    }
+    const url = `${window.location.origin}${share.path}`;
+    setLastShareUrl(url);
+    const shareText = `车辆信息：${plateNo}`;
+    try {
+      opened?.location.replace(url);
+    } catch {
+      // ignore; fallback link below
+    }
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "车辆信息", text: shareText, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      setMsg({ kind: "success", text: `已生成 ${plateNo} 的分享链接（已打开分享页）` });
+    } catch {
+      setMsg({ kind: "error", text: "分享失败，请稍后重试" });
+    }
+  }
+
   useEffect(() => {
     setPage(1);
   }, [qDeferred, deptFilter, statusFilter]);
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const pageRows = useMemo(() => {
-    const p = Math.min(page, pageCount);
-    const start = (p - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageCount]);
+
+  useEffect(() => {
+    startTransition(async () => {
+      const res = await queryVehicleLedgersAction({
+        q: qDeferred,
+        department: deptFilter,
+        usageStatus: statusFilter,
+        page,
+        pageSize,
+      });
+      if (!res.ok) {
+        setMsg({ kind: "error", text: res.error });
+        return;
+      }
+      setRows(res.rows);
+      setTotal(res.total);
+    });
+  }, [qDeferred, deptFilter, statusFilter, page, pageSize]);
+
+  const pageRows = useMemo(() => rows, [rows]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
+    <div className={pageContainerClass}>
       <PageHeader
         title="车辆台账"
         actions={
-          <Button asChild className="h-8 shrink-0">
-            <Link href="/vehicle-ledger/new">新增车辆</Link>
-          </Button>
+          canWrite ? (
+            <Button asChild className={`${compactActionButtonClass} shrink-0`}>
+              <Link href="/vehicle-ledger/new">新增车辆</Link>
+            </Button>
+          ) : (
+            <Button className={`${compactActionButtonClass} shrink-0`} disabled title="只读账号不可新增">
+              新增车辆
+            </Button>
+          )
         }
       />
-      <div className={`grid gap-2 p-3 md:grid-cols-3 ${glassPanelClass}`}>
+      <div className={`${filterPanelGridClass} md:grid-cols-3 ${glassPanelClass}`}>
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索车牌/编号/品牌/驾驶人" />
         <Select value={deptFilter} onValueChange={setDeptFilter}>
           <SelectTrigger>
@@ -123,41 +194,47 @@ export function VehicleLedgerPage({
                 </TableCell>
                 <TableCell className="text-slate-700">{r.usageStatus}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <Button asChild type="button" size="sm" variant="outline" className="h-8 border-slate-200 bg-white px-2.5 text-xs">
-                      <Link href={`/vehicle-ledger/${r.id}`}>查看</Link>
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 border-slate-200 bg-white px-2.5 text-xs"
-                      onClick={() => {
-                        if (!promptVehicleLedgerPin()) return;
-                        router.push(`/vehicle-ledger/${r.id}/edit`);
-                      }}
-                    >
-                      修改
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 border-rose-200 bg-white px-2.5 text-xs text-rose-700"
-                      disabled={pending}
-                      onClick={() =>
-                        startTransition(async () => {
+                  <RowActions
+                    actions={[
+                      { kind: "view", href: `/vehicle-ledger/${r.id}` },
+                      {
+                        kind: "edit",
+                        disabled: !canWrite,
+                        onClick: () => {
+                          if (!canWrite) return;
                           if (!promptVehicleLedgerPin()) return;
-                          if (!window.confirm(`确认删除车辆「${r.plateNo}」?`)) return;
-                          const res = await deleteVehicleLedger(r.id);
-                          if (!res.ok) setMsg(res.error);
-                          else setRows((prev) => prev.filter((x) => x.id !== r.id));
-                        })
-                      }
-                    >
-                      删除
-                    </Button>
-                  </div>
+                          router.push(`/vehicle-ledger/${r.id}/edit`);
+                        },
+                      },
+                      { kind: "share", onClick: () => void shareVehicleLink(r.id, r.plateNo) },
+                      {
+                        kind: "delete",
+                        disabled: pending || !canDelete,
+                        onClick: () =>
+                          startTransition(async () => {
+                            if (!canDelete) return;
+                            if (!promptVehicleLedgerPin()) return;
+                            if (!window.confirm(`确认删除车辆「${r.plateNo}」?`)) return;
+                            const res = await deleteVehicleLedger(r.id);
+                            if (!res.ok) setMsg({ kind: "error", text: res.error });
+                            else {
+                              setMsg({ kind: "success", text: "已删除" });
+                              const refreshed = await queryVehicleLedgersAction({
+                                q: qDeferred,
+                                department: deptFilter,
+                                usageStatus: statusFilter,
+                                page,
+                                pageSize,
+                              });
+                              if (refreshed.ok) {
+                                setRows(refreshed.rows);
+                                setTotal(refreshed.total);
+                              }
+                            }
+                          }),
+                      },
+                    ]}
+                  />
                 </TableCell>
               </TableRow>
             ))}
@@ -185,58 +262,71 @@ export function VehicleLedgerPage({
                 {(r.department || "未填部门") + " · " + r.usageStatus}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Button asChild type="button" className="h-10 w-full border border-slate-200 bg-white text-xs text-slate-800">
-                <Link href={`/vehicle-ledger/${r.id}`}>查看</Link>
-              </Button>
-              <Button
-                type="button"
-                className="h-10 w-full border border-slate-200 bg-white text-xs text-slate-800"
-                onClick={() => {
-                  if (!promptVehicleLedgerPin()) return;
-                  router.push(`/vehicle-ledger/${r.id}/edit`);
-                }}
-              >
-                修改
-              </Button>
-              <Button
-                type="button"
-                className="h-10 w-full border border-rose-200 bg-white text-xs text-rose-700"
-                disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
+            <RowActions
+              mobile
+              actions={[
+                { kind: "view", href: `/vehicle-ledger/${r.id}` },
+                {
+                  kind: "edit",
+                  disabled: !canWrite,
+                  onClick: () => {
+                    if (!canWrite) return;
                     if (!promptVehicleLedgerPin()) return;
-                    if (!window.confirm(`确认删除车辆「${r.plateNo}」?`)) return;
-                    const res = await deleteVehicleLedger(r.id);
-                    if (!res.ok) setMsg(res.error);
-                    else setRows((prev) => prev.filter((x) => x.id !== r.id));
-                  })
-                }
-              >
-                删除
-              </Button>
-            </div>
+                    router.push(`/vehicle-ledger/${r.id}/edit`);
+                  },
+                },
+                { kind: "share", onClick: () => void shareVehicleLink(r.id, r.plateNo) },
+                {
+                  kind: "delete",
+                  disabled: pending || !canDelete,
+                  onClick: () =>
+                    startTransition(async () => {
+                      if (!canDelete) return;
+                      if (!promptVehicleLedgerPin()) return;
+                      if (!window.confirm(`确认删除车辆「${r.plateNo}」?`)) return;
+                      const res = await deleteVehicleLedger(r.id);
+                      if (!res.ok) setMsg({ kind: "error", text: res.error });
+                      else {
+                        setMsg({ kind: "success", text: "已删除" });
+                        const refreshed = await queryVehicleLedgersAction({
+                          q: qDeferred,
+                          department: deptFilter,
+                          usageStatus: statusFilter,
+                          page,
+                          pageSize,
+                        });
+                        if (refreshed.ok) {
+                          setRows(refreshed.rows);
+                          setTotal(refreshed.total);
+                        }
+                      }
+                    }),
+                },
+              ]}
+            />
           </div>
         ))}
-        {filteredRows.length === 0 ? <p className="text-sm text-slate-500">暂无匹配车辆数据</p> : null}
+        {total === 0 ? <p className="text-sm text-slate-500">暂无匹配车辆数据</p> : null}
       </div>
 
-      {filteredRows.length > 0 ? (
+      {total > 0 ? (
         <div className="flex items-center justify-end gap-2">
           <Button
             type="button"
-            className="h-9 min-w-[4.5rem] border border-slate-200 bg-white px-3 text-xs text-slate-700"
+            variant="outline"
+            className={compactPaginationButtonClass}
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             上一页
           </Button>
           <span className="text-xs text-slate-500">
-            {page}/{pageCount}
+            {page}/{pageCount}（共 {total} 条）
           </span>
           <Button
             type="button"
-            className="h-9 min-w-[4.5rem] border border-slate-200 bg-white px-3 text-xs text-slate-700"
+            variant="outline"
+            className={compactPaginationButtonClass}
             disabled={page >= pageCount}
             onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
           >
@@ -244,7 +334,21 @@ export function VehicleLedgerPage({
           </Button>
         </div>
       ) : null}
-      {msg ? <p className="text-xs text-rose-700">{msg}</p> : null}
+      {msg ? (
+        <div className="space-y-1">
+          <p className={msg.kind === "error" ? "text-xs text-rose-700" : "text-xs text-emerald-700"}>{msg.text}</p>
+          {lastShareUrl ? (
+            <a
+              className="block max-w-full truncate text-xs text-sky-700 underline underline-offset-2 hover:text-sky-800"
+              href={lastShareUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {lastShareUrl}
+            </a>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

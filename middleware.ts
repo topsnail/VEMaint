@@ -13,6 +13,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (
     PUBLIC_PATHS.has(pathname) ||
+    pathname.startsWith("/share/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||

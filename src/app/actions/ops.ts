@@ -3,8 +3,7 @@
 import { createDb } from "@/db";
 import { faultEvents, incidents } from "@/db/schema";
 import { getCloudflareEnv } from "@/lib/cf-env";
-import { canWriteByRole } from "@/lib/authz";
-import { getCurrentUserRole } from "@/lib/auth-session";
+import { hasCurrentUserPermission } from "@/lib/auth-session";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -14,8 +13,7 @@ function isIsoDate(v: string) {
 
 export async function createIncidentFromForm(formData: FormData) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式禁止新增" };
+  if (!(await hasCurrentUserPermission("maintenance.write"))) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   const assetId = String(formData.get("assetId") ?? "").trim();
   const kind = String(formData.get("kind") ?? "").trim();
@@ -49,8 +47,7 @@ export async function createFaultEvent(input: {
   isRework?: boolean;
 }) {
   const { DB } = getCloudflareEnv();
-  const role = await getCurrentUserRole();
-  if (!canWriteByRole(role)) return { ok: false as const, error: "只读模式禁止新增" };
+  if (!(await hasCurrentUserPermission("maintenance.write"))) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   if (!input.assetId?.trim() || !input.faultCode?.trim() || !input.eventDate?.trim()) {
     return { ok: false as const, error: "资产、故障代码、日期必填" };
