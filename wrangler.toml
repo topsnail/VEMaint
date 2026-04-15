@@ -4,7 +4,7 @@
 
 name = "vemaint"
 compatibility_date = "2024-10-22"
-pages_build_output_dir = ".open-next"
+pages_build_output_dir = ".open-next/assets"
 compatibility_flags = ["nodejs_compat"]
 
 # D1：使用与 Cloudflare 控制台中绑定相同的名称
