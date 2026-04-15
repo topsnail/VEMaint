@@ -68,8 +68,10 @@ VEMaint
 2. 在 Cloudflare Pages 创建项目并关联仓库
 3. 构建设置（推荐）
    - 构建命令：`npm run pages:build`
-   - 构建输出目录：`.vercel/output/static`
-4. 在 Pages 后台配置环境变量（如有）
+   - 构建输出目录：`dist`
+   - 根目录：留空（仓库根目录）
+4. 在 Pages 后台配置环境变量
+   - `AUTH_SECRET`（必填，建议 32+ 字符随机密钥）
 5. 绑定 Cloudflare 资源
    - D1：绑定 `DB`
    - KV：绑定 `KV`
@@ -83,6 +85,8 @@ VEMaint
   - `DB`：D1 数据库绑定
   - `KV`：KV 命名空间绑定
   - `R2`：R2 Bucket 绑定
+- 必填（应用安全）
+  - `AUTH_SECRET`：会话与分享链接签名密钥（生产环境必须配置）
 - 可选（本地）
   - `NEXT_DISABLE_TRACE=1`：Windows 文件锁场景建议开启（项目 `dev` 脚本已内置）
 
@@ -96,8 +100,9 @@ VEMaint
 
 ## ⚠️ 注意事项
 1. Cloudflare Pages 部署注意事项
-   - 确保输出目录与构建命令匹配（`.vercel/output/static`）
+   - 确保输出目录与构建命令匹配（`dist`）
    - 资源绑定缺失会导致运行时报错（D1/KV/R2）
+   - 若自定义域名内容更新慢，先检查缓存规则并执行一次缓存清理
 2. 本地与线上差异
    - 本地通过 Wrangler 模拟绑定，线上使用真实 Cloudflare 资源
    - 本地数据库与线上数据库数据互不影响
@@ -116,6 +121,8 @@ VEMaint
 2. CF Pages 部署失败
    - 核对构建命令/输出目录
    - 核对 D1/KV/R2 绑定名称与权限
+   - 核对是否已配置 `AUTH_SECRET`
+   - 确认已推送最新代码（尤其 `package-lock.json`）
 3. 页面访问异常（404/500）
    - 清理本地缓存目录：`.next`、`.next-dev`
    - 强制刷新浏览器缓存（`Ctrl + F5`）

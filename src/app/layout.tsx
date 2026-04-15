@@ -10,6 +10,12 @@ export const runtime = "edge";
 export const metadata: Metadata = {
   title: "车辆与设备维保管理 | VEMaint",
   description: "车辆与设备维保管理（VEMaint）",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default async function RootLayout({
