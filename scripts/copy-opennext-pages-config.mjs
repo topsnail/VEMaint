@@ -4,13 +4,26 @@ import { resolve } from "node:path";
 
 const projectRoot = resolve(process.cwd());
 const srcHeaders = resolve(projectRoot, "public", "_headers");
-const dstHeaders = resolve(projectRoot, ".open-next", "_headers");
+const openNextRoot = resolve(projectRoot, ".open-next");
+const assetsRoot = resolve(openNextRoot, "assets");
+const srcWorker = resolve(openNextRoot, "worker.js");
+const dstWorker = resolve(assetsRoot, "_worker.js");
+const dstHeaders = resolve(assetsRoot, "_headers");
 
 async function main() {
-  if (!existsSync(resolve(projectRoot, ".open-next"))) {
+  if (!existsSync(openNextRoot)) {
     throw new Error("未找到 .open-next 目录，请先执行 opennextjs-cloudflare build");
   }
+  if (!existsSync(assetsRoot)) {
+    throw new Error("未找到 .open-next/assets 目录，OpenNext 构建产物不完整");
+  }
+  if (!existsSync(srcWorker)) {
+    throw new Error("未找到 .open-next/worker.js，无法生成 Pages 所需 _worker.js");
+  }
+
+  await copyFile(srcWorker, dstWorker);
   await copyFile(srcHeaders, dstHeaders);
+  console.log(`已复制 _worker.js -> ${dstWorker}`);
   console.log(`已复制 _headers -> ${dstHeaders}`);
 }
 
