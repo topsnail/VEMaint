@@ -67,7 +67,7 @@ export async function loginAction(input: { username: string; password: string })
   if (!username || !password) return { ok: false as const, error: "请输入用户名和密码" };
 
   const users = await listAuthUsers();
-  const bootstrap = getBootstrapAdminConfig();
+  const bootstrap = await getBootstrapAdminConfig();
 
   // KV 尚无用户且已在云端配置 BOOTSTRAP_ADMIN_PASSWORD：仅此凭据可创建首个超级管理员并登录
   if (users.length === 0 && bootstrap) {
@@ -118,7 +118,7 @@ export async function getCurrentUserAction() {
 
 export async function authBootstrapStatusAction() {
   const usersExist = await hasAuthUsers();
-  const bootstrapConfigured = Boolean(getBootstrapAdminConfig());
+  const bootstrapConfigured = Boolean(await getBootstrapAdminConfig());
   return { usersExist, bootstrapConfigured };
 }
 

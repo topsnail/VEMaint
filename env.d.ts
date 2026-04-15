@@ -4,6 +4,10 @@ export type CloudflareEnv = {
   DB: D1Database;
   KV: KVNamespace;
   R2: R2Bucket;
+  /** Pages 控制台环境变量可注入到 Worker env */
+  BOOTSTRAP_ADMIN_PASSWORD?: string;
+  BOOTSTRAP_ADMIN_USERNAME?: string;
+  AUTH_SECRET?: string;
 };
 
 declare global {
