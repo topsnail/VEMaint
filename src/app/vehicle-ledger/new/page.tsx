@@ -3,8 +3,6 @@ import { loadAppSettings } from "@/lib/app-settings";
 import { getCloudflareEnv } from "@/lib/cf-env";
 import { VEHICLE_LEDGER_EMPTY } from "@/lib/vehicle-ledger";
 
-export const runtime = "edge";
-
 export default async function VehicleLedgerNewPage() {
   const env = getCloudflareEnv();
   const settings = await loadAppSettings(env.KV);

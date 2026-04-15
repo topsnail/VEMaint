@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export const runtime = "edge";
-
 export default async function DeviceDetailPage({
   params,
   searchParams,

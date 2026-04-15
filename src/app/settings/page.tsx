@@ -2,8 +2,6 @@ import { SettingsForm } from "@/components/settings-form";
 import { PageContainer } from "@/components/page-container";
 import { loadAppSettings } from "@/lib/app-settings";
 import { getCloudflareEnv } from "@/lib/cf-env";
-export const runtime = "edge";
-
 export default async function SettingsPage() {
   const env = getCloudflareEnv();
   const initial = await loadAppSettings(env.KV);

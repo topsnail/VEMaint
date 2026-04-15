@@ -1,8 +1,6 @@
 import { getCloudflareEnv } from "@/lib/cf-env";
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const env = getCloudflareEnv();
   const { key: keySegments } = await params;

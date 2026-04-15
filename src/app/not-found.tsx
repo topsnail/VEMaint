@@ -1,5 +1,3 @@
-export const runtime = "edge";
-
 export default function NotFound() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-2 px-6 py-12 text-center">

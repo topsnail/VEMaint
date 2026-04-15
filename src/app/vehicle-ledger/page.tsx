@@ -2,8 +2,6 @@ import { listVehicleLedgerDepartmentsAction, queryVehicleLedgersAction } from "@
 import { VehicleLedgerPage } from "@/components/vehicle-ledger-page";
 import { hasCurrentUserPermission } from "@/lib/auth-session";
 
-export const runtime = "edge";
-
 export default async function VehicleLedgerRoute() {
   const canWrite = await hasCurrentUserPermission("ledger.write");
   const canDelete = await hasCurrentUserPermission("ledger.delete");

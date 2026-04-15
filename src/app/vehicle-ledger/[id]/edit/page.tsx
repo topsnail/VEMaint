@@ -5,8 +5,6 @@ import { getCloudflareEnv } from "@/lib/cf-env";
 import { vehicleLedgerRowFromDb } from "@/lib/vehicle-ledger-dto";
 import { notFound } from "next/navigation";
 
-export const runtime = "edge";
-
 export default async function VehicleLedgerEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const raw = await getVehicleLedgerById(id);

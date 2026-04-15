@@ -5,8 +5,6 @@ import { loadAppShellPayload } from "@/lib/load-dashboard-props";
 import { getCurrentAuthSession } from "@/lib/auth-session";
 import "./globals.css";
 
-export const runtime = "edge";
-
 export const metadata: Metadata = {
   title: "车辆与设备维保管理 | VEMaint",
   description: "车辆与设备维保管理（VEMaint）",

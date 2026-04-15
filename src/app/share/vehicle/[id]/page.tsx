@@ -5,8 +5,6 @@ import { verifyVehicleShareToken } from "@/lib/share-token";
 import { vehicleLedgerRowFromDb } from "@/lib/vehicle-ledger-dto";
 import { notFound } from "next/navigation";
 
-export const runtime = "edge";
-
 export default async function SharedVehicleDetailPage({
   params,
   searchParams,
