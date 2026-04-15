@@ -4,7 +4,7 @@ import { verifySessionToken } from "./src/lib/auth-token";
 
 const PUBLIC_PATHS = new Set(["/login", "/favicon.ico", "/favicon.svg"]);
 
-/** 供根布局判断是否为「无需 D1/KV 的壳」路由，避免登录页/分享页因绑定未就绪整站 500 */
+/** 供根布局识别路径，登录页/分享页可跳过重型数据加载 */
 function withPathname(req: NextRequest): NextResponse {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", req.nextUrl.pathname);

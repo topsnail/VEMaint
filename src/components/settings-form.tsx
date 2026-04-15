@@ -284,11 +284,11 @@ export function SettingsForm({ initial }: SettingsFormProps) {
         {activeTab === "roles" ? (
           <SectionCard
             title="权限与角色"
-            desc="权限以“登录用户角色”为准。下方“默认权限模式”仅在系统尚未启用账号体系时作为兜底/演示使用。"
+            desc="已登录用户以各自角色与单独授权为准；下方默认模式仅在尚未建立任何账号时生效。"
           >
             <div className="grid gap-5 lg:grid-cols-2">
               <div className="space-y-2">
-                <Label>默认权限模式（兜底/演示）</Label>
+                <Label>默认访问模式（无账号时）</Label>
                 <Select value={roleMode} onValueChange={(v: "admin" | "employee" | "viewer") => setRoleMode(v)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -299,7 +299,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                     <SelectItem value="viewer">访客（只读）</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-slate-500">当系统已创建用户并启用登录后，这里不再作为实际权限来源。</p>
+                <p className="text-xs text-slate-500">已有登录用户后，以用户权限为准，此处不再生效。</p>
               </div>
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-600">
                 <p className="font-medium text-slate-800">权限说明</p>

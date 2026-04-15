@@ -50,10 +50,10 @@ export function LoginForm() {
         <h1 className="text-xl font-semibold text-slate-900">登录系统</h1>
         <p className="mt-1 text-xs text-slate-500">
           {usersExist
-            ? "请输入账号和密码。可使用：① Cloudflare 中为首个超级管理员配置的账号密码；② 超级管理员在「系统设置」中创建的员工账号。"
+            ? "请输入账号和密码（由管理员在「系统设置」中分配）。"
             : bootstrapConfigured
-              ? "当前尚无用户：请使用在 Cloudflare 中配置的 BOOTSTRAP_ADMIN_USERNAME（默认 admin）与 BOOTSTRAP_ADMIN_PASSWORD 登录，系统将创建首个超级管理员。"
-              : "当前尚无用户：请先在 Cloudflare 环境变量中配置 BOOTSTRAP_ADMIN_PASSWORD（可选 BOOTSTRAP_ADMIN_USERNAME），保存并重新部署后再登录。"}
+              ? "首次使用：请使用管理员在服务器中配置的初始账号与密码登录（未指定用户名时一般为 admin）。"
+              : "系统尚未完成初始化，请联系管理员后再登录。"}
         </p>
       </div>
       <div className="space-y-2">

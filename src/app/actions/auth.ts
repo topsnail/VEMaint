@@ -69,7 +69,7 @@ export async function loginAction(input: { username: string; password: string })
   const users = await listAuthUsers();
   const bootstrap = await getBootstrapAdminConfig();
 
-  // KV 尚无用户且已在云端配置 BOOTSTRAP_ADMIN_PASSWORD：仅此凭据可创建首个超级管理员并登录
+  // KV 尚无用户且已配置初始密码：仅此凭据可创建首个管理员并登录
   if (users.length === 0 && bootstrap) {
     if (
       !constantTimeEqualStr(username, bootstrap.username) ||
@@ -136,7 +136,7 @@ export async function createUserAction(input: { username: string; password: stri
   if (!usersExist) {
     return {
       ok: false as const,
-      error: "首个超级管理员须在 Cloudflare 中配置 BOOTSTRAP_ADMIN_PASSWORD 后在登录页完成初始化，无法在系统内创建首个账号。",
+      error: "首个账号须在登录页完成初始化，无法在此创建。请联系管理员。",
     };
   }
   const canManage = await hasCurrentUserPermission("users.manage");

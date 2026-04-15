@@ -3,7 +3,10 @@ import { normalizePermissionKeys, type PermissionKey, type UserRole } from "@/li
 import { b64urlDecode, b64urlEncode } from "@/lib/base64url";
 
 const AUTH_USERS_KEY = "auth:users:v1";
-const PASSWORD_ITERATIONS = 210000;
+/** Workers 上 PBKDF2 迭代次数不得超过 100000（见 Web Crypto 限制） */
+const PASSWORD_ITERATIONS = 100000;
+/** 历史本地环境可能使用 210000；验证时作为第二路尝试，Workers 上会失败并忽略 */
+const PASSWORD_ITERATIONS_LEGACY = 210000;
 const HASH_ALGO = "SHA-256";
 
 export type AuthUser = {
@@ -29,11 +32,11 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return new Uint8Array(bytes).buffer;
 }
 
-async function derivePasswordHash(password: string, saltBytes: Uint8Array): Promise<Uint8Array> {
+async function derivePasswordHash(password: string, saltBytes: Uint8Array, iterations: number): Promise<Uint8Array> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: HASH_ALGO, salt: toArrayBuffer(saltBytes), iterations: PASSWORD_ITERATIONS },
+    { name: "PBKDF2", hash: HASH_ALGO, salt: toArrayBuffer(saltBytes), iterations },
     key,
     256,
   );
@@ -44,7 +47,7 @@ export async function hashPassword(passwordRaw: string): Promise<{ salt: string;
   const password = passwordRaw.trim();
   if (password.length < 6) throw new Error("密码长度至少 6 位");
   const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const hashBytes = await derivePasswordHash(password, saltBytes);
+  const hashBytes = await derivePasswordHash(password, saltBytes, PASSWORD_ITERATIONS);
   return {
     salt: b64urlEncode(saltBytes),
     hash: b64urlEncode(hashBytes),
@@ -56,8 +59,15 @@ export async function verifyPassword(passwordRaw: string, salt: string, hash: st
   if (!password) return false;
   const saltBytes = b64urlDecode(salt);
   const expected = b64urlDecode(hash);
-  const actual = await derivePasswordHash(password, saltBytes);
-  return constantTimeEqual(expected, actual);
+  const actual = await derivePasswordHash(password, saltBytes, PASSWORD_ITERATIONS);
+  if (constantTimeEqual(expected, actual)) return true;
+  try {
+    const legacy = await derivePasswordHash(password, saltBytes, PASSWORD_ITERATIONS_LEGACY);
+    return constantTimeEqual(expected, legacy);
+  } catch {
+    // 例如 Workers 不支持 iterations > 100000，旧哈希需在设置中由管理员重置密码后改用新迭代
+    return false;
+  }
 }
 
 export function normalizeUsername(vRaw: string): string {

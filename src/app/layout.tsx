@@ -30,7 +30,7 @@ export default async function RootLayout({
   const shellPromise = skipShellData
     ? Promise.resolve(EMPTY_APP_SHELL_PAYLOAD)
     : loadAppShellPayload().catch((err) => {
-        console.error("[layout] loadAppShellPayload 失败（请检查 D1/KV 绑定与迁移）", err);
+        console.error("[layout] loadAppShellPayload 失败", err);
         return EMPTY_APP_SHELL_PAYLOAD;
       });
 
@@ -42,9 +42,9 @@ export default async function RootLayout({
         {isDev ? (
           <div
             className="pointer-events-none fixed bottom-3 right-3 z-[100] select-none rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium text-primary shadow-sm"
-            title="当前为 Next.js development + next-on-pages 本地模拟（wrangler.toml 绑定）"
+            title="开发模式"
           >
-            本地测试
+            开发环境
           </div>
         ) : null}
         <AppShell
