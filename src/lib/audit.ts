@@ -9,7 +9,7 @@ export async function writeAuditLog(input: {
   detail?: Record<string, unknown> | null;
 }) {
   try {
-    const env = getCloudflareEnv();
+    const env = await getCloudflareEnv();
     const session = await getCurrentAuthSession();
     const db = createDb(env.DB);
     await db.insert(auditLogs).values({

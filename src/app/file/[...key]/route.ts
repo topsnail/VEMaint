@@ -2,7 +2,7 @@ import { getCloudflareEnv } from "@/lib/cf-env";
 import { NextResponse } from "next/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string[] }> }) {
-  const env = getCloudflareEnv();
+  const env = await getCloudflareEnv();
   const { key: keySegments } = await params;
   const key = (keySegments ?? []).map(decodeURIComponent).join("/");
   if (!key) return new NextResponse("Bad Request", { status: 400 });

@@ -37,7 +37,7 @@ export type DashboardDataProps = {
 };
 
 export const loadDashboardDataProps = cache(async function loadDashboardDataProps(): Promise<DashboardDataProps> {
-  const env = getCloudflareEnv();
+  const env = await getCloudflareEnv();
   const [{ assetRows, reminderRows, recordRows, incidentRows, faultRows }, appSettings] = await Promise.all([
     loadDashboardData(env),
     loadAppSettings(env.KV),
@@ -125,3 +125,12 @@ export async function loadAppShellPayload() {
     pendingReminderCount: p.reminders.filter((r) => !r.isNotified).length,
   };
 }
+
+export type AppShellPayload = Awaited<ReturnType<typeof loadAppShellPayload>>;
+
+/** 登录页/分享页等不访问 D1 时使用，避免根布局拉取数据失败导致整页 500 */
+export const EMPTY_APP_SHELL_PAYLOAD: AppShellPayload = {
+  searchAssets: [],
+  searchRecords: [],
+  pendingReminderCount: 0,
+};

@@ -4,6 +4,13 @@ import { verifySessionToken } from "./src/lib/auth-token";
 
 const PUBLIC_PATHS = new Set(["/login", "/favicon.ico", "/favicon.svg"]);
 
+/** 供根布局判断是否为「无需 D1/KV 的壳」路由，避免登录页/分享页因绑定未就绪整站 500 */
+function withPathname(req: NextRequest): NextResponse {
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", req.nextUrl.pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 function isPublicAssetPath(pathname: string) {
   // allow common static files placed under /public
   return /\.(?:svg|png|jpg|jpeg|webp|gif|ico|txt|xml|json|map|css|js)$/.test(pathname);
@@ -20,14 +27,14 @@ export async function middleware(req: NextRequest) {
     pathname === "/manifest.json" ||
     isPublicAssetPath(pathname)
   ) {
-    return NextResponse.next();
+    return withPathname(req);
   }
 
   // 关键：避免 HTML 被边缘/浏览器缓存导致“自定义域名内容过时”
   // 仅对页面导航（Accept: text/html）添加 no-store，不影响静态资源缓存策略
   const accept = req.headers.get("accept") ?? "";
   if (accept.includes("text/html")) {
-    const res = NextResponse.next();
+    const res = withPathname(req);
     res.headers.set("Cache-Control", "no-store");
     return res;
   }
@@ -35,7 +42,7 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get("ve_session")?.value;
   if (token) {
     const ok = await verifySessionToken(token);
-    if (ok) return NextResponse.next();
+    if (ok) return withPathname(req);
   }
   const url = req.nextUrl.clone();
   url.pathname = "/login";

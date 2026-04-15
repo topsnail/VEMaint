@@ -18,7 +18,7 @@ export async function getCurrentUserRole(): Promise<UserRole> {
   const session = await getCurrentAuthSession();
   if (session) return session.role;
   if (await hasAuthUsers()) return "viewer";
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const app = await loadAppSettings(KV);
   return app.roleMode;
 }

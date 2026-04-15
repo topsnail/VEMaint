@@ -88,12 +88,12 @@ function parseUsers(raw: string | null): AuthUser[] {
 }
 
 async function saveUsers(users: AuthUser[]) {
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   await KV.put(AUTH_USERS_KEY, JSON.stringify(users));
 }
 
 export async function listAuthUsers(): Promise<AuthUser[]> {
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const raw = await KV.get(AUTH_USERS_KEY, "text");
   return parseUsers(raw).sort((a, b) => a.username.localeCompare(b.username));
 }

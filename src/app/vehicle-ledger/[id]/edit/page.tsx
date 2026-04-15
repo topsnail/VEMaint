@@ -10,7 +10,7 @@ export default async function VehicleLedgerEditPage({ params }: { params: Promis
   const raw = await getVehicleLedgerById(id);
   if (!raw) notFound();
   const row = vehicleLedgerRowFromDb(raw);
-  const env = getCloudflareEnv();
+  const env = await getCloudflareEnv();
   const settings = await loadAppSettings(env.KV);
   const { id: _rowId, ...initialForm } = row;
   return (

@@ -3,7 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { loadAppSettings } from "@/lib/app-settings";
 import { getCloudflareEnv } from "@/lib/cf-env";
 export default async function SettingsPage() {
-  const env = getCloudflareEnv();
+  const env = await getCloudflareEnv();
   const initial = await loadAppSettings(env.KV);
 
   return (

@@ -64,7 +64,7 @@ function validateTruckLoad(vehicleType: string, ratedLoad: string | undefined) {
 }
 
 export async function listVehicleLedgers() {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   return db.select().from(vehicleLedgers).orderBy(desc(vehicleLedgers.createdAt));
 }
@@ -73,7 +73,7 @@ export async function listVehicleLedgerDepartmentsAction() {
   if (!(await hasCurrentUserPermission("ledger.read"))) {
     return { ok: false as const, error: "无权查看车辆台账" };
   }
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   const rows = await db
     .selectDistinct({ department: vehicleLedgers.department })
@@ -117,7 +117,7 @@ export async function queryVehicleLedgersAction(input: {
       : undefined,
   );
 
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   const totalRow = await db
     .select({ count: sql<number>`count(*)` })
@@ -138,7 +138,7 @@ export async function queryVehicleLedgersAction(input: {
 export async function getVehicleLedgerById(idRaw: string) {
   const id = idRaw?.trim();
   if (!id) return null;
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   const rows = await db.select().from(vehicleLedgers).where(eq(vehicleLedgers.id, id)).limit(1);
   return rows[0] ?? null;
@@ -157,7 +157,7 @@ export async function createVehicleShareLinkAction(idRaw: string) {
 }
 
 export async function createVehicleLedger(input: VehicleLedgerInput) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("ledger.write"))) return { ok: false as const, error: "只读模式不可新增" };
   try {
     const db = createDb(DB);
@@ -216,7 +216,7 @@ export async function createVehicleLedger(input: VehicleLedgerInput) {
 export async function updateVehicleLedger(idRaw: string, input: VehicleLedgerInput) {
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("ledger.write"))) return { ok: false as const, error: "只读模式不可编辑" };
   try {
     const db = createDb(DB);
@@ -276,7 +276,7 @@ export async function updateVehicleLedger(idRaw: string, input: VehicleLedgerInp
 export async function deleteVehicleLedger(idRaw: string) {
   const id = idRaw?.trim();
   if (!id) return { ok: false as const, error: "无效ID" };
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("ledger.delete"))) return { ok: false as const, error: "仅管理员可删除" };
   const db = createDb(DB);
   await db.delete(vehicleLedgers).where(eq(vehicleLedgers.id, id));

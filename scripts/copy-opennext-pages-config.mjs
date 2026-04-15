@@ -1,4 +1,4 @@
-import { copyFile, cp } from "node:fs/promises";
+import { copyFile, cp, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -15,6 +15,18 @@ const runtimeDirs = [
   "middleware",
   "server-functions",
 ];
+const routesConfig = {
+  version: 1,
+  include: ["/*"],
+  exclude: [
+    "/_next/static/*",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/manifest.json",
+  ],
+};
 
 async function main() {
   if (!existsSync(openNextRoot)) {
@@ -39,8 +51,14 @@ async function main() {
 
   await copyFile(srcWorker, dstWorker);
   await copyFile(srcHeaders, dstHeaders);
+  await writeFile(
+    resolve(assetsRoot, "_routes.json"),
+    `${JSON.stringify(routesConfig, null, 2)}\n`,
+    "utf8",
+  );
   console.log(`已复制 _worker.js -> ${dstWorker}`);
   console.log(`已复制 _headers -> ${dstHeaders}`);
+  console.log(`已生成 _routes.json -> ${resolve(assetsRoot, "_routes.json")}`);
 }
 
 main().catch((e) => {

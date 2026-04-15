@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
-import { loadAppShellPayload } from "@/lib/load-dashboard-props";
+import { EMPTY_APP_SHELL_PAYLOAD, loadAppShellPayload } from "@/lib/load-dashboard-props";
 import { getCurrentAuthSession } from "@/lib/auth-session";
 import "./globals.css";
 
@@ -23,7 +24,17 @@ export default async function RootLayout({
 }>) {
   await connection();
   const isDev = process.env.NODE_ENV === "development";
-  const [shell, session] = await Promise.all([loadAppShellPayload(), getCurrentAuthSession()]);
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const skipShellData = pathname === "/login" || pathname.startsWith("/share/");
+
+  const shellPromise = skipShellData
+    ? Promise.resolve(EMPTY_APP_SHELL_PAYLOAD)
+    : loadAppShellPayload().catch((err) => {
+        console.error("[layout] loadAppShellPayload 失败（请检查 D1/KV 绑定与迁移）", err);
+        return EMPTY_APP_SHELL_PAYLOAD;
+      });
+
+  const [shell, session] = await Promise.all([shellPromise, getCurrentAuthSession()]);
 
   return (
     <html lang="zh-CN" className="light">

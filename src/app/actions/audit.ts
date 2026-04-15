@@ -24,7 +24,7 @@ export async function listAuditLogsAction(input?: { q?: string; limit?: number; 
   const offset = Math.max(0, Math.round(Number(input?.offset ?? 0) || 0));
   const q = String(input?.q ?? "").trim();
 
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
 
   const where = q

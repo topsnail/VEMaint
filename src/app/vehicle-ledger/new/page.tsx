@@ -4,7 +4,7 @@ import { getCloudflareEnv } from "@/lib/cf-env";
 import { VEHICLE_LEDGER_EMPTY } from "@/lib/vehicle-ledger";
 
 export default async function VehicleLedgerNewPage() {
-  const env = getCloudflareEnv();
+  const env = await getCloudflareEnv();
   const settings = await loadAppSettings(env.KV);
   const initialForm = {
     ...VEHICLE_LEDGER_EMPTY,

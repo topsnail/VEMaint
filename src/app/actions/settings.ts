@@ -18,13 +18,13 @@ import { KV_ASSET_FIELDS_KEY, parseAssetFieldsConfig, type AssetFieldsConfig } f
 import { revalidatePath } from "next/cache";
 
 export async function getAppSettingsAction(): Promise<AppSettings> {
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const raw = await KV.get(KV_APP_SETTINGS_KEY, "text");
   return parseAppSettings(raw);
 }
 
 export async function getAssetFieldsConfigAction(): Promise<AssetFieldsConfig> {
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const raw = await KV.get(KV_ASSET_FIELDS_KEY, "text");
   return parseAssetFieldsConfig(raw);
 }
@@ -46,7 +46,7 @@ export async function updateAppSettingsAction(input: UpdateAppSettingsInput) {
   if (!(await hasCurrentUserPermission("settings.write"))) {
     return { ok: false as const, error: "仅管理员可修改系统设置" };
   }
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const kinds = input.maintenanceKindsText
     .split(/[,，\n]/)
     .map((s) => s.trim())

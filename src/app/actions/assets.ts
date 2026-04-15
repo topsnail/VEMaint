@@ -54,7 +54,7 @@ export type UpdateAssetInput = {
 };
 
 export async function createAsset(input: CreateAssetInput) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("assets.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增" };
   }
@@ -100,7 +100,7 @@ export async function createAsset(input: CreateAssetInput) {
 }
 
 export async function updateAsset(input: UpdateAssetInput) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("assets.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑" };
   }
@@ -160,7 +160,7 @@ export async function updateAsset(input: UpdateAssetInput) {
 export async function listAssetStatusLogs(assetIdRaw: string) {
   const assetId = assetIdRaw?.trim();
   if (!assetId) return [];
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   return db
     .select()
@@ -194,7 +194,7 @@ export async function importAssetsFromExcelRows(rows: ImportAssetRow[]) {
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false as const, error: "电子表格数据为空" };
   if (rows.length > 2000) return { ok: false as const, error: "单次导入最多 2000 行" };
 
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
 
   const errors: { row: number; error: string }[] = [];

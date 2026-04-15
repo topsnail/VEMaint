@@ -17,7 +17,7 @@ function safeFileSegment(name: string) {
 }
 
 async function allowedKinds(): Promise<string[]> {
-  const { KV } = getCloudflareEnv();
+  const { KV } = await getCloudflareEnv();
   const s = await loadAppSettings(KV);
   return s.maintenanceKinds.length ? s.maintenanceKinds : [...DEFAULT_MAINTENANCE_KINDS];
 }
@@ -60,7 +60,7 @@ function parsePartsJson(raw: string): { name: string; cost?: string; qty?: strin
 }
 
 export async function createMaintenanceRecordFromForm(formData: FormData) {
-  const { DB, R2 } = getCloudflareEnv();
+  const { DB, R2 } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("maintenance.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止新增记录" };
   }
@@ -182,7 +182,7 @@ export type UpdateMaintenanceInput = {
 };
 
 export async function updateMaintenanceRecord(input: UpdateMaintenanceInput) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("maintenance.write"))) {
     return { ok: false as const, error: "当前为只读访客模式，禁止编辑记录" };
   }
@@ -229,7 +229,7 @@ export async function deleteMaintenanceRecord(idRaw: string, assetIdRaw: string)
   const assetId = assetIdRaw?.trim();
   if (!id || !assetId) return { ok: false as const, error: "无效编号" };
 
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("maintenance.delete"))) {
     return { ok: false as const, error: "仅管理员可删除维保记录" };
   }

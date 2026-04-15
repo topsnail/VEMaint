@@ -12,7 +12,7 @@ function isIsoDate(v: string) {
 }
 
 export async function createIncidentFromForm(formData: FormData) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("maintenance.write"))) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   const assetId = String(formData.get("assetId") ?? "").trim();
@@ -46,7 +46,7 @@ export async function createFaultEvent(input: {
   resolvedDate?: string;
   isRework?: boolean;
 }) {
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   if (!(await hasCurrentUserPermission("maintenance.write"))) return { ok: false as const, error: "只读模式禁止新增" };
   const db = createDb(DB);
   if (!input.assetId?.trim() || !input.faultCode?.trim() || !input.eventDate?.trim()) {
@@ -70,7 +70,7 @@ export async function createFaultEvent(input: {
 export async function listIncidentsByAsset(assetIdRaw: string) {
   const assetId = assetIdRaw?.trim();
   if (!assetId) return [];
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   return db.select().from(incidents).where(eq(incidents.assetId, assetId));
 }
@@ -78,7 +78,7 @@ export async function listIncidentsByAsset(assetIdRaw: string) {
 export async function listFaultsByAsset(assetIdRaw: string) {
   const assetId = assetIdRaw?.trim();
   if (!assetId) return [];
-  const { DB } = getCloudflareEnv();
+  const { DB } = await getCloudflareEnv();
   const db = createDb(DB);
   return db.select().from(faultEvents).where(eq(faultEvents.assetId, assetId));
 }
