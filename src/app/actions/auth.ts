@@ -6,6 +6,7 @@ import { hasPermission, normalizePermissionKeys, parseUserRole, type UserRole } 
 import { getCurrentAuthSession, hasCurrentUserPermission } from "@/lib/auth-session";
 import { SESSION_COOKIE_KEY, signSession } from "@/lib/auth-token";
 import { writeAuditLog } from "@/lib/audit";
+import { constantTimeEqualStr, getBootstrapAdminConfig } from "@/lib/bootstrap-admin";
 import {
   createAuthUser,
   hasAuthUsers,
@@ -47,17 +48,9 @@ function ensureAtLeastOneManager(users: Awaited<ReturnType<typeof listAuthUsers>
   throw new Error("至少需要保留 1 个可用的用户管理账号");
 }
 
-export async function loginAction(input: { username: string; password: string }) {
-  const username = normalizeUsername(input.username);
-  const password = input.password ?? "";
-  if (!username || !password) return { ok: false as const, error: "请输入用户名和密码" };
-  const users = await listAuthUsers();
-  const user = users.find((u) => u.username === username);
-  if (!user || user.disabled) return { ok: false as const, error: "用户名或密码错误" };
-  const pass = await verifyPassword(password, user.passwordSalt, user.passwordHash);
-  if (!pass) return { ok: false as const, error: "用户名或密码错误" };
+async function setSessionCookie(userId: string, username: string, role: UserRole) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SEC;
-  const token = await signSession({ userId: user.id, username: user.username, role: user.role, exp });
+  const token = await signSession({ userId, username, role, exp });
   const store = await cookies();
   store.set(SESSION_COOKIE_KEY, token, {
     httpOnly: true,
@@ -66,6 +59,49 @@ export async function loginAction(input: { username: string; password: string })
     path: "/",
     maxAge: SESSION_MAX_AGE_SEC,
   });
+}
+
+export async function loginAction(input: { username: string; password: string }) {
+  const username = normalizeUsername(input.username);
+  const password = input.password ?? "";
+  if (!username || !password) return { ok: false as const, error: "请输入用户名和密码" };
+
+  const users = await listAuthUsers();
+  const bootstrap = getBootstrapAdminConfig();
+
+  // KV 尚无用户且已在云端配置 BOOTSTRAP_ADMIN_PASSWORD：仅此凭据可创建首个超级管理员并登录
+  if (users.length === 0 && bootstrap) {
+    if (
+      !constantTimeEqualStr(username, bootstrap.username) ||
+      !constantTimeEqualStr(password, bootstrap.password)
+    ) {
+      return { ok: false as const, error: "用户名或密码错误" };
+    }
+    try {
+      await createAuthUser({
+        username: bootstrap.username,
+        password: bootstrap.password,
+        role: "admin",
+      });
+    } catch (e) {
+      return { ok: false as const, error: e instanceof Error ? e.message : "初始化管理员失败" };
+    }
+    const created = (await listAuthUsers()).find((u) => u.username === bootstrap.username);
+    if (!created) return { ok: false as const, error: "初始化管理员失败" };
+    await setSessionCookie(created.id, created.username, created.role);
+    await writeAuditLog({
+      action: "auth.bootstrap_admin",
+      target: created.id,
+      detail: { username: created.username },
+    });
+    return { ok: true as const };
+  }
+
+  const user = users.find((u) => u.username === username);
+  if (!user || user.disabled) return { ok: false as const, error: "用户名或密码错误" };
+  const pass = await verifyPassword(password, user.passwordSalt, user.passwordHash);
+  if (!pass) return { ok: false as const, error: "用户名或密码错误" };
+  await setSessionCookie(user.id, user.username, user.role);
   return { ok: true as const };
 }
 
@@ -82,7 +118,8 @@ export async function getCurrentUserAction() {
 
 export async function authBootstrapStatusAction() {
   const usersExist = await hasAuthUsers();
-  return { usersExist };
+  const bootstrapConfigured = Boolean(getBootstrapAdminConfig());
+  return { usersExist, bootstrapConfigured };
 }
 
 export async function listUsersAction() {
@@ -96,8 +133,14 @@ export async function createUserAction(input: { username: string; password: stri
   const role = mapRole(input.role);
   if (!role) return { ok: false as const, error: "无效角色" };
   const usersExist = await hasAuthUsers();
+  if (!usersExist) {
+    return {
+      ok: false as const,
+      error: "首个超级管理员须在 Cloudflare 中配置 BOOTSTRAP_ADMIN_PASSWORD 后在登录页完成初始化，无法在系统内创建首个账号。",
+    };
+  }
   const canManage = await hasCurrentUserPermission("users.manage");
-  if (usersExist && !canManage) {
+  if (!canManage) {
     return { ok: false as const, error: "仅管理员可新增用户" };
   }
   try {

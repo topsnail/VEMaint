@@ -146,6 +146,7 @@ export function SettingsForm({ initial }: SettingsFormProps) {
       "users.reset_password": "重置用户密码",
       "users.set_disabled": "启用/禁用用户",
       "users.set_permissions": "修改用户权限",
+      "auth.bootstrap_admin": "云端初始管理员（首次登录创建）",
     };
     return map[action] ?? `未分类操作（${action}）`;
   }
