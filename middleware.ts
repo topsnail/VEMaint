@@ -22,6 +22,16 @@ export async function middleware(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
+
+  // 关键：避免 HTML 被边缘/浏览器缓存导致“自定义域名内容过时”
+  // 仅对页面导航（Accept: text/html）添加 no-store，不影响静态资源缓存策略
+  const accept = req.headers.get("accept") ?? "";
+  if (accept.includes("text/html")) {
+    const res = NextResponse.next();
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  }
+
   const token = req.cookies.get("ve_session")?.value;
   if (token) {
     const ok = await verifySessionToken(token);

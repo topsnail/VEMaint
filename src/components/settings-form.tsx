@@ -853,42 +853,42 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                 />
                 <p className="text-xs text-slate-500">用于维保记录类型下拉、仪表盘统计与提醒规则匹配。</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="projects">维保项目（逗号或换行分隔）</Label>
-                <Textarea
-                  id="projects"
-                  value={projectsText}
-                  onChange={(e) => setProjectsText(e.target.value)}
+      <div className="space-y-2">
+        <Label htmlFor="projects">维保项目（逗号或换行分隔）</Label>
+        <Textarea
+          id="projects"
+          value={projectsText}
+          onChange={(e) => setProjectsText(e.target.value)}
                   rows={3}
                   className="min-h-0 font-mono text-xs"
-                  placeholder="车辆，设备，检测仪器，其他"
-                />
+          placeholder="车辆，设备，检测仪器，其他"
+        />
                 <p className="text-xs text-slate-500">默认：车辆、设备、检测仪器、其他。可按需增删，保存后写入系统配置。</p>
               </div>
             </div>
 
-            {projectParents.length > 0 ? (
+        {projectParents.length > 0 ? (
               <div className="space-y-3">
                 <p className="text-sm font-medium text-slate-800">项目子分类</p>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {projectParents.map((parent) => (
+            {projectParents.map((parent) => (
                     <div key={parent} className="space-y-1 rounded-lg border border-slate-200 p-3">
                       <Label htmlFor={`sub-${parent}`} className="text-xs text-slate-700">
-                        「{parent}」子分类
-                      </Label>
-                      <Textarea
-                        id={`sub-${parent}`}
-                        value={childrenTextByParent[parent] ?? ""}
-                        onChange={(e) =>
-                          setChildrenTextByParent((prev) => ({ ...prev, [parent]: e.target.value }))
-                        }
+                  「{parent}」子分类
+                </Label>
+                <Textarea
+                  id={`sub-${parent}`}
+                  value={childrenTextByParent[parent] ?? ""}
+                  onChange={(e) =>
+                    setChildrenTextByParent((prev) => ({ ...prev, [parent]: e.target.value }))
+                  }
                         rows={2}
                         className="min-h-0 font-mono text-xs"
-                        placeholder="逗号或换行分隔，如：货车，小车"
-                      />
-                    </div>
-                  ))}
-                </div>
+                  placeholder="逗号或换行分隔，如：货车，小车"
+                />
+              </div>
+            ))}
+          </div>
               </div>
             ) : null}
           </SectionCard>
@@ -899,42 +899,42 @@ export function SettingsForm({ initial }: SettingsFormProps) {
             title="提醒配置"
             desc="用于提醒生成、仪表盘预警进度和快捷录入推荐。建议把窗口天数与提前规则一起维护，避免策略不一致。"
           >
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="reminderTypes">预警任务类型推荐（逗号或换行分隔）</Label>
-                <Textarea
-                  id="reminderTypes"
-                  value={reminderTypesText}
-                  onChange={(e) => setReminderTypesText(e.target.value)}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="reminderTypes">预警任务类型推荐（逗号或换行分隔）</Label>
+          <Textarea
+            id="reminderTypes"
+            value={reminderTypesText}
+            onChange={(e) => setReminderTypesText(e.target.value)}
                   rows={3}
-                  className="min-h-0 font-mono text-xs"
+            className="min-h-0 font-mono text-xs"
                   placeholder="年审，保险，保养"
-                />
+          />
                 <p className="text-xs text-slate-500">用于「新增预警」下拉推荐，仍支持手动输入其它类型。</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="win">预警进度条窗口（天）</Label>
-                <Input
-                  id="win"
-                  type="number"
-                  min={7}
-                  max={365}
-                  value={windowDays}
-                  onChange={(e) => setWindowDays(e.target.value)}
-                />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="win">预警进度条窗口（天）</Label>
+          <Input
+            id="win"
+            type="number"
+            min={7}
+            max={365}
+            value={windowDays}
+            onChange={(e) => setWindowDays(e.target.value)}
+          />
                 <p className="text-xs text-slate-500">用于仪表盘“接近到期”进度计算，建议设置为 30~90 天。</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="leadRules">提醒提前天数规则（每行 类型:天数）</Label>
-              <Textarea
-                id="leadRules"
-                value={leadRulesText}
-                onChange={(e) => setLeadRulesText(e.target.value)}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="leadRules">提醒提前天数规则（每行 类型:天数）</Label>
+        <Textarea
+          id="leadRules"
+          value={leadRulesText}
+          onChange={(e) => setLeadRulesText(e.target.value)}
                 rows={6}
-                className="font-mono text-xs"
-                placeholder={"年审:60\n保险:60\n保养:30"}
-              />
+          className="font-mono text-xs"
+          placeholder={"年审:60\n保险:60\n保养:30"}
+        />
               <p className="text-xs text-slate-500">示例：年审:60，表示距离到期 60 天时进入提醒窗口。</p>
             </div>
           </SectionCard>
@@ -1004,9 +1004,9 @@ export function SettingsForm({ initial }: SettingsFormProps) {
       {msg ? <p className="text-xs text-primary">{msg}</p> : null}
       <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-slate-500">当前分类仅影响页面组织方式；保存时仍会统一写入系统设置键。</p>
-        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-          {pending ? "保存中…" : "保存到 KV"}
-        </Button>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+        {pending ? "保存中…" : "保存到 KV"}
+      </Button>
       </div>
     </form>
   );

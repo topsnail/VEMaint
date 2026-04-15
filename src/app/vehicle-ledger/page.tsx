@@ -1,6 +1,5 @@
 import { listVehicleLedgerDepartmentsAction, queryVehicleLedgersAction } from "@/app/actions/vehicle-ledger";
 import { VehicleLedgerPage } from "@/components/vehicle-ledger-page";
-import { vehicleLedgerRowFromDb } from "@/lib/vehicle-ledger-dto";
 import { hasCurrentUserPermission } from "@/lib/auth-session";
 
 export const runtime = "edge";
@@ -24,7 +23,7 @@ export default async function VehicleLedgerRoute() {
   }
   return (
     <VehicleLedgerPage
-      initialRows={initial.rows.map((r) => vehicleLedgerRowFromDb(r))}
+      initialRows={initial.rows}
       initialTotal={initial.total}
       deptOptions={departments.ok ? departments.options : []}
       canWrite={canWrite}
