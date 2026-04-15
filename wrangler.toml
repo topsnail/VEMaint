@@ -6,19 +6,19 @@ name = "vemaint"
 compatibility_date = "2024-10-22"
 pages_build_output_dir = "dist"
 
-# D1：创建远程库后把 database_id 换成控制台里的 UUID
+# D1：使用与 Cloudflare 控制台中绑定相同的名称
 [[d1_databases]]
 binding = "DB"
 database_name = "vemaint"
-database_id = "00000000-0000-0000-0000-000000000001"
+database_id = "745ac509-c99d-4e9b-8620-44831093244e"  # 在 Cloudflare 控制台中获取
 migrations_dir = "drizzle/migrations"
 
-# KV：创建命名空间后替换 id
+# KV：使用与 Cloudflare 控制台中绑定相同的名称
 [[kv_namespaces]]
 binding = "KV"
-id = "00000000000000000000000000000001"
+id = "934631cf47c84ab5b92f813fb8ec727d"  # 在 Cloudflare 控制台中获取
 
-# R2：桶名与控制台一致；本地 wrangler 会模拟桶
+# R2：使用与 Cloudflare 控制台中绑定相同的名称
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "vemaint"
+bucket_name = "vemaint"  # 在 Cloudflare 控制台中获取
