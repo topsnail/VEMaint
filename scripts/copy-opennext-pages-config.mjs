@@ -5,17 +5,13 @@ import { resolve } from "node:path";
 const projectRoot = resolve(process.cwd());
 const srcHeaders = resolve(projectRoot, "public", "_headers");
 const openNextRoot = resolve(projectRoot, ".open-next");
-const assetsRoot = resolve(openNextRoot, "assets");
 const srcWorker = resolve(openNextRoot, "worker.js");
-const dstWorker = resolve(assetsRoot, "_worker.js");
-const dstHeaders = resolve(assetsRoot, "_headers");
+const dstWorker = resolve(openNextRoot, "_worker.js");
+const dstHeaders = resolve(openNextRoot, "_headers");
 
 async function main() {
   if (!existsSync(openNextRoot)) {
     throw new Error("未找到 .open-next 目录，请先执行 opennextjs-cloudflare build");
-  }
-  if (!existsSync(assetsRoot)) {
-    throw new Error("未找到 .open-next/assets 目录，OpenNext 构建产物不完整");
   }
   if (!existsSync(srcWorker)) {
     throw new Error("未找到 .open-next/worker.js，无法生成 Pages 所需 _worker.js");
