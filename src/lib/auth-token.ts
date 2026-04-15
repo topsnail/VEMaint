@@ -1,5 +1,6 @@
 import { b64urlDecode, b64urlEncode } from "@/lib/base64url";
 import { parseUserRole, type UserRole } from "@/lib/authz";
+import { importAuthHmacKey } from "@/lib/runtime-secret";
 
 export type AuthSession = {
   userId: string;
@@ -10,35 +11,12 @@ export type AuthSession = {
 
 export const SESSION_COOKIE_KEY = "ve_session";
 
-function getAuthSecret(): string {
-  const v = process.env.AUTH_SECRET;
-  if (process.env.NODE_ENV === "production" && !v?.trim()) {
-    throw new Error("Missing AUTH_SECRET in production.");
-  }
-  return v?.trim() || "ve-maint-dev-secret-change-me";
-}
-
-let hmacKeyPromise: Promise<CryptoKey> | null = null;
-async function importHmacKey() {
-  if (!hmacKeyPromise) {
-    const enc = new TextEncoder();
-    hmacKeyPromise = crypto.subtle.importKey(
-      "raw",
-      enc.encode(getAuthSecret()),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign", "verify"],
-    );
-  }
-  return hmacKeyPromise;
-}
-
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return new Uint8Array(bytes).buffer;
 }
 
 export async function signSession(session: AuthSession): Promise<string> {
-  const key = await importHmacKey();
+  const key = await importAuthHmacKey();
   const payload = b64urlEncode(new TextEncoder().encode(JSON.stringify(session)));
   const sigBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
   return `${payload}.${b64urlEncode(new Uint8Array(sigBuffer))}`;
@@ -47,7 +25,7 @@ export async function signSession(session: AuthSession): Promise<string> {
 export async function verifySessionToken(token: string): Promise<AuthSession | null> {
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
-  const key = await importHmacKey();
+  const key = await importAuthHmacKey();
   const ok = await crypto.subtle.verify("HMAC", key, toArrayBuffer(b64urlDecode(sig)), new TextEncoder().encode(payload));
   if (!ok) return null;
   try {
@@ -65,4 +43,3 @@ export async function verifySessionToken(token: string): Promise<AuthSession | n
     return null;
   }
 }
-
