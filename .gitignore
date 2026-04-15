@@ -13,6 +13,7 @@ output/
 # Next.js / Cloudflare Pages（构建产物与本地缓存；本项目 next.config 中 distDir 为 .next-dev）
 .next/
 .next-dev/
+.open-next/
 out/
 .vercel/
 *.tsbuildinfo
