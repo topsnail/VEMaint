@@ -59,7 +59,7 @@ order by v.updated_at desc
     if (maintKmLeft !== null && maintKmLeft <= 500) {
       out.push({
         type: "maintenance-km",
-        level: maintKmLeft < 0 ? "expired" : "soon",
+        level: maintKmLeft < 0 ? "expired" : "within7",
         kmLeft: maintKmLeft,
         vehicleId: r.vehicleId,
         plateNo: r.plateNo,

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
-import { permit } from "../middleware/permit";
+import { permitPerm } from "../middleware/permit";
 import {
   createMaintenance,
   deleteMaintenance,
@@ -34,7 +34,7 @@ maintenanceRoute.get("/api/maintenance/:id", async (c) => {
   return jsonOk(c, { record: row });
 });
 
-maintenanceRoute.post("/api/maintenance", permit("admin", "maintainer"), async (c) => {
+maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async (c) => {
   const body = await c.req.json().catch(() => null as unknown);
   const targetType = String((body as any)?.targetType ?? "vehicle").trim() as "vehicle" | "equipment";
   const vehicleId = String((body as any)?.vehicleId ?? "").trim() || null;
@@ -75,7 +75,7 @@ maintenanceRoute.post("/api/maintenance", permit("admin", "maintainer"), async (
   return jsonOk(c, { id }, 201);
 });
 
-maintenanceRoute.put("/api/maintenance/:id", permit("admin", "maintainer"), async (c) => {
+maintenanceRoute.put("/api/maintenance/:id", permitPerm("maintenance.edit"), async (c) => {
   const id = c.req.param("id").trim();
   const body = await c.req.json().catch(() => null as unknown);
   const targetType = String((body as any)?.targetType ?? "vehicle").trim() as "vehicle" | "equipment";
@@ -117,7 +117,7 @@ maintenanceRoute.put("/api/maintenance/:id", permit("admin", "maintainer"), asyn
   return jsonOk(c, { ok: true });
 });
 
-maintenanceRoute.delete("/api/maintenance/:id", permit("admin"), async (c) => {
+maintenanceRoute.delete("/api/maintenance/:id", permitPerm("maintenance.delete"), async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return jsonError(c, "BAD_REQUEST", "无效 ID", 400);
   await deleteMaintenance(c.env.DB, id);

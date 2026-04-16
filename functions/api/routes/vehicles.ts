@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
-import { permit } from "../middleware/permit";
+import { permitPerm } from "../middleware/permit";
 import { createVehicle, getVehicleById, listVehicles, setVehicleStatus, updateVehicle } from "../repositories/vehicles";
 import { getCycleByVehicleId, upsertCycle } from "../repositories/cycles";
 import { writeOperationLog } from "../repositories/logs";
@@ -25,7 +25,7 @@ vehiclesRoute.get("/api/vehicles/:id", async (c) => {
   return jsonOk(c, { vehicle: row });
 });
 
-vehiclesRoute.post("/api/vehicles", permit("admin"), async (c) => {
+vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
   const body = await c.req.json().catch(() => null as unknown);
   const plateNo = String((body as any)?.plateNo ?? "").trim().toUpperCase();
   const vehicleType = String((body as any)?.vehicleType ?? "").trim();
@@ -38,6 +38,11 @@ vehiclesRoute.post("/api/vehicles", permit("admin"), async (c) => {
   const ownerDept = String((body as any)?.ownerDept ?? "").trim();
   const ownerPerson = String((body as any)?.ownerPerson ?? "").trim();
   const mileage = Number((body as any)?.mileage ?? 0);
+  const purchaseDate = String((body as any)?.purchaseDate ?? "").trim() || null;
+  const purchaseCost = Number.isFinite(Number((body as any)?.purchaseCost)) ? Number((body as any)?.purchaseCost) : null;
+  const serviceLifeYears = Number.isFinite(Number((body as any)?.serviceLifeYears)) ? Number((body as any)?.serviceLifeYears) : null;
+  const scrapDate = String((body as any)?.scrapDate ?? "").trim() || null;
+  const disposalMethod = String((body as any)?.disposalMethod ?? "").trim() || null;
   const status = String((body as any)?.status ?? "normal").trim() as any;
   const remark = String((body as any)?.remark ?? "").trim() || null;
   if (!plateNo || !vehicleType || !brandModel || !vin || !engineNo || !ownerDept || !ownerPerson || !Number.isFinite(mileage))
@@ -55,6 +60,11 @@ vehiclesRoute.post("/api/vehicles", permit("admin"), async (c) => {
       ownerDept,
       ownerPerson,
       mileage,
+      purchaseDate,
+      purchaseCost,
+      serviceLifeYears,
+      scrapDate,
+      disposalMethod,
       status,
       remark,
     });
@@ -65,7 +75,7 @@ vehiclesRoute.post("/api/vehicles", permit("admin"), async (c) => {
   }
 });
 
-vehiclesRoute.put("/api/vehicles/:id", permit("admin"), async (c) => {
+vehiclesRoute.put("/api/vehicles/:id", permitPerm("vehicle.manage"), async (c) => {
   const id = c.req.param("id").trim();
   const body = await c.req.json().catch(() => null as unknown);
   const plateNo = String((body as any)?.plateNo ?? "").trim().toUpperCase();
@@ -79,6 +89,11 @@ vehiclesRoute.put("/api/vehicles/:id", permit("admin"), async (c) => {
   const ownerDept = String((body as any)?.ownerDept ?? "").trim();
   const ownerPerson = String((body as any)?.ownerPerson ?? "").trim();
   const mileage = Number((body as any)?.mileage ?? 0);
+  const purchaseDate = String((body as any)?.purchaseDate ?? "").trim() || null;
+  const purchaseCost = Number.isFinite(Number((body as any)?.purchaseCost)) ? Number((body as any)?.purchaseCost) : null;
+  const serviceLifeYears = Number.isFinite(Number((body as any)?.serviceLifeYears)) ? Number((body as any)?.serviceLifeYears) : null;
+  const scrapDate = String((body as any)?.scrapDate ?? "").trim() || null;
+  const disposalMethod = String((body as any)?.disposalMethod ?? "").trim() || null;
   const status = String((body as any)?.status ?? "normal").trim() as any;
   const remark = String((body as any)?.remark ?? "").trim() || null;
   if (!id || !plateNo || !vehicleType || !brandModel || !vin || !engineNo || !ownerDept || !ownerPerson || !Number.isFinite(mileage))
@@ -95,6 +110,11 @@ vehiclesRoute.put("/api/vehicles/:id", permit("admin"), async (c) => {
     ownerDept,
     ownerPerson,
     mileage,
+    purchaseDate,
+    purchaseCost,
+    serviceLifeYears,
+    scrapDate,
+    disposalMethod,
     status,
     remark,
   });
@@ -102,7 +122,7 @@ vehiclesRoute.put("/api/vehicles/:id", permit("admin"), async (c) => {
   return jsonOk(c, { ok: true });
 });
 
-vehiclesRoute.put("/api/vehicles/:id/status", permit("admin"), async (c) => {
+vehiclesRoute.put("/api/vehicles/:id/status", permitPerm("vehicle.manage"), async (c) => {
   const id = c.req.param("id").trim();
   const body = await c.req.json().catch(() => null as unknown);
   const status = String((body as any)?.status ?? "").trim() as "normal" | "repairing" | "scrapped" | "stopped";
@@ -120,7 +140,7 @@ vehiclesRoute.get("/api/vehicles/:id/cycles", async (c) => {
   return jsonOk(c, { cycle });
 });
 
-vehiclesRoute.put("/api/vehicles/:id/cycles", permit("admin", "maintainer"), async (c) => {
+vehiclesRoute.put("/api/vehicles/:id/cycles", permitPerm("maintenance.edit"), async (c) => {
   const id = c.req.param("id").trim();
   const body = await c.req.json().catch(() => null as unknown);
   if (!id) return jsonError(c, "BAD_REQUEST", "无效 ID", 400);

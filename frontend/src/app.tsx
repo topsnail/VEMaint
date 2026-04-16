@@ -1,12 +1,17 @@
-import { BellOutlined, CarOutlined, FileTextOutlined, SettingOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu, Space, Typography, message } from "antd";
+import {
+  BellOutlined,
+  CarOutlined,
+  FileTextOutlined,
+  LogoutOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Space, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
-  canDeleteMaintenance,
-  canEditMaintenance,
-  canManageUsers,
-  canManageVehicles,
   clearToken,
   getToken,
   getUser,
@@ -14,6 +19,7 @@ import {
   type UserInfo,
 } from "./lib/auth";
 import { apiFetch } from "./lib/http";
+import { hasPerm, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -24,18 +30,24 @@ import { VehiclesPage } from "./pages/VehiclesPage";
 
 function AppInner() {
   const [user, setCurrentUser] = useState<UserInfo | null>(() => getUser());
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
   const nav = useNavigate();
   const loc = useLocation();
 
   const loadMe = async () => {
     if (!getToken()) return setCurrentUser(null);
-    const res = await apiFetch<{ userId: string; username: string; role: "admin" | "maintainer" | "reader" }>("/user/info");
-    if (!res.ok) {
+    const [userRes, settingsRes] = await Promise.all([
+      apiFetch<{ userId: string; username: string; role: "admin" | "maintainer" | "reader" }>("/user/info"),
+      apiFetch<{ config: { permissions?: { roles?: RolePermissions } } }>("/settings"),
+    ]);
+    if (!userRes.ok) {
       clearToken();
       return setCurrentUser(null);
     }
-    setUser(res.data);
-    setCurrentUser(res.data);
+    setUser(userRes.data);
+    setCurrentUser(userRes.data);
+    if (settingsRes.ok) setRolePermissions(normalizeRolePermissions(settingsRes.data.config.permissions));
+    else setRolePermissions(normalizeRolePermissions(null));
   };
 
   useEffect(() => {
@@ -43,65 +55,133 @@ function AppInner() {
   }, []);
 
   if (!user) return <LoginPage onLoggedIn={loadMe} />;
+  const canViewDashboard = hasPerm(user.role, "app.view", rolePermissions);
+  const canViewVehicles = hasPerm(user.role, "vehicle.view", rolePermissions);
+  const canManageVehicle = hasPerm(user.role, "vehicle.manage", rolePermissions);
+  const canViewMaintenance = hasPerm(user.role, "maintenance.view", rolePermissions);
+  const canEditMaintenance = hasPerm(user.role, "maintenance.edit", rolePermissions);
+  const canDeleteMaintenance = hasPerm(user.role, "maintenance.delete", rolePermissions);
+  const canManageUsers = hasPerm(user.role, "user.manage", rolePermissions);
+  const canManageConfig = hasPerm(user.role, "config.manage", rolePermissions);
+  const defaultPath = canViewDashboard
+    ? "/dashboard"
+    : canViewVehicles
+      ? "/vehicles"
+      : canViewMaintenance
+        ? "/maintenance"
+        : "/profile";
 
   const items = [
-    { key: "/dashboard", icon: <BellOutlined />, label: "预警中心" },
-    { key: "/vehicles", icon: <CarOutlined />, label: "车辆台账" },
-    { key: "/maintenance", icon: <FileTextOutlined />, label: "维保记录" },
-    { key: "/profile", icon: <UserOutlined />, label: "个人中心" },
-    ...(canManageUsers(user.role) ? [{ key: "/users", icon: <TeamOutlined />, label: "用户管理" }] : []),
-    ...(canManageUsers(user.role) ? [{ key: "/config", icon: <SettingOutlined />, label: "系统配置" }] : []),
+    ...(canViewDashboard ? [{ key: "/dashboard", icon: <BellOutlined />, label: "仪表盘" }] : []),
+    ...(canViewVehicles ? [{ key: "/vehicles", icon: <CarOutlined />, label: "车辆台账" }] : []),
+    ...(canViewMaintenance ? [{ key: "/maintenance", icon: <FileTextOutlined />, label: "维保记录" }] : []),
+    ...(canManageConfig ? [{ key: "/config", icon: <SettingOutlined />, label: "系统配置" }] : []),
   ];
 
+  const quickActions = [
+    ...(canManageVehicle ? [{ key: "new-vehicle", label: "新增车辆", target: "/vehicles?create=1" }] : []),
+    ...(canEditMaintenance ? [{ key: "new-maint", label: "新增维保", target: "/maintenance?create=1" }] : []),
+  ];
+
+  const submitGlobalSearch = (value: string) => {
+    const keyword = value.trim();
+    if (!keyword) return nav("/dashboard");
+    nav(`/vehicles?q=${encodeURIComponent(keyword)}`);
+  };
+
+  const logout = async () => {
+    await apiFetch("/logout", { method: "POST" });
+    clearToken();
+    setCurrentUser(null);
+    message.success("已退出");
+  };
+
   return (
-    <Layout className="min-h-screen">
-      <Layout.Sider width={220} className="flex h-screen flex-col">
-        <div className="px-4 py-4 text-white">
-          <Typography.Text className="!text-white">VEMaint</Typography.Text>
+    <Layout className="min-h-screen ve-shell">
+      <Layout.Header className="ve-topbar">
+        <div className="ve-topbar-left">
+          <div>
+            <img src="/favicon.png" alt="VEMaint Logo" className="h-8 w-8 object-contain" />
+          </div>
+          <Typography.Title level={5} className="!mb-0 !text-slate-900">
+            VEMaint
+          </Typography.Title>
         </div>
-        <Menu
-          className="flex-1"
-          theme="dark"
-          selectedKeys={[loc.pathname]}
-          onClick={({ key }) => nav(key)}
-          items={items}
-          mode="inline"
-        />
-        <div className="border-t border-slate-700 px-4 py-4 text-white">
-          <Space direction="vertical" size={4}>
-            <Space>
-              <UserOutlined />
-              <span>{user.username}</span>
-              <span className="text-slate-400">({user.role})</span>
+        <div className="ve-topbar-center">
+          <Input.Search
+            className="ve-topbar-search"
+            placeholder="搜索车牌、设备、维保记录..."
+            enterButton={<SearchOutlined />}
+            allowClear
+            onSearch={submitGlobalSearch}
+          />
+        </div>
+        <div className="ve-topbar-right">
+          <Badge dot offset={[0, 2]}>
+            <Button type="text" shape="circle" icon={<BellOutlined />} onClick={() => nav("/dashboard")} />
+          </Badge>
+          <Dropdown
+            menu={{
+              items: [
+                { key: "profile", icon: <UserOutlined />, label: "个人中心" },
+                { type: "divider" },
+                { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
+              ],
+              onClick: ({ key }) => {
+                if (key === "profile") nav("/profile");
+                if (key === "logout") void logout();
+              },
+            }}
+            trigger={["click"]}
+          >
+            <Space className="cursor-pointer rounded-md px-2 py-1 hover:bg-slate-50">
+              <Avatar size="small" icon={<UserOutlined />} />
+              <span className="text-slate-700">{user.username}</span>
             </Space>
-            <Button
-              block
-              onClick={async () => {
-                await apiFetch("/logout", { method: "POST" });
-                clearToken();
-                setCurrentUser(null);
-                message.success("已退出");
-              }}
-            >
-              退出登录
-            </Button>
-          </Space>
+          </Dropdown>
         </div>
-      </Layout.Sider>
-      <Layout>
-        <Layout.Content className="p-6">
+      </Layout.Header>
+      <Layout className="ve-main-layout">
+        <Layout.Sider width={200} className="ve-left-sider">
+          <div className="px-4 py-4">
+            <Typography.Text className="text-xs uppercase tracking-wide text-slate-400">概览</Typography.Text>
+            <Menu
+              className="mt-2 rounded-lg border border-slate-200 bg-white"
+              selectedKeys={[loc.pathname]}
+              onClick={({ key }) => nav(key)}
+              items={items}
+              mode="inline"
+            />
+          </div>
+          <div className="px-4 pb-4">
+            <Typography.Text className="text-xs uppercase tracking-wide text-slate-400">快捷新增</Typography.Text>
+            <Space direction="vertical" className="mt-2 w-full">
+              {quickActions.map((action) => (
+                <Button key={action.key} block icon={<PlusOutlined />} className="justify-start" onClick={() => nav(action.target)}>
+                  {action.label}
+                </Button>
+              ))}
+            </Space>
+          </div>
+        </Layout.Sider>
+        <Layout.Content className="ve-content">
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/vehicles" element={<VehiclesPage canManage={canManageVehicles(user.role)} />} />
+            <Route path="/" element={<Navigate to={defaultPath} replace />} />
+            <Route
+              path="/dashboard"
+              element={canViewDashboard ? <DashboardPage canHandleAlerts={canEditMaintenance} /> : <Navigate to={defaultPath} replace />}
+            />
+            <Route path="/vehicles" element={canViewVehicles ? <VehiclesPage canManage={canManageVehicle} /> : <Navigate to={defaultPath} replace />} />
             <Route
               path="/maintenance"
-              element={<MaintenancePage canEdit={canEditMaintenance(user.role)} canDelete={canDeleteMaintenance(user.role)} />}
+              element={
+                canViewMaintenance ? <MaintenancePage canEdit={canEditMaintenance} canDelete={canDeleteMaintenance} /> : <Navigate to={defaultPath} replace />
+              }
             />
             <Route path="/profile" element={<ProfilePage />} />
-            {canManageUsers(user.role) ? <Route path="/users" element={<UsersPage />} /> : null}
-            {canManageUsers(user.role) ? <Route path="/config" element={<ConfigPage />} /> : null}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {canManageUsers ? <Route path="/users" element={<UsersPage />} /> : null}
+            {canManageConfig ? <Route path="/config" element={<ConfigPage />} /> : null}
+            <Route path="*" element={<Navigate to={defaultPath} replace />} />
           </Routes>
         </Layout.Content>
       </Layout>

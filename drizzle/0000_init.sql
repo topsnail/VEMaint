@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS operation_logs;
+DROP TABLE IF EXISTS alert_actions;
 DROP TABLE IF EXISTS maintenance_records;
 DROP TABLE IF EXISTS vehicle_cycles;
 DROP TABLE IF EXISTS vehicles;
@@ -27,6 +28,11 @@ CREATE TABLE IF NOT EXISTS vehicles (
   owner_dept TEXT NOT NULL,
   owner_person TEXT NOT NULL,
   mileage INTEGER NOT NULL DEFAULT 0,
+  purchase_date TEXT,
+  purchase_cost REAL,
+  service_life_years INTEGER,
+  scrap_date TEXT,
+  disposal_method TEXT,
   status TEXT NOT NULL CHECK (status IN ('normal', 'repairing', 'scrapped', 'stopped')) DEFAULT 'normal',
   remark TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -81,6 +87,14 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   target TEXT,
   detail TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alert_actions (
+  alert_key TEXT PRIMARY KEY NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('open', 'processing', 'resolved')) DEFAULT 'open',
+  handler TEXT,
+  note TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_plate_no ON vehicles(plate_no);

@@ -1,5 +1,7 @@
-import { Button, Col, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Table, Tabs, message } from "antd";
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import { Button, Col, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tooltip, message } from "antd";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { apiFetch, uploadFile } from "../lib/http";
 import type { MaintenanceRecord, Vehicle } from "../types";
@@ -9,7 +11,7 @@ type FormModel = {
   vehicleId?: string;
   equipmentName?: string;
   maintenanceType: "routine" | "fault" | "accident" | "periodic";
-  maintenanceDate: string;
+  maintenanceDate: string | Dayjs;
   itemDesc: string;
   cost: number;
   vendor?: string;
@@ -46,6 +48,18 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
     loadDropdowns();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") !== "1" || !canEdit) return;
+    setEditing(null);
+    form.resetFields();
+    setOpen(true);
+    params.delete("create");
+    const next = params.toString();
+    const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", url);
+  }, [canEdit, form]);
+
   const maintenanceTypeDefaults = ["日常保养", "故障维修", "事故维修", "定期检修"];
   const maintenanceTypeCodes: FormModel["maintenanceType"][] = ["routine", "fault", "accident", "periodic"];
   const maintenanceTypeLabels = dropdowns.maintenanceType && dropdowns.maintenanceType.length > 0 ? dropdowns.maintenanceType : maintenanceTypeDefaults;
@@ -56,8 +70,18 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
 
   const submit = async () => {
     const v = await form.validateFields();
+    const normalizeDate = (value: unknown) => {
+      if (!value) return "";
+      if (typeof value === "string") return value.trim();
+      if (typeof (value as { format?: (pattern: string) => string }).format === "function") {
+        return (value as { format: (pattern: string) => string }).format("YYYY-MM-DD");
+      }
+      return "";
+    };
+    const maintenanceDate = normalizeDate(v.maintenanceDate);
     const payload = {
       ...v,
+      maintenanceDate,
       vendor: v.vendor || null,
       remark: v.remark || null,
       attachmentKey: v.attachmentKey || null,
@@ -89,11 +113,12 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end">
+    <div className="ve-maintenance-page space-y-4">
+      <div className="ve-maintenance-header flex items-center justify-end">
         {canEdit ? (
           <Button
             type="primary"
+            className="ve-primary-btn"
             onClick={() => {
               setEditing(null);
               form.resetFields();
@@ -105,7 +130,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
         ) : null}
       </div>
       <Table
-        className="ve-table"
+        className="ve-maintenance-table ve-table"
         size="small"
         tableLayout="auto"
         rowKey="id"
@@ -121,7 +146,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
             title: "附件",
             render: (_, r) =>
               r.attachmentKey ? (
-                <a href={`/api/files/${encodeURIComponent(r.attachmentKey)}`} target="_blank" rel="noreferrer">
+                <a href={`/api/files/${encodeURIComponent(r.attachmentKey)}`} target="_blank" rel="noreferrer" className="ve-link">
                   查看
                 </a>
               ) : (
@@ -131,37 +156,40 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
           {
             title: "操作",
             render: (_, r) => (
-              <Space>
+              <Space size={6}>
                 {canEdit ? (
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditing(r);
-                      form.setFieldsValue({
-                        vehicleId: r.vehicleId ?? undefined,
-                        targetType: r.targetType,
-                        equipmentName: r.equipmentName || "",
-                        maintenanceType: r.maintenanceType,
-                        maintenanceDate: r.maintenanceDate,
-                        itemDesc: r.itemDesc,
-                        cost: r.cost,
-                        vendor: r.vendor || "",
-                        parts: r.parts || "",
-                        mileage: r.mileage ?? undefined,
-                        remark: r.remark || "",
-                        attachmentKey: r.attachmentKey || "",
-                      });
-                      setOpen(true);
-                    }}
-                  >
-                    编辑
-                  </Button>
+                  <Tooltip title="编辑">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<EditOutlined />}
+                      className="ve-edit-btn"
+                      onClick={() => {
+                        setEditing(r);
+                        form.setFieldsValue({
+                          vehicleId: r.vehicleId ?? undefined,
+                          targetType: r.targetType,
+                          equipmentName: r.equipmentName || "",
+                          maintenanceType: r.maintenanceType,
+                          maintenanceDate: r.maintenanceDate ? dayjs(r.maintenanceDate) : undefined,
+                          itemDesc: r.itemDesc,
+                          cost: r.cost,
+                          vendor: r.vendor || "",
+                          parts: r.parts || "",
+                          mileage: r.mileage ?? undefined,
+                          remark: r.remark || "",
+                          attachmentKey: r.attachmentKey || "",
+                        });
+                        setOpen(true);
+                      }}
+                    />
+                  </Tooltip>
                 ) : null}
                 {canDelete ? (
                   <Popconfirm title="确认删除该记录？" onConfirm={() => remove(r.id)}>
-                    <Button size="small" danger>
-                      删除
-                    </Button>
+                    <Tooltip title="删除">
+                      <Button type="text" size="small" danger icon={<DeleteOutlined />} className="ve-delete-btn" />
+                    </Tooltip>
                   </Popconfirm>
                 ) : null}
               </Space>
@@ -174,6 +202,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
         title={editing ? "编辑维保记录" : "新增维保记录"}
         open={open}
         width={920}
+        className="ve-maintenance-modal"
         style={{ top: 24 }}
         onCancel={() => setOpen(false)}
         onOk={submit}
@@ -217,7 +246,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
                     </Col>
                     <Col span={12}>
                       <Form.Item label="维保日期" name="maintenanceDate" rules={[{ required: true }]}>
-                        <DatePicker className="w-full" format="YYYY-MM-DD" valueFormat="YYYY-MM-DD" />
+                        <DatePicker className="w-full" format="YYYY-MM-DD" />
                       </Form.Item>
                     </Col>
                     <Col span={24}>

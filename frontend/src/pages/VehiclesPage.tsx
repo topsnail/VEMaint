@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, EyeOutlined, PaperClipOutlined, ShareAltOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined, ShareAltOutlined } from "@ant-design/icons";
 import { Button, Col, DatePicker, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, message } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -45,9 +45,10 @@ type VehicleForm = {
 };
 
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
+  const initialParams = new URLSearchParams(window.location.search);
   const [rows, setRows] = useState<Vehicle[]>([]);
   const [dropdowns, setDropdowns] = useState<Record<string, string[]>>({});
-  const [q, setQ] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
+  const [q, setQ] = useState(() => initialParams.get("q") ?? "");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
@@ -57,11 +58,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [viewTab, setViewTab] = useState("base");
   const [editTab, setEditTab] = useState("basic");
   const [cyclesByVehicleId, setCyclesByVehicleId] = useState<Record<string, VehicleCycle | null>>({});
-  const [warnDays, setWarnDays] = useState(7);
-  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>(() => initialParams.get("status") ?? "");
   const [filterVehicleType, setFilterVehicleType] = useState<string>("");
   const [filterOwnerDept, setFilterOwnerDept] = useState<string>("");
-  const [filterNearDue, setFilterNearDue] = useState<string>("");
+  const [filterNearDue, setFilterNearDue] = useState<string>(() => initialParams.get("due") ?? "");
+  const [filterIncomplete, setFilterIncomplete] = useState<string>("");
   const [form] = Form.useForm<VehicleForm>();
 
   const parseRemarkMeta = (remarkText: string | null | undefined) => {
@@ -108,10 +109,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   };
 
   const loadDropdowns = async () => {
-    const res = await apiFetch<{ config: { dropdowns?: Record<string, string[]>; warnDays?: number } }>("/settings");
+    const res = await apiFetch<{ config: { dropdowns?: Record<string, string[]> } }>("/settings");
     if (res.ok) {
       setDropdowns(res.data.config.dropdowns ?? {});
-      if (typeof res.data.config.warnDays === "number") setWarnDays(res.data.config.warnDays);
     }
   };
 
@@ -177,19 +177,57 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     stopped: { color: "default", label: "停用" },
     scrapped: { color: "red", label: "报废" },
   };
-  const isNearDue = (cycle: VehicleCycle | null | undefined) => {
-    if (!cycle) return false;
-    const today = dayjs().startOf("day");
-    const check = (value: string | null | undefined) => {
-      if (!value) return false;
-      const d = dayjs(value);
-      if (!d.isValid()) return false;
-      return d.startOf("day").diff(today, "day") <= warnDays;
-    };
-    return check(cycle.insuranceExpiry) || check(cycle.annualExpiry) || check(cycle.maintNextDate);
+
+  const getVehicleCompleteness = (vehicle: Vehicle, cycle: VehicleCycle | null | undefined) => {
+    const meta = parseRemarkMeta(vehicle.remark);
+    const split = (text: string | null | undefined) =>
+      (text ?? "")
+        .split("/")
+        .map((x) => x.trim())
+        .filter(Boolean);
+    const [energyType, usageNature] = split(vehicle.usageNature);
+    const [loadPeople, loadWeight, dimensions] = split(vehicle.loadSpec);
+    const requiredChecks = [
+      !!vehicle.plateNo,
+      !!vehicle.vehicleType,
+      !!vehicle.brandModel,
+      !!vehicle.vin,
+      !!vehicle.engineNo,
+      !!vehicle.regDate,
+      !!energyType,
+      !!usageNature,
+      !!loadPeople,
+      !!loadWeight,
+      !!dimensions,
+      !!vehicle.ownerDept,
+      !!vehicle.ownerPerson,
+      Number.isFinite(Number(vehicle.mileage)),
+      !!meta.issueDate,
+      !!meta.archiveNo,
+      !!meta.ownerName,
+      !!meta.ownerAddress,
+      !!meta.drivingLicenseAttachmentKey,
+      !!cycle?.insuranceType,
+      !!cycle?.insuranceVendor,
+      !!cycle?.insuranceStart,
+      !!cycle?.insuranceExpiry,
+      !!cycle?.insuranceAttachmentKey,
+      !!cycle?.annualLastDate,
+      !!cycle?.annualExpiry,
+      !!cycle?.maintLastDate,
+      typeof cycle?.maintIntervalDays === "number",
+      typeof cycle?.maintIntervalKm === "number",
+      !!cycle?.maintNextDate,
+      typeof cycle?.maintNextKm === "number",
+    ];
+    const filled = requiredChecks.filter(Boolean).length;
+    const total = requiredChecks.length;
+    const percent = Math.round((filled / total) * 100);
+    return { filled, total, percent };
   };
+
   const getDueHint = (cycle: VehicleCycle | null | undefined) => {
-    if (!cycle) return { text: "-", color: "default" as const };
+    if (!cycle) return { text: "-", color: "default" as const, level: "none" as const };
     const today = dayjs().startOf("day");
     const candidates = [
       { label: "保险", date: cycle.insuranceExpiry },
@@ -198,23 +236,34 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     ]
       .map((x) => ({ ...x, parsed: x.date ? dayjs(x.date).startOf("day") : null }))
       .filter((x) => x.parsed && x.parsed.isValid()) as Array<{ label: string; date: string | null; parsed: Dayjs }>;
-    if (candidates.length === 0) return { text: "-", color: "default" as const };
+    if (candidates.length === 0) return { text: "-", color: "default" as const, level: "none" as const };
     candidates.sort((a, b) => a.parsed.diff(b.parsed, "day"));
     const nearest = candidates[0];
     const diffDays = nearest.parsed.diff(today, "day");
-    if (diffDays < 0) return { text: `${nearest.label}已逾期${Math.abs(diffDays)}天`, color: "red" as const };
-    if (diffDays <= warnDays) return { text: `${nearest.label}${diffDays}天后到期`, color: "orange" as const };
-    return { text: `${nearest.label}正常`, color: "green" as const };
+    if (diffDays < 0) return { text: `${nearest.label}已逾期${Math.abs(diffDays)}天`, color: "red" as const, level: "overdue" as const };
+    if (diffDays <= 7) return { text: `${nearest.label}${diffDays}天后到期`, color: "orange" as const, level: "within7" as const };
+    if (diffDays <= 30) return { text: `${nearest.label}${diffDays}天后到期`, color: "gold" as const, level: "within30" as const };
+    return { text: `${nearest.label}正常`, color: "green" as const, level: "normal" as const };
   };
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
       if (filterStatus && r.status !== filterStatus) return false;
       if (filterVehicleType && r.vehicleType !== filterVehicleType) return false;
       if (filterOwnerDept && r.ownerDept !== filterOwnerDept) return false;
-      if (filterNearDue && !isNearDue(cyclesByVehicleId[r.id])) return false;
+      if (filterNearDue) {
+        const dueLevel = getDueHint(cyclesByVehicleId[r.id]).level;
+        if (filterNearDue === "due" && !(dueLevel === "within7" || dueLevel === "within30" || dueLevel === "overdue")) return false;
+        if (filterNearDue === "overdue" && dueLevel !== "overdue") return false;
+        if (filterNearDue === "within7" && dueLevel !== "within7") return false;
+        if (filterNearDue === "within30" && dueLevel !== "within30") return false;
+      }
+      if (filterIncomplete) {
+        const completeness = getVehicleCompleteness(r, cyclesByVehicleId[r.id]);
+        if (filterIncomplete === "yes" && completeness.percent >= 100) return false;
+      }
       return true;
     });
-  }, [rows, filterStatus, filterVehicleType, filterOwnerDept, filterNearDue, cyclesByVehicleId, warnDays]);
+  }, [rows, filterStatus, filterVehicleType, filterOwnerDept, filterNearDue, filterIncomplete, cyclesByVehicleId]);
   const vehicleTypeFilterOptions = Array.from(new Set(rows.map((r) => r.vehicleType))).map((v) => ({ label: v, value: v }));
   const ownerDeptFilterOptions = Array.from(new Set(rows.map((r) => r.ownerDept))).map((v) => ({ label: v, value: v }));
 
@@ -222,6 +271,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     load();
     loadDropdowns();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") !== "1" || !canManage) return;
+    setEditing(null);
+    form.resetFields();
+    setOpen(true);
+    params.delete("create");
+    const next = params.toString();
+    const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", url);
+  }, [canManage, form]);
 
   const submit = async () => {
     const v = await form.validateFields();
@@ -372,6 +433,15 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     window.history.replaceState(null, "", url.toString());
   };
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (filterStatus) url.searchParams.set("status", filterStatus);
+    else url.searchParams.delete("status");
+    if (filterNearDue) url.searchParams.set("due", filterNearDue);
+    else url.searchParams.delete("due");
+    window.history.replaceState(null, "", url.toString());
+  }, [filterStatus, filterNearDue]);
+
   const openView = async (r: Vehicle, tab: "base" | "cycle" | "files" = "base") => {
     setViewVehicle(r);
     setViewCycle(null);
@@ -415,8 +485,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="ve-vehicles-page space-y-4">
+      <div className="ve-vehicles-header">
         <Space>
           <Input.Search
             placeholder="搜索车牌/品牌/归属"
@@ -428,12 +498,12 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
               setTimeout(load, 0);
             }}
             allowClear
-            style={{ width: 280 }}
+            style={{ width: 300 }}
           />
           <Select
             allowClear
             placeholder="状态"
-            style={{ width: 120 }}
+            style={{ width: 140 }}
             value={filterStatus || undefined}
             onChange={(v) => setFilterStatus(v ?? "")}
             options={[
@@ -461,11 +531,24 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           />
           <Select
             allowClear
-            placeholder="临近到期"
+            placeholder="到期分级"
             style={{ width: 140 }}
             value={filterNearDue || undefined}
             onChange={(v) => setFilterNearDue(v ?? "")}
-            options={[{ label: `是（${warnDays}天内）`, value: "yes" }]}
+            options={[
+              { label: "已逾期", value: "overdue" },
+              { label: "7天内", value: "within7" },
+              { label: "30天内", value: "within30" },
+              { label: "全部临期", value: "due" },
+            ]}
+          />
+          <Select
+            allowClear
+            placeholder="台账缺项"
+            style={{ width: 140 }}
+            value={filterIncomplete || undefined}
+            onChange={(v) => setFilterIncomplete(v ?? "")}
+            options={[{ label: "仅看不完整", value: "yes" }]}
           />
         </Space>
         {canManage ? (
@@ -483,7 +566,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       </div>
 
       <Table
-        className="ve-table"
+        className="ve-vehicles-table"
         size="small"
         tableLayout="auto"
         rowKey="id"
@@ -506,6 +589,14 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             title: "车辆状态",
             render: (_, r) => <Tag color={statusMeta[r.status].color}>{statusMeta[r.status].label}</Tag>,
           },
+          {
+            title: "台账完整度",
+            render: (_, r) => {
+              const c = getVehicleCompleteness(r, cyclesByVehicleId[r.id]);
+              const color = c.percent === 100 ? "green" : c.percent >= 80 ? "gold" : "red";
+              return <Tag color={color}>{`${c.percent}% (${c.filled}/${c.total})`}</Tag>;
+            },
+          },
           { title: "本次保养里程", dataIndex: "mileage" },
           {
             title: "下次保养里程",
@@ -527,6 +618,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             width: 160,
             render: (_, r) => (
               <Space size={6}>
+                <Tooltip title="查看车辆详情">
+                  <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openView(r)} />
+                </Tooltip>
                 {canManage ? (
                   <Tooltip title="编辑">
                     <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r, "basic")} />
@@ -539,12 +633,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                     </Tooltip>
                   </Popconfirm>
                 ) : null}
-                <Tooltip title="查看车辆详情">
-                  <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openView(r)} />
-                </Tooltip>
-                <Tooltip title="查看附件">
-                  <Button type="text" size="small" icon={<PaperClipOutlined />} onClick={() => openView(r, "files")} />
-                </Tooltip>
                 <Tooltip title="分享">
                   <Button type="text" size="small" icon={<ShareAltOutlined />} onClick={() => shareVehicle(r)} />
                 </Tooltip>
@@ -554,7 +642,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         ]}
       />
 
-      <Modal title="车辆详情" open={viewOpen} onCancel={() => setViewOpen(false)} footer={null} width={920} style={{ top: 24 }}>
+      <Modal title="车辆详情" open={viewOpen} onCancel={() => setViewOpen(false)} footer={null} width={920} style={{ top: 24 }} className="ve-vehicles-modal">
         {viewVehicle ? (
           <Spin spinning={viewLoading}>
             <Tabs
@@ -700,6 +788,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             paddingTop: 12,
           },
         }}
+        className="ve-vehicles-modal"
       >
         <Form form={form} layout="vertical">
           <Tabs

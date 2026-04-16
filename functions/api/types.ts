@@ -25,6 +25,11 @@ export type Vehicle = {
   ownerDept: string;
   ownerPerson: string;
   mileage: number;
+  purchaseDate: string | null;
+  purchaseCost: number | null;
+  serviceLifeYears: number | null;
+  scrapDate: string | null;
+  disposalMethod: string | null;
   status: "normal" | "repairing" | "scrapped" | "stopped";
   remark: string | null;
   createdAt: string;

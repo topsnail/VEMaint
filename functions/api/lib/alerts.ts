@@ -7,10 +7,11 @@ export function daysBetweenToday(dateStr: string | null): number | null {
   return Math.ceil((t - now.getTime()) / 86400000);
 }
 
-export function alertLevel(days: number | null, threshold: number): "none" | "soon" | "expired" {
+export function alertLevel(days: number | null, threshold: number): "none" | "within30" | "within7" | "expired" {
   if (days === null) return "none";
   if (days < 0) return "expired";
-  if (days <= threshold) return "soon";
+  if (days <= Math.min(threshold, 7)) return "within7";
+  if (days <= 30) return "within30";
   return "none";
 }
 

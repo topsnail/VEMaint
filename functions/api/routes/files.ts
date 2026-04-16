@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
-import { permit } from "../middleware/permit";
+import { permitPerm } from "../middleware/permit";
 import { r2Get, r2Put } from "../services/r2";
 import type { AppEnv } from "../types";
 
 export const filesRoute = new Hono<AppEnv>();
 filesRoute.use("/api/files/*", requireAuth);
-filesRoute.use("/api/upload", requireAuth, permit("admin", "maintainer"));
+filesRoute.use("/api/upload", requireAuth, permitPerm("maintenance.edit"));
 
 filesRoute.get("/api/files/*", async (c) => {
   const key = decodeURIComponent(c.req.path.replace(/^\/api\/files\//, "")).trim();

@@ -9,6 +9,7 @@ import { configRoute } from "./routes/config";
 import { alertsRoute } from "./routes/alerts";
 import { logsRoute } from "./routes/logs";
 import { exportRoute } from "./routes/export";
+import { dashboardRoute } from "./routes/dashboard";
 import type { AppEnv } from "./types";
 
 export const app = new Hono<AppEnv>();
@@ -31,4 +32,5 @@ app.route("/", configRoute);
 app.route("/", alertsRoute);
 app.route("/", logsRoute);
 app.route("/", exportRoute);
+app.route("/", dashboardRoute);
 

@@ -1,3 +1,5 @@
+import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions, type RolePermissions } from "../lib/permissions";
+
 const KEY = "sys:config:v1";
 
 export type SystemConfig = {
@@ -5,9 +7,18 @@ export type SystemConfig = {
   warnDays: number;
   versionNote: string;
   dropdowns: Record<string, string[]>;
+  permissions: {
+    roles: RolePermissions;
+  };
 };
 
-const DEFAULT_CONFIG: SystemConfig = { siteName: "VEMaint", warnDays: 7, versionNote: "v1.0.0", dropdowns: {} };
+const DEFAULT_CONFIG: SystemConfig = {
+  siteName: "VEMaint",
+  warnDays: 7,
+  versionNote: "v1.0.0",
+  dropdowns: {},
+  permissions: { roles: DEFAULT_ROLE_PERMISSIONS },
+};
 
 function normalizeDropdowns(input: unknown): Record<string, string[]> {
   if (!input || typeof input !== "object") return {};
@@ -44,6 +55,9 @@ export async function getSystemConfig(kv: KVNamespace): Promise<SystemConfig> {
       versionNote:
         typeof parsed.versionNote === "string" && parsed.versionNote.trim() ? parsed.versionNote.trim() : "v1.0.0",
       dropdowns: normalizeDropdowns((parsed as { dropdowns?: unknown }).dropdowns),
+      permissions: {
+        roles: normalizeRolePermissions((parsed as { permissions?: unknown }).permissions),
+      },
     };
   } catch {
     return DEFAULT_CONFIG;

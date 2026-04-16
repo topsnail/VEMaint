@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { hashPassword } from "../lib/password";
 import { requireAuth } from "../middleware/require-auth";
-import { permit } from "../middleware/permit";
+import { permitPerm } from "../middleware/permit";
 import { createUser, deleteUser, listUsers, setUserDisabled, updateUserPassword, updateUserRole } from "../repositories/users";
 import { jsonError, jsonOk } from "../lib/response";
 import { normalizeUsername, parseRole } from "../services/auth-users";
@@ -9,8 +9,8 @@ import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 
 export const usersRoute = new Hono<AppEnv>();
-usersRoute.use("/api/users/*", requireAuth, permit("admin"));
-usersRoute.use("/api/users", requireAuth, permit("admin"));
+usersRoute.use("/api/users/*", requireAuth, permitPerm("user.manage"));
+usersRoute.use("/api/users", requireAuth, permitPerm("user.manage"));
 
 usersRoute.get("/api/users", async (c) => {
   const rows = await listUsers(c.env.DB);
