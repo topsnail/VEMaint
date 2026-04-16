@@ -2,6 +2,7 @@ import { Alert, Button, Card, Col, Input, List, Progress, Row, Space, Statistic,
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/http";
+import type { MaintenanceRecord, Vehicle } from "../types";
 
 type AlertItem = {
   alertKey: string;
@@ -91,8 +92,8 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
     const key = q.trim();
     if (!key) return setSearch({ vehicles: [], maintenance: [] });
     const [v, m] = await Promise.all([
-      apiFetch<{ vehicles: any[] }>(`/vehicles?q=${encodeURIComponent(key)}`),
-      apiFetch<{ records: any[] }>(`/maintenance?q=${encodeURIComponent(key)}`),
+      apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(key)}`),
+      apiFetch<{ records: MaintenanceRecord[] }>(`/maintenance?q=${encodeURIComponent(key)}`),
     ]);
     setSearch({
       vehicles: v.ok ? v.data.vehicles.map((x) => ({ id: x.id, plateNo: x.plateNo, brandModel: x.brandModel })) : [],

@@ -37,15 +37,35 @@ body {
   width: 220px;
   min-width: 220px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.ve-topbar-left:hover {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
 }
 
 .ve-topbar-left img {
-  transition: all 0.3s ease;
+  width: 20px !important;
+  height: 20px !important;
+  transition: transform 0.2s ease;
 }
 
 .ve-topbar-left img:hover {
-  transform: scale(1.05);
+  transform: scale(1.03);
+}
+
+.ve-topbar-left .ant-typography {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
 }
 
 .ve-topbar-center {
@@ -56,33 +76,86 @@ body {
 }
 
 .ve-topbar-search {
-  width: min(760px, 100%);
+  width: min(720px, 100%);
 }
 
-.ve-topbar-search .ant-input-group .ant-input {
-  height: 40px;
-  border-radius: 6px 0 0 6px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
+.ve-topbar-search.ant-input-affix-wrapper {
+  min-height: 36px;
+  padding: 0 6px 0 12px !important;
+  border: 1px solid #d7dee8 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease !important;
 }
 
-.ve-topbar-search .ant-input-group .ant-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+.ve-topbar-search.ant-input-affix-wrapper:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06) !important;
 }
 
-.ve-topbar-search .ant-input-group .ant-input-group-addon .ant-btn {
-  height: 40px;
-  border-radius: 0 6px 6px 0;
-  border: 1px solid #e2e8f0;
-  border-left: none;
-  transition: all 0.3s ease;
+.ve-topbar-search.ant-input-affix-wrapper-focused {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important;
 }
 
-.ve-topbar-search .ant-input-group .ant-input-group-addon .ant-btn:hover {
-  background-color: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
+.ve-topbar-search.ant-input-affix-wrapper .ant-input {
+  border: none !important;
+  background: transparent !important;
+  font-size: 13px !important;
+  color: #1e293b !important;
+  box-shadow: none !important;
+}
+
+.ve-topbar-search.ant-input-affix-wrapper .ant-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.ve-topbar-search .ant-input-prefix,
+.ve-topbar-search .ant-input-suffix {
+  color: #94a3b8 !important;
+}
+
+.ve-topbar-search-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.ve-topbar-search-inline-btn:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.ve-topbar-search-inline-btn:focus,
+.ve-topbar-search-inline-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ve-topbar-search-btn-content {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ve-topbar-search-btn-content .anticon {
+  font-size: 15px;
+}
+
+@media (max-width: 1280px) {
+  .ve-topbar-search {
+    width: min(620px, 100%);
+  }
 }
 
 .ve-topbar-right {
@@ -95,21 +168,57 @@ body {
 }
 
 .ve-topbar-right .ant-btn {
-  border-radius: 6px;
-  transition: all 0.3s ease;
+  border-radius: 10px;
+  transition: all 0.2s ease;
 }
 
 .ve-topbar-right .ant-btn:hover {
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
 }
 
 .ve-topbar-right .ant-dropdown-trigger {
-  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  transition: all 0.2s ease;
 }
 
 .ve-topbar-right .ant-dropdown-trigger:hover {
-  background-color: #f1f5f9;
-  transform: translateY(-1px);
+  background-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  transform: none;
+}
+
+.ve-topbar-right .ant-badge {
+  display: inline-flex;
+}
+
+.ve-topbar-right .ant-badge .ant-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+}
+
+.ve-topbar-right .ant-badge .ant-btn:hover {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  transform: none;
+}
+
+.ve-topbar-right .ant-badge .ant-btn .anticon {
+  font-size: 18px;
+}
+
+.ve-topbar-right .ant-badge-count {
+  box-shadow: 0 0 0 2px #fff;
+  font-weight: 600;
 }
 
 .ve-main-layout {

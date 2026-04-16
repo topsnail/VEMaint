@@ -15,11 +15,12 @@ import {
   clearToken,
   getToken,
   getUser,
+  setToken,
   setUser,
   type UserInfo,
 } from "./lib/auth";
 import { apiFetch } from "./lib/http";
-import { hasPerm, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
+import { DEFAULT_ROLE_PERMISSIONS, hasPerm, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -29,30 +30,97 @@ import { UsersPage } from "./pages/UsersPage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 
 function AppInner() {
-  const [user, setCurrentUser] = useState<UserInfo | null>(() => getUser());
+  const fallbackUser: UserInfo = { userId: "mock_user_fallback", username: "mock", role: "admin" };
+  const [user, setCurrentUser] = useState<UserInfo | null>(() => {
+    const cachedUser = getUser();
+    if (cachedUser) return cachedUser;
+
+    const token = getToken();
+    if (token?.startsWith("mock_token_")) return fallbackUser;
+    return null;
+  });
   const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [globalSearch, setGlobalSearch] = useState("");
   const nav = useNavigate();
   const loc = useLocation();
 
   const loadMe = async () => {
-    if (!getToken()) return setCurrentUser(null);
-    const [userRes, settingsRes] = await Promise.all([
-      apiFetch<{ userId: string; username: string; role: "admin" | "maintainer" | "reader" }>("/user/info"),
-      apiFetch<{ config: { permissions?: { roles?: RolePermissions } } }>("/settings"),
-    ]);
-    if (!userRes.ok) {
-      clearToken();
-      return setCurrentUser(null);
+    const token = getToken();
+    if (!token) return setCurrentUser(null);
+
+    const cachedUser = getUser();
+
+    // 仅前端模拟登录：跳过后端接口
+    // 即使缓存用户为空，也用兜底 mock user 恢复 UI（避免刷新后回登录）
+    if (token.startsWith("mock_token_")) {
+      if (cachedUser) {
+        setCurrentUser(cachedUser);
+      } else {
+        const fallbackUser = { userId: "mock_user_fallback", username: "mock", role: "admin" as const };
+        setUser(fallbackUser);
+        setCurrentUser(fallbackUser);
+      }
+      setRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+      return;
     }
-    setUser(userRes.data);
-    setCurrentUser(userRes.data);
-    if (settingsRes.ok) setRolePermissions(normalizeRolePermissions(settingsRes.data.config.permissions));
-    else setRolePermissions(normalizeRolePermissions(null));
+
+    // 优先从缓存恢复 UI，避免刷新时后端不可用导致强制回登录页
+    if (cachedUser) {
+      setCurrentUser(cachedUser);
+      // 缓存恢复时先用默认权限兜底；后续如果后端可用会覆盖
+      setRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+    }
+
+    try {
+      const [userRes, settingsRes] = await Promise.all([
+        apiFetch<{ userId: string; username: string; role: "admin" | "maintainer" | "reader" }>("/user/info"),
+        apiFetch<{ config: { permissions?: { roles?: RolePermissions } } }>("/settings"),
+      ]);
+
+      if (!userRes.ok) {
+        // 如果缓存用户存在，就保持当前界面；否则清 token 回到登录页
+        if (cachedUser) return;
+        clearToken();
+        setCurrentUser(null);
+        return;
+      }
+
+      setUser(userRes.data);
+      setCurrentUser(userRes.data);
+      if (settingsRes.ok) setRolePermissions(normalizeRolePermissions(settingsRes.data.config.permissions));
+      else setRolePermissions(normalizeRolePermissions(null));
+    } catch {
+      // 网络/运行时错误时同样降级为使用缓存用户
+      if (!cachedUser) {
+        clearToken();
+        setCurrentUser(null);
+      }
+    }
   };
 
   useEffect(() => {
     loadMe();
   }, []);
+
+  useEffect(() => {
+    const loadNotificationCount = async () => {
+      if (!user) {
+        setNotificationCount(0);
+        return;
+      }
+      try {
+        const res = await apiFetch<{ kpis?: { alerts?: { total?: number } } }>("/dashboard/overview");
+        if (res.ok) {
+          setNotificationCount(Number(res.data.kpis?.alerts?.total ?? 0));
+          return;
+        }
+      } catch {
+        // ignore and keep existing count
+      }
+    };
+    void loadNotificationCount();
+  }, [user]);
 
   if (!user) return <LoginPage onLoggedIn={loadMe} />;
   const canViewDashboard = hasPerm(user.role, "app.view", rolePermissions);
@@ -108,16 +176,28 @@ function AppInner() {
           </Typography.Title>
         </div>
         <div className="ve-topbar-center">
-          <Input.Search
+          <Input
             className="ve-topbar-search"
             placeholder="搜索车牌、设备、维保记录..."
-            enterButton={<SearchOutlined />}
             allowClear
-            onSearch={submitGlobalSearch}
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            onPressEnter={(e) => submitGlobalSearch((e.target as HTMLInputElement).value)}
+            suffix={
+              <button
+                type="button"
+                className="ve-topbar-search-inline-btn"
+                onClick={() => submitGlobalSearch(globalSearch)}
+              >
+                <span className="ve-topbar-search-btn-content">
+                  <SearchOutlined />
+                </span>
+              </button>
+            }
           />
         </div>
         <div className="ve-topbar-right">
-          <Badge dot offset={[0, 2]}>
+          <Badge count={notificationCount} size="small" overflowCount={99} offset={[-2, 2]}>
             <Button type="text" shape="circle" icon={<BellOutlined />} onClick={() => nav("/dashboard")} />
           </Badge>
           <Dropdown

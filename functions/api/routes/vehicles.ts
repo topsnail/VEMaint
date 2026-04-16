@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getNullableTrimmedStringField, getNumberField, getOptionalNumberField, getTrimmedStringField, readJsonRecord } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
 import { permitPerm } from "../middleware/permit";
@@ -10,6 +11,14 @@ import type { AppEnv } from "../types";
 export const vehiclesRoute = new Hono<AppEnv>();
 vehiclesRoute.use("/api/vehicles/*", requireAuth);
 vehiclesRoute.use("/api/vehicles", requireAuth);
+
+const VEHICLE_STATUSES = ["normal", "repairing", "scrapped", "stopped"] as const;
+type VehicleStatus = (typeof VEHICLE_STATUSES)[number];
+
+function parseVehicleStatus(value: unknown, fallback: VehicleStatus = "normal"): VehicleStatus | null {
+  const normalized = String(value ?? fallback).trim();
+  return (VEHICLE_STATUSES as readonly string[]).includes(normalized) ? (normalized as VehicleStatus) : null;
+}
 
 vehiclesRoute.get("/api/vehicles", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
@@ -26,27 +35,28 @@ vehiclesRoute.get("/api/vehicles/:id", async (c) => {
 });
 
 vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
-  const body = await c.req.json().catch(() => null as unknown);
-  const plateNo = String((body as any)?.plateNo ?? "").trim().toUpperCase();
-  const vehicleType = String((body as any)?.vehicleType ?? "").trim();
-  const brandModel = String((body as any)?.brandModel ?? "").trim();
-  const vin = String((body as any)?.vin ?? "").trim().toUpperCase();
-  const engineNo = String((body as any)?.engineNo ?? "").trim();
-  const regDate = String((body as any)?.regDate ?? "").trim() || null;
-  const loadSpec = String((body as any)?.loadSpec ?? "").trim() || null;
-  const usageNature = String((body as any)?.usageNature ?? "").trim() || null;
-  const ownerDept = String((body as any)?.ownerDept ?? "").trim();
-  const ownerPerson = String((body as any)?.ownerPerson ?? "").trim();
-  const mileage = Number((body as any)?.mileage ?? 0);
-  const purchaseDate = String((body as any)?.purchaseDate ?? "").trim() || null;
-  const purchaseCost = Number.isFinite(Number((body as any)?.purchaseCost)) ? Number((body as any)?.purchaseCost) : null;
-  const serviceLifeYears = Number.isFinite(Number((body as any)?.serviceLifeYears)) ? Number((body as any)?.serviceLifeYears) : null;
-  const scrapDate = String((body as any)?.scrapDate ?? "").trim() || null;
-  const disposalMethod = String((body as any)?.disposalMethod ?? "").trim() || null;
-  const status = String((body as any)?.status ?? "normal").trim() as any;
-  const remark = String((body as any)?.remark ?? "").trim() || null;
+  const body = await readJsonRecord(c);
+  const plateNo = getTrimmedStringField(body, "plateNo").toUpperCase();
+  const vehicleType = getTrimmedStringField(body, "vehicleType");
+  const brandModel = getTrimmedStringField(body, "brandModel");
+  const vin = getTrimmedStringField(body, "vin").toUpperCase();
+  const engineNo = getTrimmedStringField(body, "engineNo");
+  const regDate = getNullableTrimmedStringField(body, "regDate");
+  const loadSpec = getNullableTrimmedStringField(body, "loadSpec");
+  const usageNature = getNullableTrimmedStringField(body, "usageNature");
+  const ownerDept = getTrimmedStringField(body, "ownerDept");
+  const ownerPerson = getTrimmedStringField(body, "ownerPerson");
+  const mileage = getNumberField(body, "mileage", 0);
+  const purchaseDate = getNullableTrimmedStringField(body, "purchaseDate");
+  const purchaseCost = getOptionalNumberField(body, "purchaseCost");
+  const serviceLifeYears = getOptionalNumberField(body, "serviceLifeYears");
+  const scrapDate = getNullableTrimmedStringField(body, "scrapDate");
+  const disposalMethod = getNullableTrimmedStringField(body, "disposalMethod");
+  const status = parseVehicleStatus(body.status);
+  const remark = getNullableTrimmedStringField(body, "remark");
   if (!plateNo || !vehicleType || !brandModel || !vin || !engineNo || !ownerDept || !ownerPerson || !Number.isFinite(mileage))
     return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
+  if (!status) return jsonError(c, "BAD_REQUEST", "车辆状态无效", 400);
   try {
     const id = await createVehicle(c.env.DB, {
       plateNo,
@@ -77,27 +87,28 @@ vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
 
 vehiclesRoute.put("/api/vehicles/:id", permitPerm("vehicle.manage"), async (c) => {
   const id = c.req.param("id").trim();
-  const body = await c.req.json().catch(() => null as unknown);
-  const plateNo = String((body as any)?.plateNo ?? "").trim().toUpperCase();
-  const vehicleType = String((body as any)?.vehicleType ?? "").trim();
-  const brandModel = String((body as any)?.brandModel ?? "").trim();
-  const vin = String((body as any)?.vin ?? "").trim().toUpperCase();
-  const engineNo = String((body as any)?.engineNo ?? "").trim();
-  const regDate = String((body as any)?.regDate ?? "").trim() || null;
-  const loadSpec = String((body as any)?.loadSpec ?? "").trim() || null;
-  const usageNature = String((body as any)?.usageNature ?? "").trim() || null;
-  const ownerDept = String((body as any)?.ownerDept ?? "").trim();
-  const ownerPerson = String((body as any)?.ownerPerson ?? "").trim();
-  const mileage = Number((body as any)?.mileage ?? 0);
-  const purchaseDate = String((body as any)?.purchaseDate ?? "").trim() || null;
-  const purchaseCost = Number.isFinite(Number((body as any)?.purchaseCost)) ? Number((body as any)?.purchaseCost) : null;
-  const serviceLifeYears = Number.isFinite(Number((body as any)?.serviceLifeYears)) ? Number((body as any)?.serviceLifeYears) : null;
-  const scrapDate = String((body as any)?.scrapDate ?? "").trim() || null;
-  const disposalMethod = String((body as any)?.disposalMethod ?? "").trim() || null;
-  const status = String((body as any)?.status ?? "normal").trim() as any;
-  const remark = String((body as any)?.remark ?? "").trim() || null;
+  const body = await readJsonRecord(c);
+  const plateNo = getTrimmedStringField(body, "plateNo").toUpperCase();
+  const vehicleType = getTrimmedStringField(body, "vehicleType");
+  const brandModel = getTrimmedStringField(body, "brandModel");
+  const vin = getTrimmedStringField(body, "vin").toUpperCase();
+  const engineNo = getTrimmedStringField(body, "engineNo");
+  const regDate = getNullableTrimmedStringField(body, "regDate");
+  const loadSpec = getNullableTrimmedStringField(body, "loadSpec");
+  const usageNature = getNullableTrimmedStringField(body, "usageNature");
+  const ownerDept = getTrimmedStringField(body, "ownerDept");
+  const ownerPerson = getTrimmedStringField(body, "ownerPerson");
+  const mileage = getNumberField(body, "mileage", 0);
+  const purchaseDate = getNullableTrimmedStringField(body, "purchaseDate");
+  const purchaseCost = getOptionalNumberField(body, "purchaseCost");
+  const serviceLifeYears = getOptionalNumberField(body, "serviceLifeYears");
+  const scrapDate = getNullableTrimmedStringField(body, "scrapDate");
+  const disposalMethod = getNullableTrimmedStringField(body, "disposalMethod");
+  const status = parseVehicleStatus(body.status);
+  const remark = getNullableTrimmedStringField(body, "remark");
   if (!id || !plateNo || !vehicleType || !brandModel || !vin || !engineNo || !ownerDept || !ownerPerson || !Number.isFinite(mileage))
     return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
+  if (!status) return jsonError(c, "BAD_REQUEST", "车辆状态无效", 400);
   await updateVehicle(c.env.DB, id, {
     plateNo,
     vehicleType,
@@ -124,10 +135,10 @@ vehiclesRoute.put("/api/vehicles/:id", permitPerm("vehicle.manage"), async (c) =
 
 vehiclesRoute.put("/api/vehicles/:id/status", permitPerm("vehicle.manage"), async (c) => {
   const id = c.req.param("id").trim();
-  const body = await c.req.json().catch(() => null as unknown);
-  const status = String((body as any)?.status ?? "").trim() as "normal" | "repairing" | "scrapped" | "stopped";
+  const body = await readJsonRecord(c);
+  const status = parseVehicleStatus(body.status, "normal");
   if (!id) return jsonError(c, "BAD_REQUEST", "无效 ID", 400);
-  if (!status) return jsonError(c, "BAD_REQUEST", "状态不能为空", 400);
+  if (!status) return jsonError(c, "BAD_REQUEST", "状态无效", 400);
   await setVehicleStatus(c.env.DB, id, status);
   await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.status", id, { status });
   return jsonOk(c, { ok: true });
@@ -142,26 +153,22 @@ vehiclesRoute.get("/api/vehicles/:id/cycles", async (c) => {
 
 vehiclesRoute.put("/api/vehicles/:id/cycles", permitPerm("maintenance.edit"), async (c) => {
   const id = c.req.param("id").trim();
-  const body = await c.req.json().catch(() => null as unknown);
+  const body = await readJsonRecord(c);
   if (!id) return jsonError(c, "BAD_REQUEST", "无效 ID", 400);
   await upsertCycle(c.env.DB, {
     vehicleId: id,
-    insuranceType: String((body as any)?.insuranceType ?? "").trim() || null,
-    insuranceVendor: String((body as any)?.insuranceVendor ?? "").trim() || null,
-    insuranceStart: String((body as any)?.insuranceStart ?? "").trim() || null,
-    insuranceExpiry: String((body as any)?.insuranceExpiry ?? "").trim() || null,
-    insuranceAttachmentKey: String((body as any)?.insuranceAttachmentKey ?? "").trim() || null,
-    annualLastDate: String((body as any)?.annualLastDate ?? "").trim() || null,
-    annualExpiry: String((body as any)?.annualExpiry ?? "").trim() || null,
-    maintLastDate: String((body as any)?.maintLastDate ?? "").trim() || null,
-    maintIntervalDays: Number.isFinite(Number((body as any)?.maintIntervalDays))
-      ? Number((body as any)?.maintIntervalDays)
-      : null,
-    maintIntervalKm: Number.isFinite(Number((body as any)?.maintIntervalKm))
-      ? Number((body as any)?.maintIntervalKm)
-      : null,
-    maintNextDate: String((body as any)?.maintNextDate ?? "").trim() || null,
-    maintNextKm: Number.isFinite(Number((body as any)?.maintNextKm)) ? Number((body as any)?.maintNextKm) : null,
+    insuranceType: getNullableTrimmedStringField(body, "insuranceType"),
+    insuranceVendor: getNullableTrimmedStringField(body, "insuranceVendor"),
+    insuranceStart: getNullableTrimmedStringField(body, "insuranceStart"),
+    insuranceExpiry: getNullableTrimmedStringField(body, "insuranceExpiry"),
+    insuranceAttachmentKey: getNullableTrimmedStringField(body, "insuranceAttachmentKey"),
+    annualLastDate: getNullableTrimmedStringField(body, "annualLastDate"),
+    annualExpiry: getNullableTrimmedStringField(body, "annualExpiry"),
+    maintLastDate: getNullableTrimmedStringField(body, "maintLastDate"),
+    maintIntervalDays: getOptionalNumberField(body, "maintIntervalDays"),
+    maintIntervalKm: getOptionalNumberField(body, "maintIntervalKm"),
+    maintNextDate: getNullableTrimmedStringField(body, "maintNextDate"),
+    maintNextKm: getOptionalNumberField(body, "maintNextKm"),
   });
   await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.cycle.update", id, null);
   return jsonOk(c, { ok: true });

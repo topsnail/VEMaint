@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { getTrimmedStringField, readJsonRecord } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { revokeToken, signAccessToken } from "../lib/jwt";
 import { requireAuth } from "../middleware/require-auth";
@@ -12,9 +13,9 @@ import { writeOperationLog } from "../repositories/logs";
 export const authRoute = new Hono<AppEnv>();
 
 async function loginHandler(c: Context<AppEnv>) {
-  const body = await c.req.json().catch(() => null as unknown);
-  const username = normalizeUsername((body as any)?.username ?? "");
-  const password = String((body as any)?.password ?? "");
+  const body = await readJsonRecord(c);
+  const username = normalizeUsername(getTrimmedStringField(body, "username"));
+  const password = getTrimmedStringField(body, "password");
   if (!username || !password) return jsonError(c, "BAD_REQUEST", "请输入用户名和密码", 400);
 
   const user = await getUserByUsername(c.env.DB, username);
@@ -48,9 +49,9 @@ authRoute.post("/api/logout", requireAuth, async (c) => {
 authRoute.post("/api/bootstrap", async (c) => {
   const admin = await getUserByUsername(c.env.DB, "admin");
   if (admin) return jsonError(c, "BOOTSTRAPPED", "系统已初始化", 400);
-  const body = await c.req.json().catch(() => null as unknown);
-  const username = normalizeUsername((body as any)?.username ?? "admin");
-  const password = String((body as any)?.password ?? "");
+  const body = await readJsonRecord(c);
+  const username = normalizeUsername(getTrimmedStringField(body, "username", "admin"));
+  const password = getTrimmedStringField(body, "password");
   if (!username || !password) return jsonError(c, "BAD_REQUEST", "请提供用户名和密码", 400);
   const passwordHash = await hashPassword(password);
   await createUser(c.env.DB, { username, passwordHash, role: "admin" });
@@ -59,9 +60,9 @@ authRoute.post("/api/bootstrap", async (c) => {
 
 authRoute.put("/api/profile/password", requireAuth, async (c) => {
   const me = c.get("auth");
-  const body = await c.req.json().catch(() => null as unknown);
-  const oldPassword = String((body as any)?.oldPassword ?? "");
-  const newPassword = String((body as any)?.newPassword ?? "");
+  const body = await readJsonRecord(c);
+  const oldPassword = getTrimmedStringField(body, "oldPassword");
+  const newPassword = getTrimmedStringField(body, "newPassword");
   if (!oldPassword || !newPassword) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
   const user = await getUserByUsername(c.env.DB, me.username);
   if (!user) return jsonError(c, "NOT_FOUND", "用户不存在", 404);

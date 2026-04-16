@@ -8,4 +8,9 @@ export type CloudflareEnv = {
   TOKEN_BLACKLIST_PREFIX?: string;
 };
 
+declare module "*.module.css" {
+  const classes: Record<string, string>;
+  export default classes;
+}
+
 export {};

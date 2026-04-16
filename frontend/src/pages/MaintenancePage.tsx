@@ -3,7 +3,7 @@ import { Button, Col, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, R
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
-import { apiFetch, uploadFile } from "../lib/http";
+import { apiFetch, openProtectedFile, uploadFile } from "../lib/http";
 import type { MaintenanceRecord, Vehicle } from "../types";
 
 type FormModel = {
@@ -112,6 +112,11 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
     message.success("上传完成");
   };
 
+  const viewAttachment = async (attachmentKey: string) => {
+    const res = await openProtectedFile(`/files/${encodeURIComponent(attachmentKey)}`);
+    if (!res.ok) message.error(res.error.message);
+  };
+
   return (
     <div className="ve-maintenance-page space-y-4">
       <div className="ve-maintenance-header flex items-center justify-end">
@@ -146,7 +151,14 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
             title: "附件",
             render: (_, r) =>
               r.attachmentKey ? (
-                <a href={`/api/files/${encodeURIComponent(r.attachmentKey)}`} target="_blank" rel="noreferrer" className="ve-link">
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void viewAttachment(r.attachmentKey!);
+                  }}
+                  className="ve-link"
+                >
                   查看
                 </a>
               ) : (

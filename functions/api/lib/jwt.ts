@@ -31,10 +31,11 @@ export async function signAccessToken(
 export async function verifyAccessToken(env: CloudflareEnv, token: string): Promise<JwtUser | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(env), { algorithms: ["HS256"] });
+    const payloadRecord = payload as Record<string, unknown>;
     const userId = typeof payload.sub === "string" ? payload.sub : "";
-    const username = typeof (payload as any).username === "string" ? String((payload as any).username) : "";
-    const roleRaw = (payload as any).role;
-    const jti = typeof (payload as any).jti === "string" ? String((payload as any).jti) : "";
+    const username = typeof payloadRecord.username === "string" ? payloadRecord.username : "";
+    const roleRaw = payloadRecord.role;
+    const jti = typeof payloadRecord.jti === "string" ? payloadRecord.jti : "";
     const exp = typeof payload.exp === "number" ? payload.exp : 0;
     if (!userId || !username || !jti || exp <= 0) return null;
     if (roleRaw !== "admin" && roleRaw !== "maintainer" && roleRaw !== "reader") return null;

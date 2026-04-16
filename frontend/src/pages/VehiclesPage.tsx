@@ -4,8 +4,7 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import type { Vehicle, VehicleCycle } from "../types";
-import { apiFetch } from "../lib/http";
-import { uploadFile } from "../lib/http";
+import { apiFetch, openProtectedFile, uploadFile } from "../lib/http";
 
 type VehicleForm = {
   plateNo: string;
@@ -94,8 +93,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     return { ...meta, remarkBody: body };
   };
 
-  const load = async () => {
-    const res = await apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(q)}`);
+  const load = async (search = q) => {
+    const res = await apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(search)}`);
     if (res.ok) {
       setRows(res.data.vehicles);
       const cycleEntries = await Promise.all(
@@ -484,6 +483,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     input.click();
   };
 
+  const viewAttachment = async (attachmentKey: string) => {
+    const res = await openProtectedFile(`/files/${encodeURIComponent(attachmentKey)}`);
+    if (!res.ok) message.error(res.error.message);
+  };
+
   return (
     <div className="ve-vehicles-page space-y-4">
       <div className="ve-vehicles-header">
@@ -495,7 +499,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
               const nextQ = v.trim();
               setQ(nextQ);
               updateQueryInUrl(nextQ);
-              setTimeout(load, 0);
+              void load(nextQ);
             }}
             allowClear
             style={{ width: 300 }}
@@ -744,7 +748,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                   children: (
                     <Space direction="vertical" size={8}>
                       {viewCycle?.insuranceAttachmentKey ? (
-                        <a href={`/api/files/${encodeURIComponent(viewCycle.insuranceAttachmentKey)}`} target="_blank" rel="noreferrer">
+                        <a
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void viewAttachment(viewCycle.insuranceAttachmentKey!);
+                          }}
+                        >
                           查看保单附件
                         </a>
                       ) : (
@@ -752,9 +762,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       )}
                       {parseRemarkMeta(viewVehicle.remark).drivingLicenseAttachmentKey ? (
                         <a
-                          href={`/api/files/${encodeURIComponent(parseRemarkMeta(viewVehicle.remark).drivingLicenseAttachmentKey)}`}
-                          target="_blank"
-                          rel="noreferrer"
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void viewAttachment(parseRemarkMeta(viewVehicle.remark).drivingLicenseAttachmentKey);
+                          }}
                         >
                           查看行驶证附件
                         </a>

@@ -3,7 +3,7 @@ import { Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Space, Tabl
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUser } from "../lib/auth";
-import { apiFetch } from "../lib/http";
+import { apiFetch, downloadProtectedFile, openProtectedFile } from "../lib/http";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
 
 type ConfigForm = {
@@ -148,6 +148,16 @@ export function ConfigPage() {
     }));
   };
 
+  const handleExport = async (path: string, fallbackFilename: string) => {
+    const res = await downloadProtectedFile(path, fallbackFilename);
+    if (!res.ok) message.error(res.error.message);
+  };
+
+  const handleOpenLogs = async () => {
+    const res = await openProtectedFile("/logs");
+    if (!res.ok) message.error(res.error.message);
+  };
+
   return (
     <div className="ve-config-page max-w-3xl">
       <Form form={form} layout="vertical">
@@ -228,16 +238,26 @@ export function ConfigPage() {
               label: "导出与日志",
               children: (
                 <Card size="small" title="数据导出与操作日志" className="ve-config-card">
-                  <Typography.Text type="secondary">导出为 CSV/Excel（取决于浏览器下载设置），以及查看最近操作日志。</Typography.Text>
+                  <Typography.Text type="secondary">导出为 CSV 文件，以及查看最近操作日志。</Typography.Text>
                   <div className="mt-3">
                     <Space wrap>
-                      <Button type="link" href="/api/export/vehicles" target="_blank" rel="noreferrer" disabled={!canExportVehicles} className="ve-link-btn">
+                      <Button
+                        type="link"
+                        disabled={!canExportVehicles}
+                        className="ve-link-btn"
+                        onClick={() => void handleExport("/export/vehicles", "vehicles.csv")}
+                      >
                         导出车辆
                       </Button>
-                      <Button type="link" href="/api/export/maintenance" target="_blank" rel="noreferrer" disabled={!canExportMaintenance} className="ve-link-btn">
+                      <Button
+                        type="link"
+                        disabled={!canExportMaintenance}
+                        className="ve-link-btn"
+                        onClick={() => void handleExport("/export/maintenance", "maintenance.csv")}
+                      >
                         导出维保
                       </Button>
-                      <Button type="link" href="/api/logs" target="_blank" rel="noreferrer" disabled={!canViewLogs} className="ve-link-btn">
+                      <Button type="link" disabled={!canViewLogs} className="ve-link-btn" onClick={() => void handleOpenLogs()}>
                         查看日志
                       </Button>
                     </Space>

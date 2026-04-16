@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { d1All, d1First, d1Run } from "../db/d1";
 import { alertLevel, daysBetweenToday } from "../lib/alerts";
+import { getNullableTrimmedStringField, readJsonRecord } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { permitPerm } from "../middleware/permit";
 import { requireAuth } from "../middleware/require-auth";
@@ -71,6 +72,21 @@ type CostByDeptRow = {
 type CostByPersonRow = {
   ownerPerson: string | null;
   monthCost: number;
+};
+
+type DashboardAlert = {
+  alertKey: string;
+  type: string;
+  level: "expired" | "within7" | "within30";
+  vehicleId: string;
+  plateNo: string;
+  ownerDept: string;
+  ownerPerson: string;
+  days?: number | null;
+  kmLeft?: number | null;
+  actionStatus: "open" | "processing" | "resolved";
+  actionHandler: string | null;
+  actionUpdatedAt: string | null;
 };
 
 export const dashboardRoute = new Hono<AppEnv>();
@@ -158,13 +174,16 @@ group by v.owner_person
   ]);
   const actionMap = new Map(actionRows.map((x) => [x.alertKey, x]));
 
-  const alerts = cycleRows.flatMap((r) => {
-    const out: Array<Record<string, unknown>> = [];
+  const alerts = cycleRows.flatMap<DashboardAlert>((r) => {
+    const out: DashboardAlert[] = [];
     const insuranceDays = daysBetweenToday(r.insuranceExpiry);
     const annualDays = daysBetweenToday(r.annualExpiry);
     const maintDays = daysBetweenToday(r.maintNextDate);
     const maintKmLeft = typeof r.maintNextKm === "number" ? r.maintNextKm - r.mileage : null;
-    const attachAction = (base: Record<string, unknown>, type: string) => {
+    const attachAction = (
+      base: Omit<DashboardAlert, "alertKey" | "ownerDept" | "ownerPerson" | "actionStatus" | "actionHandler" | "actionUpdatedAt">,
+      type: string,
+    ): DashboardAlert => {
       const alertKey = `${r.vehicleId}:${type}`;
       const action = actionMap.get(alertKey);
       return {
@@ -172,7 +191,7 @@ group by v.owner_person
         alertKey,
         ownerDept: r.ownerDept,
         ownerPerson: r.ownerPerson,
-        actionStatus: (action?.status ?? "open") as "open" | "processing" | "resolved",
+        actionStatus: action?.status ?? "open",
         actionHandler: action?.handler ?? null,
         actionUpdatedAt: action?.updatedAt ?? null,
       };
@@ -196,12 +215,9 @@ group by v.owner_person
 
     if (maintKmLeft !== null && maintKmLeft <= 500) {
       out.push({
-        ...attachAction({}, "maintenance-km"),
+        ...attachAction({ type: "保养里程", level: maintKmLeft < 0 ? "expired" : "within7", vehicleId: r.vehicleId, plateNo: r.plateNo }, "maintenance-km"),
         type: "保养里程",
-        level: maintKmLeft < 0 ? "expired" : "within7",
         kmLeft: maintKmLeft,
-        vehicleId: r.vehicleId,
-        plateNo: r.plateNo,
       });
     }
     return out;
@@ -268,7 +284,7 @@ limit 5
   const personCostMap = new Map(costByPersonRows.map((x) => [x.ownerPerson ?? "-", Number(x.monthCost ?? 0)]));
   const deptMap = new Map<string, { ownerDept: string; expired: number; within7: number; within30: number; pending: number; monthCost: number }>();
   const personMap = new Map<string, { ownerPerson: string; expired: number; within7: number; within30: number; pending: number; monthCost: number }>();
-  for (const a of alerts as Array<any>) {
+  for (const a of alerts) {
     const dept = String(a.ownerDept ?? "-");
     const person = String(a.ownerPerson ?? "-");
     if (!deptMap.has(dept)) deptMap.set(dept, { ownerDept: dept, expired: 0, within7: 0, within30: 0, pending: 0, monthCost: deptCostMap.get(dept) ?? 0 });
@@ -330,9 +346,9 @@ limit 5
 dashboardRoute.put("/api/dashboard/alerts/:key/action", permitPerm("maintenance.edit"), async (c) => {
   await ensureAlertActionsTable(c.env.DB);
   const key = decodeURIComponent(c.req.param("key") ?? "").trim();
-  const body = await c.req.json().catch(() => null as unknown);
-  const status = String((body as any)?.status ?? "").trim();
-  const note = String((body as any)?.note ?? "").trim() || null;
+  const body = await readJsonRecord(c);
+  const status = getNullableTrimmedStringField(body, "status") ?? "";
+  const note = getNullableTrimmedStringField(body, "note");
   if (!key) return jsonError(c, "BAD_REQUEST", "无效告警Key", 400);
   if (!["open", "processing", "resolved"].includes(status)) return jsonError(c, "BAD_REQUEST", "无效状态", 400);
   await d1Run(
