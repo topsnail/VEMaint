@@ -1,14 +1,16 @@
 import { createMiddleware } from "hono/factory";
 import { jsonError } from "../lib/response";
-import { verifyAccessToken, type JwtClaims } from "../lib/jwt";
+import { verifyAccessToken } from "../lib/jwt";
+import type { JwtUser } from "../types";
+import type { AppEnv } from "../types";
 
 declare module "hono" {
   interface ContextVariableMap {
-    auth: JwtClaims;
+    auth: JwtUser;
   }
 }
 
-export const requireAuth = createMiddleware(async (c, next) => {
+export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const hdr = c.req.header("authorization") ?? "";
   const m = hdr.match(/^Bearer\s+(.+)$/i);
   if (!m) return jsonError(c, "UNAUTHORIZED", "未登录", 401);

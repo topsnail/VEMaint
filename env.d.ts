@@ -5,6 +5,7 @@ export type CloudflareEnv = {
   KV: KVNamespace;
   R2: R2Bucket;
   AUTH_SECRET?: string;
+  TOKEN_BLACKLIST_PREFIX?: string;
 };
 
 export {};

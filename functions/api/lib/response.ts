@@ -6,10 +6,16 @@ export type ApiErr = { ok: false; error: ApiError };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
 
 export function jsonOk<T>(c: Context, data: T, status = 200) {
-  return c.json({ ok: true, data } satisfies ApiOk<T>, status);
+  return c.json({ ok: true, data } satisfies ApiOk<T>, status as any);
 }
 
 export function jsonError(c: Context, code: string, message: string, status = 400) {
-  return c.json({ ok: false, error: { code, message } } satisfies ApiErr, status);
+  return c.json({ ok: false, error: { code, message } } satisfies ApiErr, status as any);
+}
+
+export function toInt(v: string | null, fallback: number, min: number, max: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 

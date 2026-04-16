@@ -1,43 +1,55 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { CloudflareEnv } from "../../../env";
+import type { JwtUser, UserRole } from "../types";
 
-export type JwtClaims = {
-  sub: string;
-  username: string;
-  role: "admin" | "employee" | "viewer";
-};
+const TTL_SEC = 7 * 24 * 60 * 60;
 
 function requireSecret(env: CloudflareEnv): string {
   const s = typeof env.AUTH_SECRET === "string" ? env.AUTH_SECRET.trim() : "";
-  if (!s) throw new Error("Missing AUTH_SECRET");
-  return s;
+  if (s) return s;
+  throw new Error("Missing AUTH_SECRET");
 }
 
 function secretKey(env: CloudflareEnv) {
   return new TextEncoder().encode(requireSecret(env));
 }
 
-export async function signAccessToken(env: CloudflareEnv, claims: JwtClaims, ttlSec: number) {
+export async function signAccessToken(
+  env: CloudflareEnv,
+  claims: { userId: string; username: string; role: UserRole },
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return await new SignJWT({ username: claims.username, role: claims.role })
+  const jti = crypto.randomUUID();
+  return await new SignJWT({ username: claims.username, role: claims.role, jti })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setSubject(claims.sub)
+    .setSubject(claims.userId)
     .setIssuedAt(now)
-    .setExpirationTime(now + ttlSec)
+    .setExpirationTime(now + TTL_SEC)
     .sign(secretKey(env));
 }
 
-export async function verifyAccessToken(env: CloudflareEnv, token: string): Promise<JwtClaims | null> {
+export async function verifyAccessToken(env: CloudflareEnv, token: string): Promise<JwtUser | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(env), { algorithms: ["HS256"] });
-    const sub = typeof payload.sub === "string" ? payload.sub : "";
+    const userId = typeof payload.sub === "string" ? payload.sub : "";
     const username = typeof (payload as any).username === "string" ? String((payload as any).username) : "";
-    const role = (payload as any).role;
-    if (!sub || !username) return null;
-    if (role !== "admin" && role !== "employee" && role !== "viewer") return null;
-    return { sub, username, role };
+    const roleRaw = (payload as any).role;
+    const jti = typeof (payload as any).jti === "string" ? String((payload as any).jti) : "";
+    const exp = typeof payload.exp === "number" ? payload.exp : 0;
+    if (!userId || !username || !jti || exp <= 0) return null;
+    if (roleRaw !== "admin" && roleRaw !== "maintainer" && roleRaw !== "reader") return null;
+    const blacklistKey = `auth:blacklist:${jti}`;
+    const blocked = await env.KV.get(blacklistKey, "text");
+    if (blocked) return null;
+    return { userId, username, role: roleRaw, jti, exp };
   } catch {
     return null;
   }
+}
+
+export async function revokeToken(env: CloudflareEnv, user: JwtUser) {
+  const now = Math.floor(Date.now() / 1000);
+  const ttl = Math.max(60, user.exp - now);
+  await env.KV.put(`auth:blacklist:${user.jti}`, "1", { expirationTtl: ttl });
 }
 
