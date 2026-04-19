@@ -4,9 +4,15 @@ function hexOf(bytes: Uint8Array): string {
     .join("");
 }
 
+function validatePasswordStrength(password: string): void {
+  if (password.length < 6) {
+    throw new Error("密码长度至少 6 位");
+  }
+}
+
 export async function hashPassword(raw: string): Promise<string> {
   const p = raw.trim();
-  if (p.length < 6) throw new Error("密码至少 6 位");
+  validatePasswordStrength(p);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(p));
   return hexOf(new Uint8Array(digest));
 }

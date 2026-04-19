@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import styles from "./LoginPage.module.css";
 import { apiFetch } from "../lib/http";
-import { clearToken, setToken, setUser } from "../lib/auth";
+import { clearToken, setToken, setUser, setCsrfToken } from "../lib/auth";
 import { AnimatedCharacters } from "../components/AnimatedCharacters";
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
@@ -22,7 +22,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
     setError("");
 
     try {
-      const res = await apiFetch<{ token: string }>("/login", {
+      const res = await apiFetch<{ token: string; csrfToken: string }>("/login", {
         method: "POST",
         body: JSON.stringify(values),
       });
@@ -33,6 +33,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
       }
 
       setToken(res.data.token);
+      setCsrfToken(res.data.csrfToken);
 
       const me = await apiFetch<{
         userId: string;
@@ -128,7 +129,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
                 <Input
                   prefix={<LockOutlined className={styles.prefixIcon} />}
                   type={showPassword ? "text" : "password"}
-                  placeholder="输入您的密码"
+                  placeholder="输入您的密码（至少6位）"
                   onFocus={() => setIsPasswordFocused(true)}
                   onBlur={() => setIsPasswordFocused(false)}
                   onChange={(e) => setPasswordValue(e.target.value)}

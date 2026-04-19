@@ -17,15 +17,19 @@ function secretKey(env: CloudflareEnv) {
 export async function signAccessToken(
   env: CloudflareEnv,
   claims: { userId: string; username: string; role: UserRole },
-): Promise<string> {
+): Promise<{ token: string; csrfToken: string }> {
   const now = Math.floor(Date.now() / 1000);
   const jti = crypto.randomUUID();
-  return await new SignJWT({ username: claims.username, role: claims.role, jti })
+  const csrfToken = crypto.randomUUID();
+  
+  const token = await new SignJWT({ username: claims.username, role: claims.role, jti, csrfToken })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(claims.userId)
     .setIssuedAt(now)
     .setExpirationTime(now + TTL_SEC)
     .sign(secretKey(env));
+  
+  return { token, csrfToken };
 }
 
 export async function verifyAccessToken(env: CloudflareEnv, token: string): Promise<JwtUser | null> {
@@ -36,13 +40,14 @@ export async function verifyAccessToken(env: CloudflareEnv, token: string): Prom
     const username = typeof payloadRecord.username === "string" ? payloadRecord.username : "";
     const roleRaw = payloadRecord.role;
     const jti = typeof payloadRecord.jti === "string" ? payloadRecord.jti : "";
+    const csrfToken = typeof payloadRecord.csrfToken === "string" ? payloadRecord.csrfToken : "";
     const exp = typeof payload.exp === "number" ? payload.exp : 0;
-    if (!userId || !username || !jti || exp <= 0) return null;
+    if (!userId || !username || !jti || !csrfToken || exp <= 0) return null;
     if (roleRaw !== "admin" && roleRaw !== "maintainer" && roleRaw !== "reader") return null;
     const blacklistKey = `auth:blacklist:${jti}`;
     const blocked = await env.KV.get(blacklistKey, "text");
     if (blocked) return null;
-    return { userId, username, role: roleRaw, jti, exp };
+    return { userId, username, role: roleRaw, jti, csrfToken, exp };
   } catch {
     return null;
   }
@@ -52,5 +57,9 @@ export async function revokeToken(env: CloudflareEnv, user: JwtUser) {
   const now = Math.floor(Date.now() / 1000);
   const ttl = Math.max(60, user.exp - now);
   await env.KV.put(`auth:blacklist:${user.jti}`, "1", { expirationTtl: ttl });
+}
+
+export function validateCsrfToken(user: JwtUser, csrfToken: string): boolean {
+  return user.csrfToken === csrfToken;
 }
 

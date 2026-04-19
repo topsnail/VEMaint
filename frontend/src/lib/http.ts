@@ -1,4 +1,5 @@
-import { getToken, clearToken } from "./auth";
+import { getToken, getCsrfToken, clearToken } from "./auth";
+import { API_CONFIG } from "./config";
 
 export type ApiOk<T> = { ok: true; data: T };
 export type ApiErr = { ok: false; error: { code: string; message: string } };
@@ -9,8 +10,11 @@ export type BlobResult = {
   contentType: string | null;
 };
 
-function requestPath(path: string) {
-  return `/api${path.startsWith("/") ? path : `/${path}`}`;
+// API 基础配置
+const API_BASE_URL = API_CONFIG.BASE_URL;
+
+function requestPath(path: string): string {
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function isApiResult<T>(value: unknown): value is ApiResult<T> {
@@ -25,12 +29,31 @@ function parseFilename(contentDisposition: string | null): string | null {
   return plainMatch?.[1] ?? null;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+// 通用请求处理函数
+async function handleRequest<T>(
+  path: string, 
+  init?: RequestInit,
+  isBlob = false
+): Promise<ApiResult<T> | ApiResult<BlobResult>> {
   const token = getToken();
+  const csrfToken = getCsrfToken();
   const headers = new Headers(init?.headers);
-  headers.set("Accept", "application/json");
-  if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  
+  // 设置默认头部
+  if (!isBlob) {
+    headers.set("Accept", "application/json");
+    if (init?.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+  }
+  
+  // 添加认证信息
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (csrfToken) {
+    headers.set("X-CSRF-Token", csrfToken);
+  }
 
   let res: Response;
   try {
@@ -38,72 +61,80 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<Api
   } catch {
     return { ok: false, error: { code: "NETWORK_ERROR", message: "网络异常，请检查服务是否可用" } };
   }
-  // mock 登录模式下不依赖后端鉴权，避免 401 把本地 mock token 清掉导致回登录页
-  if (res.status === 401 && token && !token.startsWith("mock_token_")) clearToken();
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore
+  
+  // 处理 401 错误
+  if (res.status === 401 && token && !token.startsWith("mock_token_")) {
+    clearToken();
   }
+  
+  // 处理非成功响应
   if (!res.ok) {
-    const msg =
-      json && typeof json === "object" && "error" in json
-        ? String((json as any).error?.message ?? "请求失败")
-        : "请求失败";
-    return { ok: false, error: { code: `HTTP_${res.status}`, message: msg } };
+    let errorMessage = "请求失败";
+    try {
+      const json = await res.json();
+      if (json && typeof json === "object" && "error" in json) {
+        errorMessage = String((json as any).error?.message ?? errorMessage);
+      }
+    } catch {
+      try {
+        const text = await res.text();
+        if (text) {
+          errorMessage = text;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: false, error: { code: `HTTP_${res.status}`, message: errorMessage } };
   }
-  return isApiResult<T>(json) ? json : { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } };
+  
+  // 处理成功响应
+  if (isBlob) {
+    const blob = await res.blob();
+    return {
+      ok: true,
+      data: {
+        blob,
+        filename: parseFilename(res.headers.get("Content-Disposition")),
+        contentType: res.headers.get("Content-Type"),
+      },
+    } as ApiResult<BlobResult>;
+  } else {
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch {
+      return { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } };
+    }
+    return isApiResult<T>(json) ? json : { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } };
+  }
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  return handleRequest<T>(path, init) as Promise<ApiResult<T>>;
 }
 
 export async function uploadFile(file: File): Promise<ApiResult<{ key: string; url: string }>> {
   const token = getToken();
   if (!token) return { ok: false, error: { code: "UNAUTHORIZED", message: "未登录" } };
+  
   const form = new FormData();
   form.append("file", file);
-  let res: Response;
-  try {
-    res = await fetch(requestPath("/upload"), {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-  } catch {
-    return { ok: false, error: { code: "NETWORK_ERROR", message: "上传失败，请检查网络连接" } };
+  
+  const csrfToken = getCsrfToken();
+  if (csrfToken) {
+    form.append("csrfToken", csrfToken);
   }
-  const json = (await res.json().catch(() => null)) as ApiResult<{ key: string; url: string }> | null;
-  if (res.status === 401 && token && !token.startsWith("mock_token_")) clearToken();
-  if (!res.ok || !json) return { ok: false, error: { code: "UPLOAD_FAILED", message: "上传失败" } };
-  return json;
+  
+  return handleRequest<{ key: string; url: string }>("/upload", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
 }
 
 export async function apiFetchBlob(path: string, init?: RequestInit): Promise<ApiResult<BlobResult>> {
-  const token = getToken();
-  const headers = new Headers(init?.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  let res: Response;
-  try {
-    res = await fetch(requestPath(path), { ...init, headers });
-  } catch {
-    return { ok: false, error: { code: "NETWORK_ERROR", message: "网络异常，请检查服务是否可用" } };
-  }
-
-  if (res.status === 401 && token && !token.startsWith("mock_token_")) clearToken();
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    return { ok: false, error: { code: `HTTP_${res.status}`, message: text || "请求失败" } };
-  }
-
-  const blob = await res.blob();
-  return {
-    ok: true,
-    data: {
-      blob,
-      filename: parseFilename(res.headers.get("Content-Disposition")),
-      contentType: res.headers.get("Content-Type"),
-    },
-  };
+  return handleRequest<BlobResult>(path, init, true) as Promise<ApiResult<BlobResult>>;
 }
 
 export async function openProtectedFile(path: string) {

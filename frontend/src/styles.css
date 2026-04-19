@@ -4,11 +4,36 @@
 
 body {
   margin: 0;
-  background: #f4f6f8;
+  background: #f5f7fa;
+  color: #1f2937;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+/* 2026.md: prefer subtle borders and restrained shadows */
+.ant-card,
+.ant-table,
+.ant-dropdown-menu,
+.ant-tooltip-content,
+.ant-popover,
+.ant-modal-content {
+  box-shadow: none !important;
+}
+
+/* Keep legacy shell styles inert (layout now controls structure) */
+.ve-shell,
+.ve-topbar,
+.ve-main-layout,
+.ve-left-sider,
+.ve-content {
+  background: transparent !important;
 }
 
 .ve-shell .ant-layout-header {
-  height: 64px;
+  height: 50px;
   line-height: normal;
 }
 
@@ -16,11 +41,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   border-bottom: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
-  padding: 0 20px;
+  padding: 0 16px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   position: sticky;
   top: 0;
@@ -37,11 +62,11 @@ body {
   width: 220px;
   min-width: 220px;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 0 10px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
   border: none;
-  border-radius: 12px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: none;
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
@@ -80,10 +105,10 @@ body {
 }
 
 .ve-topbar-search.ant-input-affix-wrapper {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 6px 0 12px !important;
   border: 1px solid #d7dee8 !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
   background: #ffffff !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease !important;
@@ -120,10 +145,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  padding: 0 10px;
+  height: 24px;
+  padding: 0 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #f8fafc;
   color: #475569;
   cursor: pointer;
@@ -168,7 +193,7 @@ body {
 }
 
 .ve-topbar-right .ant-btn {
-  border-radius: 10px;
+  border-radius: 6px;
   transition: all 0.2s ease;
 }
 
@@ -182,7 +207,7 @@ body {
   min-height: 36px;
   padding: 0 10px;
   border: none;
-  border-radius: 12px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: none;
   transition: all 0.2s ease;
@@ -199,8 +224,8 @@ body {
 }
 
 .ve-topbar-right .ant-badge .ant-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: none;
@@ -219,10 +244,12 @@ body {
 .ve-topbar-right .ant-badge-count {
   box-shadow: 0 0 0 2px #fff;
   font-weight: 600;
+  margin-top: 0px !important;
+  right: 0px !important;
 }
 
 .ve-main-layout {
-  height: calc(100vh - 64px);
+  height: calc(100vh - 50px);
   background: #f8fafc;
 }
 
@@ -440,14 +467,20 @@ body {
 
 /* 模态框样式 */
 .ant-modal {
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
 .ant-modal-content {
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
-  border: none;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.ant-modal-content:hover {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  border-color: #cbd5e1;
 }
 
 .ant-modal-header {
@@ -608,10 +641,21 @@ body {
 
 /* 消息提示样式 */
 .ant-message-notice {
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  overflow: visible;
+}
+
+.ant-message-notice-content {
+  width: fit-content;
+  max-width: min(420px, calc(100vw - 32px));
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
   border: 1px solid #e2e8f0;
   overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* 通知样式 */
@@ -620,6 +664,13 @@ body {
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
   border: 1px solid #e2e8f0;
   overflow: hidden;
+}
+
+.ant-notification-notice {
+  width: fit-content;
+  max-width: min(420px, calc(100vw - 32px));
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* 车辆管理页面样式 */
@@ -1325,13 +1376,22 @@ body {
 
 /* 趋势卡片样式 */
 .ve-dashboard .ve-trend-stat-card {
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #f1f5f9;
   height: 100%;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.ve-dashboard .ve-trend-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
+  border-color: #e2e8f0;
 }
 
 .ve-dashboard .ve-trend-stat-cost {
-  border-left: 3px solid var(--ve-primary-color);
+  /* 删除左侧彩色竖条 */
 }
 
 .ve-dashboard .ve-trend-chart {
@@ -1366,9 +1426,15 @@ body {
 /* 表格样式 */
 .ve-dashboard .ve-dash-table .ant-table {
   border: 1px solid #edf1f6;
-  border-radius: 10px;
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: all 0.3s ease;
+}
+
+.ve-dashboard .ve-dash-table .ant-table:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  border-color: #e2e8f0;
 }
 
 .ve-dashboard .ve-dash-table .ant-table-thead > tr > th {
@@ -1429,8 +1495,13 @@ body {
 
 /* 搜索样式 */
 .ve-dashboard .ve-search-input {
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: all 0.3s ease;
+}
+
+.ve-dashboard .ve-search-input:hover {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
 }
 
 .ve-dashboard .ve-search-section-title {
@@ -1440,8 +1511,11 @@ body {
 }
 
 .ve-dashboard .ve-search-results {
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e2e8f0;
+  background: white;
 }
 
 .ve-dashboard .ve-search-item {
@@ -1474,9 +1548,16 @@ body {
 
 /* 空状态样式 */
 .ve-dashboard .ve-empty-alert {
-  border-radius: 8px;
+  border-radius: 6px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: all 0.3s ease;
+}
+
+.ve-dashboard .ve-empty-alert:hover {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+  border-color: #cbd5e1;
 }
 
 /* 刷新按钮样式 */

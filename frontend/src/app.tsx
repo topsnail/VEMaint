@@ -20,7 +20,9 @@ import {
   type UserInfo,
 } from "./lib/auth";
 import { apiFetch } from "./lib/http";
-import { DEFAULT_ROLE_PERMISSIONS, hasPerm, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
+import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
+import { usePermissions } from "./lib/usePermissions";
+import { DashboardLayout } from "./layouts/DashboardLayout";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -123,14 +125,18 @@ function AppInner() {
   }, [user]);
 
   if (!user) return <LoginPage onLoggedIn={loadMe} />;
-  const canViewDashboard = hasPerm(user.role, "app.view", rolePermissions);
-  const canViewVehicles = hasPerm(user.role, "vehicle.view", rolePermissions);
-  const canManageVehicle = hasPerm(user.role, "vehicle.manage", rolePermissions);
-  const canViewMaintenance = hasPerm(user.role, "maintenance.view", rolePermissions);
-  const canEditMaintenance = hasPerm(user.role, "maintenance.edit", rolePermissions);
-  const canDeleteMaintenance = hasPerm(user.role, "maintenance.delete", rolePermissions);
-  const canManageUsers = hasPerm(user.role, "user.manage", rolePermissions);
-  const canManageConfig = hasPerm(user.role, "config.manage", rolePermissions);
+  
+  const { 
+    canViewDashboard, 
+    canViewVehicles, 
+    canManageVehicle, 
+    canViewMaintenance, 
+    canEditMaintenance, 
+    canDeleteMaintenance, 
+    canManageUsers, 
+    canManageConfig 
+  } = usePermissions(user, rolePermissions);
+  
   const defaultPath = canViewDashboard
     ? "/dashboard"
     : canViewVehicles
@@ -164,87 +170,105 @@ function AppInner() {
     message.success("已退出");
   };
 
+  const shellHeaderLeft = (
+    <div className="flex items-center gap-3">
+      <div className="h-10 w-10 rounded-lg border border-[#E5E7EB] bg-white p-2">
+        <img src="/favicon.png" alt="VEMaint Logo" className="h-full w-full object-contain" />
+      </div>
+      <div className="leading-tight">
+        <div className="text-[16px] font-semibold tracking-tight text-[#1F2937]">VEMaint</div>
+        <div className="text-[14px] text-[#6B7280]">车辆与设备维保</div>
+      </div>
+    </div>
+  );
+
+  const shellHeaderCenter = (
+    <div className="flex justify-center">
+      <Input
+        className="w-full max-w-[720px]"
+        placeholder="搜索车牌、设备、维保记录..."
+        allowClear
+        value={globalSearch}
+        onChange={(e) => setGlobalSearch(e.target.value)}
+        onPressEnter={(e) => submitGlobalSearch((e.target as HTMLInputElement).value)}
+        suffix={
+          <button type="button" className="rounded-md px-2 py-1 text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#1F2937]" onClick={() => submitGlobalSearch(globalSearch)}>
+            <span className="inline-flex items-center">
+              <SearchOutlined />
+            </span>
+          </button>
+        }
+      />
+    </div>
+  );
+
+  const shellHeaderRight = (
+    <div className="flex items-center gap-2">
+      <Badge count={notificationCount} size="small" overflowCount={99} offset={[-2, 2]}>
+        <Button
+          type="text"
+          shape="circle"
+          icon={<BellOutlined />}
+          className="!text-[#6B7280] hover:!bg-[#F3F4F6] hover:!text-[#1F2937]"
+          onClick={() => nav("/dashboard")}
+        />
+      </Badge>
+      <Dropdown
+        menu={{
+          items: [
+            { key: "profile", icon: <UserOutlined />, label: "个人中心" },
+            { type: "divider" },
+            { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
+          ],
+          onClick: ({ key }) => {
+            if (key === "profile") nav("/profile");
+            if (key === "logout") void logout();
+          },
+        }}
+        trigger={["click"]}
+      >
+        <Space className="cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 hover:bg-[#F9FAFB]">
+          <Avatar size="small" icon={<UserOutlined />} />
+          <span className="text-[#1F2937]">{user.username}</span>
+        </Space>
+      </Dropdown>
+    </div>
+  );
+
+  const shellSider = (
+    <div className="space-y-4">
+      <div>
+        <Typography.Text className="text-xs uppercase tracking-wide text-[#6B7280]">概览</Typography.Text>
+        <Menu
+          className="mt-2 !border-0 !bg-transparent"
+          selectedKeys={[loc.pathname]}
+          onClick={({ key }) => nav(key)}
+          items={items}
+          mode="inline"
+        />
+      </div>
+      <div>
+        <Typography.Text className="text-xs uppercase tracking-wide text-[#6B7280]">快捷新增</Typography.Text>
+        <Space direction="vertical" className="mt-2 w-full">
+          {quickActions.map((action) => (
+            <Button
+              key={action.key}
+              block
+              icon={<PlusOutlined />}
+              className="!h-10 !justify-start !rounded-lg !border-[#E5E7EB] !bg-white !text-[#1F2937] hover:!bg-[#F9FAFB]"
+              onClick={() => nav(action.target)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </Space>
+      </div>
+    </div>
+  );
+
   return (
-    <Layout className="min-h-screen ve-shell">
-      <Layout.Header className="ve-topbar">
-        <div className="ve-topbar-left">
-          <div>
-            <img src="/favicon.png" alt="VEMaint Logo" className="h-8 w-8 object-contain" />
-          </div>
-          <Typography.Title level={5} className="!mb-0 !text-slate-900">
-            VEMaint
-          </Typography.Title>
-        </div>
-        <div className="ve-topbar-center">
-          <Input
-            className="ve-topbar-search"
-            placeholder="搜索车牌、设备、维保记录..."
-            allowClear
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            onPressEnter={(e) => submitGlobalSearch((e.target as HTMLInputElement).value)}
-            suffix={
-              <button
-                type="button"
-                className="ve-topbar-search-inline-btn"
-                onClick={() => submitGlobalSearch(globalSearch)}
-              >
-                <span className="ve-topbar-search-btn-content">
-                  <SearchOutlined />
-                </span>
-              </button>
-            }
-          />
-        </div>
-        <div className="ve-topbar-right">
-          <Badge count={notificationCount} size="small" overflowCount={99} offset={[-2, 2]}>
-            <Button type="text" shape="circle" icon={<BellOutlined />} onClick={() => nav("/dashboard")} />
-          </Badge>
-          <Dropdown
-            menu={{
-              items: [
-                { key: "profile", icon: <UserOutlined />, label: "个人中心" },
-                { type: "divider" },
-                { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
-              ],
-              onClick: ({ key }) => {
-                if (key === "profile") nav("/profile");
-                if (key === "logout") void logout();
-              },
-            }}
-            trigger={["click"]}
-          >
-            <Space className="cursor-pointer rounded-md px-2 py-1 hover:bg-slate-50">
-              <Avatar size="small" icon={<UserOutlined />} />
-              <span className="text-slate-700">{user.username}</span>
-            </Space>
-          </Dropdown>
-        </div>
-      </Layout.Header>
-      <Layout className="ve-main-layout">
-        <Layout.Sider width={200} className="ve-left-sider">
-          <div className="px-4 py-4">
-            <Typography.Text className="text-xs uppercase tracking-wide text-slate-400">概览</Typography.Text>
-            <Menu
-              className="mt-2 rounded-lg border border-slate-200 bg-white"
-              selectedKeys={[loc.pathname]}
-              onClick={({ key }) => nav(key)}
-              items={items}
-              mode="inline"
-            />
-          </div>
-          <div className="px-4 pb-4">
-            <Typography.Text className="text-xs uppercase tracking-wide text-slate-400">快捷新增</Typography.Text>
-            <Space direction="vertical" className="mt-2 w-full">
-              {quickActions.map((action) => (
-                <Button key={action.key} block icon={<PlusOutlined />} className="justify-start" onClick={() => nav(action.target)}>
-                  {action.label}
-                </Button>
-              ))}
-            </Space>
-          </div>
-        </Layout.Sider>
-        <Layout.Content className="ve-content">
+    <DashboardLayout headerLeft={shellHeaderLeft} headerCenter={shellHeaderCenter} headerRight={shellHeaderRight} sider={shellSider}>
+      <div className="min-h-[calc(100vh-160px)]">
           <Routes>
             <Route path="/" element={<Navigate to={defaultPath} replace />} />
             <Route
@@ -263,9 +287,8 @@ function AppInner() {
             {canManageConfig ? <Route path="/config" element={<ConfigPage />} /> : null}
             <Route path="*" element={<Navigate to={defaultPath} replace />} />
           </Routes>
-        </Layout.Content>
-      </Layout>
-    </Layout>
+      </div>
+    </DashboardLayout>
   );
 }
 

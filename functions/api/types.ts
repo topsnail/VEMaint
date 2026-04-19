@@ -9,6 +9,7 @@ export type JwtUser = {
   username: string;
   role: UserRole;
   jti: string;
+  csrfToken: string;
   exp: number;
 };
 

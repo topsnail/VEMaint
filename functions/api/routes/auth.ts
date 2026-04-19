@@ -24,9 +24,9 @@ async function loginHandler(c: Context<AppEnv>) {
   const ok = await verifyPassword(password, user.password_hash);
   if (!ok) return jsonError(c, "INVALID_CREDENTIALS", "用户名或密码错误", 401);
 
-  const token = await signAccessToken(c.env, { userId: user.id, username: user.username, role: user.role });
-  await writeOperationLog(c.env.DB, { userId: user.id, username: user.username, role: user.role, jti: "", exp: 0 }, "auth.login", user.id, null);
-  return jsonOk(c, { token });
+  const { token, csrfToken } = await signAccessToken(c.env, { userId: user.id, username: user.username, role: user.role });
+  await writeOperationLog(c.env.DB, { userId: user.id, username: user.username, role: user.role, jti: "", csrfToken: "", exp: 0 }, "auth.login", user.id, null);
+  return jsonOk(c, { token, csrfToken });
 }
 
 authRoute.post("/api/login", loginHandler);

@@ -5,6 +5,7 @@ import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import type { Vehicle, VehicleCycle } from "../types";
 import { apiFetch, openProtectedFile, uploadFile } from "../lib/http";
+import { StatusPill } from "../components/StatusPill";
 
 type VehicleForm = {
   plateNo: string;
@@ -591,14 +592,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           { title: "责任人", dataIndex: "ownerPerson" },
           {
             title: "车辆状态",
-            render: (_, r) => <Tag color={statusMeta[r.status].color}>{statusMeta[r.status].label}</Tag>,
+            render: (_, r) => {
+              const m = statusMeta[r.status];
+              const tone = m.color === "green" ? "success" : m.color === "gold" ? "warning" : m.color === "red" ? "danger" : "neutral";
+              return <StatusPill tone={tone} label={m.label} />;
+            },
           },
           {
             title: "台账完整度",
             render: (_, r) => {
               const c = getVehicleCompleteness(r, cyclesByVehicleId[r.id]);
-              const color = c.percent === 100 ? "green" : c.percent >= 80 ? "gold" : "red";
-              return <Tag color={color}>{`${c.percent}% (${c.filled}/${c.total})`}</Tag>;
+              const tone = c.percent === 100 ? "success" : c.percent >= 80 ? "warning" : "danger";
+              return <StatusPill tone={tone} label={`${c.percent}% (${c.filled}/${c.total})`} />;
             },
           },
           { title: "本次保养里程", dataIndex: "mileage" },
@@ -610,7 +615,15 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             title: "到期提醒",
             render: (_, r) => {
               const hint = getDueHint(cyclesByVehicleId[r.id]);
-              return <Tag color={hint.color}>{hint.text}</Tag>;
+              const tone =
+                hint.color === "green"
+                  ? "success"
+                  : hint.color === "gold"
+                    ? "warning"
+                    : hint.color === "red"
+                      ? "danger"
+                      : "neutral";
+              return <StatusPill tone={tone} label={hint.text} />;
             },
           },
           {

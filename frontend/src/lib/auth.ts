@@ -1,29 +1,42 @@
-const KEY = "ve_token";
-const USER_KEY = "ve_user";
+import { STORAGE_KEYS } from "./config";
+
+const KEY = STORAGE_KEYS.TOKEN;
+const USER_KEY = STORAGE_KEYS.USER;
+const CSRF_KEY = STORAGE_KEYS.CSRF;
 
 export type Role = "admin" | "maintainer" | "reader";
 export type UserInfo = { userId: string; username: string; role: Role };
 
 export function getToken(): string | null {
-  const v = localStorage.getItem(KEY);
+  const v = sessionStorage.getItem(KEY);
   return v && v.trim() ? v : null;
 }
 
 export function setToken(token: string) {
-  localStorage.setItem(KEY, token);
+  sessionStorage.setItem(KEY, token);
+}
+
+export function getCsrfToken(): string | null {
+  const v = sessionStorage.getItem(CSRF_KEY);
+  return v && v.trim() ? v : null;
+}
+
+export function setCsrfToken(csrfToken: string) {
+  sessionStorage.setItem(CSRF_KEY, csrfToken);
 }
 
 export function clearToken() {
-  localStorage.removeItem(KEY);
-  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(KEY);
+  sessionStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(CSRF_KEY);
 }
 
 export function setUser(user: UserInfo) {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function getUser(): UserInfo | null {
-  const raw = localStorage.getItem(USER_KEY);
+  const raw = sessionStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<UserInfo>;

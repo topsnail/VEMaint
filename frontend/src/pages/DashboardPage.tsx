@@ -1,7 +1,12 @@
 import { Alert, Button, Card, Col, Input, List, Progress, Row, Space, Statistic, Table, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/http";
+import { REFRESH_INTERVALS, SEARCH_CONFIG } from "../lib/config";
+import { handleApiError } from "../lib/errorHandler";
+import { KpiCard } from "../components/KpiCard";
+import { AlertItem as AlertItemComponent, type AlertItemType } from "../components/AlertItem";
+import { PendingAlertItem } from "../components/PendingAlertItem";
 import type { MaintenanceRecord, Vehicle } from "../types";
 
 type AlertItem = {
@@ -82,30 +87,79 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
 
   useEffect(() => {
     loadOverview();
-    const timer = setInterval(() => {
-      if (!document.hidden) void loadOverview();
-    }, 30000);
-    return () => clearInterval(timer);
+    
+    // 优化数据刷新策略
+    let timer: NodeJS.Timeout;
+    let isRefreshing = false;
+    
+    const refreshData = async () => {
+      if (isRefreshing || document.hidden) return;
+      
+      isRefreshing = true;
+      try {
+        await loadOverview();
+      } catch (error) {
+        handleApiError(error);
+      } finally {
+        isRefreshing = false;
+      }
+    };
+    
+    // 初始加载后，设置定时器
+    timer = setInterval(refreshData, REFRESH_INTERVALS.DASHBOARD); // 使用配置的刷新间隔
+    
+    // 监听页面可见性变化，当页面从隐藏变为可见时刷新数据
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void refreshData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
+  // 添加防抖处理
+  const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  
   const runSearch = async (q: string) => {
     const key = q.trim();
     if (!key) return setSearch({ vehicles: [], maintenance: [] });
-    const [v, m] = await Promise.all([
-      apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(key)}`),
-      apiFetch<{ records: MaintenanceRecord[] }>(`/maintenance?q=${encodeURIComponent(key)}`),
-    ]);
-    setSearch({
-      vehicles: v.ok ? v.data.vehicles.map((x) => ({ id: x.id, plateNo: x.plateNo, brandModel: x.brandModel })) : [],
-      maintenance: m.ok
-        ? m.data.records.map((x) => ({
-            id: x.id,
-            itemDesc: x.itemDesc,
-            plateNo: x.plateNo ?? null,
-            equipmentName: x.equipmentName ?? null,
-          }))
-        : [],
-    });
+    
+    // 清除之前的定时器
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+    }
+    
+    // 设置新的定时器，实现防抖
+    const timer = setTimeout(async () => {
+      try {
+        const [v, m] = await Promise.all([
+          apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(key)}`),
+          apiFetch<{ records: MaintenanceRecord[] }>(`/maintenance?q=${encodeURIComponent(key)}`),
+        ]);
+        setSearch({
+          vehicles: v.ok ? v.data.vehicles.map((x) => ({ id: x.id, plateNo: x.plateNo, brandModel: x.brandModel })) : [],
+          maintenance: m.ok
+            ? m.data.records.map((x) => ({
+                id: x.id,
+                itemDesc: x.itemDesc,
+                plateNo: x.plateNo ?? null,
+                equipmentName: x.equipmentName ?? null,
+              }))
+            : [],
+        });
+      } catch (error) {
+        handleApiError(error);
+        setSearch({ vehicles: [], maintenance: [] });
+      }
+    }, SEARCH_CONFIG.DEBOUNCE_DELAY); // 使用配置的防抖延迟
+    
+    setSearchTimer(timer);
   };
 
   const trendSummary = useMemo(() => {
@@ -129,11 +183,19 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
     goVehicles({ q: a.plateNo });
   };
   const updateAlertStatus = async (a: AlertItem, status: "open" | "processing" | "resolved") => {
-    const res = await apiFetch<{ ok: true }>(`/dashboard/alerts/${encodeURIComponent(a.alertKey)}/action`, {
-      method: "PUT",
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) await loadOverview();
+    try {
+      const res = await apiFetch<{ ok: true }>(`/dashboard/alerts/${encodeURIComponent(a.alertKey)}/action`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        await loadOverview();
+      } else {
+        handleApiError(res);
+      }
+    } catch (error) {
+      handleApiError(error);
+    }
   };
 
   return (
@@ -155,77 +217,64 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
       >
         <Row gutter={[16, 16]}>
           <Col xs={12} md={6}>
-            <Card size="small" hoverable className="ve-kpi-card" onClick={() => goVehicles({})}>
-              <Statistic 
-                title="车辆总数" 
-                value={overview?.kpis.vehicles.total ?? 0} 
-                valueStyle={{ fontSize: '24px', fontWeight: '600' }}
-              />
-            </Card>
+            <KpiCard 
+              title="车辆总数" 
+              value={overview?.kpis.vehicles.total ?? 0} 
+              valueStyle={{ fontSize: '24px', fontWeight: '600' }}
+              onClick={() => goVehicles({})}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" hoverable className="ve-kpi-card" onClick={() => goVehicles({ status: "normal" })}>
-              <Statistic 
-                title="正常车辆" 
-                value={overview?.kpis.vehicles.normal ?? 0} 
-                valueStyle={{ color: "#16a34a", fontSize: '24px', fontWeight: '600' }} 
-              />
-            </Card>
+            <KpiCard 
+              title="正常车辆" 
+              value={overview?.kpis.vehicles.normal ?? 0} 
+              valueStyle={{ color: "#16a34a", fontSize: '24px', fontWeight: '600' }}
+              onClick={() => goVehicles({ status: "normal" })}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" hoverable className="ve-kpi-card" onClick={() => goVehicles({ status: "repairing" })}>
-              <Statistic 
-                title="维修中" 
-                value={overview?.kpis.vehicles.repairing ?? 0} 
-                valueStyle={{ color: "#d97706", fontSize: '24px', fontWeight: '600' }} 
-              />
-            </Card>
+            <KpiCard 
+              title="维修中" 
+              value={overview?.kpis.vehicles.repairing ?? 0} 
+              valueStyle={{ color: "#d97706", fontSize: '24px', fontWeight: '600' }}
+              onClick={() => goVehicles({ status: "repairing" })}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" hoverable className="ve-kpi-card" onClick={() => goVehicles({ status: "stopped" })}>
-              <Statistic 
-                title="停用/报废" 
-                value={(overview?.kpis.vehicles.stopped ?? 0) + (overview?.kpis.vehicles.scrapped ?? 0)} 
-                valueStyle={{ color: "#dc2626", fontSize: '24px', fontWeight: '600' }} 
-              />
-            </Card>
+            <KpiCard 
+              title="停用/报废" 
+              value={(overview?.kpis.vehicles.stopped ?? 0) + (overview?.kpis.vehicles.scrapped ?? 0)} 
+              valueStyle={{ color: "#dc2626", fontSize: '24px', fontWeight: '600' }}
+              onClick={() => goVehicles({ status: "stopped" })}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" className="ve-stat-card">
-              <Statistic 
-                title="今日维保" 
-                value={overview?.kpis.maintenance.todayCount ?? 0} 
-                valueStyle={{ fontSize: '20px' }}
-              />
-            </Card>
+            <KpiCard 
+              title="今日维保" 
+              value={overview?.kpis.maintenance.todayCount ?? 0} 
+              valueStyle={{ fontSize: '20px' }}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" className="ve-stat-card">
-              <Statistic 
-                title="本周维保" 
-                value={overview?.kpis.maintenance.weekCount ?? 0} 
-                valueStyle={{ fontSize: '20px' }}
-              />
-            </Card>
+            <KpiCard 
+              title="本周维保" 
+              value={overview?.kpis.maintenance.weekCount ?? 0} 
+              valueStyle={{ fontSize: '20px' }}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" className="ve-stat-card">
-              <Statistic 
-                title="本月维保单数" 
-                value={overview?.kpis.maintenance.monthCount ?? 0} 
-                valueStyle={{ fontSize: '20px' }}
-              />
-            </Card>
+            <KpiCard 
+              title="本月维保单数" 
+              value={overview?.kpis.maintenance.monthCount ?? 0} 
+              valueStyle={{ fontSize: '20px' }}
+            />
           </Col>
           <Col xs={12} md={6}>
-            <Card size="small" className="ve-stat-card">
-              <Statistic 
-                title="本月维保费用" 
-                value={overview?.kpis.maintenance.monthCost ?? 0} 
-                precision={2} 
-                valueStyle={{ fontSize: '20px', color: '#3b82f6' }}
-              />
-            </Card>
+            <KpiCard 
+              title="本月维保费用" 
+              value={overview?.kpis.maintenance.monthCost ?? 0} 
+              valueStyle={{ fontSize: '20px', color: '#3b82f6' }}
+            />
           </Col>
         </Row>
       </Card>
@@ -273,34 +322,11 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
               className="ve-alert-list"
               dataSource={alerts.slice(0, 15)}
               renderItem={(a) => (
-                <List.Item className="ve-alert-item">
-                  <Space size="middle" className="w-full">
-                    <Tag 
-                      color={a.level === "expired" ? "red" : a.level === "within7" ? "orange" : "gold"}
-                      className="ve-alert-tag"
-                    >
-                      {a.level === "expired" ? "已逾期" : a.level === "within7" ? "7天内到期" : "30天内到期"}
-                    </Tag>
-                    <span className="ve-alert-plateNo font-medium">{a.plateNo}</span>
-                    <span className="ve-alert-type">{a.type}</span>
-                    {typeof a.days === "number" && <span className="ve-alert-days">{a.days} 天</span>}
-                    {typeof a.kmLeft === "number" && <span className="ve-alert-km">{a.kmLeft} km</span>}
-                    <Tag 
-                      color={a.actionStatus === "resolved" ? "green" : a.actionStatus === "processing" ? "blue" : "default"}
-                      className="ve-alert-status"
-                    >
-                      {a.actionStatus === "resolved" ? "已处理" : a.actionStatus === "processing" ? "处理中" : "未处理"}
-                    </Tag>
-                    <Button 
-                      size="small" 
-                      type="link" 
-                      onClick={() => openAlertAction(a)}
-                      className="ve-alert-action"
-                    >
-                      处理
-                    </Button>
-                  </Space>
-                </List.Item>
+                <AlertItemComponent 
+                  key={a.alertKey}
+                  item={a} 
+                  onAction={() => openAlertAction(a)}
+                />
               )}
             />
           </Space>
@@ -316,46 +342,18 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
           <Alert type="success" showIcon message="暂无待处理预警" className="ve-empty-alert" />
         ) : (
           <List
-            size="small"
-            className="ve-pending-list"
-            dataSource={pendingAlerts}
-            renderItem={(a) => (
-              <List.Item className="ve-pending-item">
-                <Space wrap size="middle" className="w-full items-center">
-                  <Tag 
-                    color={a.level === "expired" ? "red" : a.level === "within7" ? "orange" : "gold"}
-                    className="ve-alert-tag"
-                  >
-                    {a.level === "expired" ? "已逾期" : a.level === "within7" ? "7天内到期" : "30天内到期"}
-                  </Tag>
-                  <span className="ve-alert-plateNo font-medium">{a.plateNo}</span>
-                  <span className="ve-alert-type">{a.type}</span>
-                  <span className="ve-alert-owner text-slate-500">{a.ownerDept ?? "-"}/{a.ownerPerson ?? "-"}</span>
-                  {canHandleAlerts && (
-                    <Space size="small" className="ml-auto">
-                      <Button 
-                        size="small" 
-                        onClick={() => updateAlertStatus(a, "processing")} 
-                        disabled={a.actionStatus === "processing"}
-                        className="ve-status-btn ve-status-processing"
-                      >
-                        标记处理中
-                      </Button>
-                      <Button 
-                        size="small" 
-                        type="primary" 
-                        onClick={() => updateAlertStatus(a, "resolved")} 
-                        disabled={a.actionStatus === "resolved"}
-                        className="ve-status-btn ve-status-resolved"
-                      >
-                        标记已处理
-                      </Button>
-                    </Space>
-                  )}
-                </Space>
-              </List.Item>
-            )}
-          />
+              size="small"
+              className="ve-pending-list"
+              dataSource={pendingAlerts}
+              renderItem={(a) => (
+                <PendingAlertItem 
+                  key={a.alertKey}
+                  item={a} 
+                  canHandleAlerts={canHandleAlerts}
+                  onUpdateStatus={(status) => updateAlertStatus(a, status)}
+                />
+              )}
+            />
         )}
       </Card>
 
