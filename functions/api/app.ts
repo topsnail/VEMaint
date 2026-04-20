@@ -14,6 +14,17 @@ import type { AppEnv } from "./types";
 
 export const app = new Hono<AppEnv>();
 
+app.use("/api/*", async (c, next) => {
+  // 防止在自定义域名/缓存规则下缓存 API JSON 响应，导致“新增后列表不更新”
+  // 文件下载接口单独处理缓存策略（见 routes/files.ts）
+  if (!c.req.path.startsWith("/api/files/")) {
+    c.header("Cache-Control", "no-store");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
+  }
+  await next();
+});
+
 app.onError((err, c) => {
   console.error(err);
   return jsonError(c, "INTERNAL_ERROR", "服务异常", 500);
