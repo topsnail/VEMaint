@@ -1,4 +1,3 @@
-import { message } from "antd";
 import { clearToken } from "./auth";
 import type { ApiErr } from "./http";
 
@@ -8,6 +7,15 @@ export type AppError = {
   message: string;
   details?: unknown;
 };
+
+let onGlobalErrorMessage: ((text: string) => void) | null = null;
+
+/**
+ * 由 React 根组件注入，用于全局错误提示（避免直接使用 antd 静态 message）。
+ */
+export function setGlobalErrorMessenger(fn: ((text: string) => void) | null) {
+  onGlobalErrorMessage = fn;
+}
 
 // 错误处理函数
 export function handleApiError(error: ApiErr | Error | unknown): void {
@@ -54,7 +62,7 @@ export function handleApiError(error: ApiErr | Error | unknown): void {
   }
 
   // 显示错误消息
-  message.error(errorMessage);
+  onGlobalErrorMessage?.(errorMessage);
   
   // 记录错误
   console.error("API Error:", errorCode, errorMessage, error);

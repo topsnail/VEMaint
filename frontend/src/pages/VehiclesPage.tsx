@@ -1,11 +1,21 @@
 import { DeleteOutlined, EditOutlined, EyeOutlined, ShareAltOutlined } from "@ant-design/icons";
-import { Button, Col, DatePicker, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, message } from "antd";
+import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import type { Vehicle, VehicleCycle } from "../types";
-import { apiFetch, openProtectedFile, uploadFile } from "../lib/http";
+import { R2AttachmentUploader } from "../components/R2AttachmentUploader";
+import { useVehiclesTableData } from "../hooks/useVehiclesTableData";
+import {
+  fetchVehicleCycle,
+  requestPutVehicleCycles,
+  requestPutVehicleStatus,
+  requestUpsertVehicle,
+} from "../hooks/vehiclesApi";
+import { openProtectedFile } from "../lib/http";
+import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
+import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 
 type VehicleForm = {
   plateNo: string;
@@ -44,10 +54,16 @@ type VehicleForm = {
   remark?: string;
 };
 
+/**
+ * 新增车辆时节号默认值：地区简称 + 间隔号，便于在「相同前缀」下继续录入后半段（发牌代号+序号）。
+ * 其他地区车辆可整段删除后重输；中间点仅为录入习惯，可按需保留或删除。
+ */
+const DEFAULT_PLATE_NO_PREFIX = "豫A·";
+
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
+  const { message } = App.useApp();
   const initialParams = new URLSearchParams(window.location.search);
-  const [rows, setRows] = useState<Vehicle[]>([]);
-  const [dropdowns, setDropdowns] = useState<Record<string, string[]>>({});
+  const { rows, cyclesByVehicleId, dropdowns, ownerDirectory, loading: listLoading, load, loadDropdowns } = useVehiclesTableData();
   const [q, setQ] = useState(() => initialParams.get("q") ?? "");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
@@ -57,7 +73,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [viewCycle, setViewCycle] = useState<VehicleCycle | null>(null);
   const [viewTab, setViewTab] = useState("base");
   const [editTab, setEditTab] = useState("basic");
-  const [cyclesByVehicleId, setCyclesByVehicleId] = useState<Record<string, VehicleCycle | null>>({});
   const [filterStatus, setFilterStatus] = useState<string>(() => initialParams.get("status") ?? "");
   const [filterVehicleType, setFilterVehicleType] = useState<string>("");
   const [filterOwnerDept, setFilterOwnerDept] = useState<string>("");
@@ -92,27 +107,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       )
       .join("\n");
     return { ...meta, remarkBody: body };
-  };
-
-  const load = async (search = q) => {
-    const res = await apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(search)}`);
-    if (res.ok) {
-      setRows(res.data.vehicles);
-      const cycleEntries = await Promise.all(
-        res.data.vehicles.map(async (v) => {
-          const cycleRes = await apiFetch<{ cycle: VehicleCycle | null }>(`/vehicles/${v.id}/cycles`);
-          return [v.id, cycleRes.ok ? cycleRes.data.cycle : null] as const;
-        }),
-      );
-      setCyclesByVehicleId(Object.fromEntries(cycleEntries));
-    }
-  };
-
-  const loadDropdowns = async () => {
-    const res = await apiFetch<{ config: { dropdowns?: Record<string, string[]> } }>("/settings");
-    if (res.ok) {
-      setDropdowns(res.data.config.dropdowns ?? {});
-    }
   };
 
   const renderTextInput = (key: string, placeholder?: string) => {
@@ -176,6 +170,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     repairing: { color: "orange", label: "维修中" },
     stopped: { color: "default", label: "停用" },
     scrapped: { color: "red", label: "报废" },
+  };
+
+  const vehicleStatusTone = (status: Vehicle["status"]): "success" | "warning" | "danger" | "neutral" => {
+    if (status === "normal") return "success";
+    if (status === "repairing") return "warning";
+    if (status === "scrapped") return "danger";
+    return "neutral";
   };
 
   const getVehicleCompleteness = (vehicle: Vehicle, cycle: VehicleCycle | null | undefined) => {
@@ -266,10 +267,31 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   }, [rows, filterStatus, filterVehicleType, filterOwnerDept, filterNearDue, filterIncomplete, cyclesByVehicleId]);
   const vehicleTypeFilterOptions = Array.from(new Set(rows.map((r) => r.vehicleType))).map((v) => ({ label: v, value: v }));
   const ownerDeptFilterOptions = Array.from(new Set(rows.map((r) => r.ownerDept))).map((v) => ({ label: v, value: v }));
+  /** 系统配置中的部门字典 + 台账已有部门，供表单下拉；仍允许 AutoComplete 手输新部门 */
+  const ownerDeptSelectOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of normalizeDropdownOptions(dropdowns.ownerDept, [])) {
+      set.add(v);
+    }
+    for (const r of rows) {
+      const v = r.ownerDept?.trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set)
+      .sort((a, b) => a.localeCompare(b, "zh-CN"))
+      .map((v) => ({ label: v, value: v }));
+  }, [dropdowns.ownerDept, rows]);
+
+  const ownerDirectoryMap = useMemo(() => new Map(ownerDirectory.map((o) => [o.name, o.address])), [ownerDirectory]);
+  const ownerNameSelectOptions = useMemo(
+    () => ownerDirectory.map((o) => ({ label: o.name, value: o.name })),
+    [ownerDirectory],
+  );
 
   useEffect(() => {
-    load();
-    loadDropdowns();
+    void load(q);
+    void loadDropdowns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时按初始 q 拉取；搜索由 onSearch 调用 load
   }, []);
 
   useEffect(() => {
@@ -286,6 +308,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
 
   const submit = async () => {
     const v = await form.validateFields();
+    const normalizePlateNo = (value: unknown) =>
+      String(value ?? "")
+        .toUpperCase()
+        .replace(/[·•\.\-\s]/g, "")
+        .trim();
     const normalizeDate = (value: unknown) => {
       if (!value) return "";
       if (typeof value === "string") return value.trim();
@@ -310,47 +337,42 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       .join("\n");
     const payload = {
       ...v,
+      plateNo: normalizePlateNo(v.plateNo),
       regDate: regDate || null,
       loadSpec: mergedLoadSpec || null,
       usageNature: mergedUsageNature || null,
       remark: mergedRemark || null,
     };
-    const res = await apiFetch<{ id?: string }>(editing ? `/vehicles/${editing.id}` : "/vehicles", {
-      method: editing ? "PUT" : "POST",
-      body: JSON.stringify(payload),
-    });
+    const res = await requestUpsertVehicle(editing?.id ?? null, payload);
     if (!res.ok) return message.error(res.error.message);
     const vehicleId = editing ? editing.id : res.data.id;
     if (vehicleId) {
-      await apiFetch(`/vehicles/${vehicleId}/cycles`, {
-        method: "PUT",
-        body: JSON.stringify({
-          insuranceType: v.insuranceType || null,
-          insuranceVendor: v.insuranceVendor || null,
-          insuranceStart: v.insuranceStart || null,
-          insuranceExpiry: v.insuranceExpiry || null,
-          insuranceAttachmentKey: v.insuranceAttachmentKey || null,
-          annualLastDate: v.annualLastDate || null,
-          annualExpiry: v.annualExpiry || null,
-          maintLastDate: v.maintLastDate || null,
-          maintIntervalDays: v.maintIntervalDays ?? null,
-          maintIntervalKm: v.maintIntervalKm ?? null,
-          maintNextDate: v.maintNextDate || null,
-          maintNextKm: v.maintNextKm ?? null,
-        }),
+      await requestPutVehicleCycles(vehicleId, {
+        insuranceType: v.insuranceType || null,
+        insuranceVendor: v.insuranceVendor || null,
+        insuranceStart: v.insuranceStart || null,
+        insuranceExpiry: v.insuranceExpiry || null,
+        insuranceAttachmentKey: v.insuranceAttachmentKey || null,
+        annualLastDate: v.annualLastDate || null,
+        annualExpiry: v.annualExpiry || null,
+        maintLastDate: v.maintLastDate || null,
+        maintIntervalDays: v.maintIntervalDays ?? null,
+        maintIntervalKm: v.maintIntervalKm ?? null,
+        maintNextDate: v.maintNextDate || null,
+        maintNextKm: v.maintNextKm ?? null,
       });
     }
     setOpen(false);
     form.resetFields();
     setEditing(null);
-    await load();
+    await load(q);
   };
 
   const setStatus = async (id: string, status: Vehicle["status"]) => {
-    const res = await apiFetch<{ ok: true }>(`/vehicles/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
+    const res = await requestPutVehicleStatus(id, status);
     if (!res.ok) return message.error(res.error.message);
     message.success("状态已更新");
-    await load();
+    await load(q);
   };
 
   const openEdit = (r: Vehicle, tab: "basic" | "insurance" | "annual" | "maint" = "basic") => {
@@ -393,7 +415,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       remark: meta.remarkBody || "",
     });
 
-    apiFetch<{ cycle: VehicleCycle | null }>(`/vehicles/${r.id}/cycles`)
+    void fetchVehicleCycle(r.id)
       .then((cycleRes) => {
         if (cycleRes.ok && cycleRes.data.cycle) {
           const c = cycleRes.data.cycle;
@@ -449,39 +471,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setViewOpen(true);
     setViewLoading(true);
     try {
-      const cycleRes = await apiFetch<{ cycle: VehicleCycle | null }>(`/vehicles/${r.id}/cycles`);
+      const cycleRes = await fetchVehicleCycle(r.id);
       if (cycleRes.ok) setViewCycle(cycleRes.data.cycle);
     } finally {
       setViewLoading(false);
     }
-  };
-
-  const uploadInsurance = async () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const up = await uploadFile(file);
-      if (!up.ok) return message.error(up.error.message);
-      form.setFieldValue("insuranceAttachmentKey", up.data.key);
-      message.success("保单附件上传成功");
-    };
-    input.click();
-  };
-
-  const uploadDrivingLicense = async () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const up = await uploadFile(file);
-      if (!up.ok) return message.error(up.error.message);
-      form.setFieldValue("drivingLicenseAttachmentKey", up.data.key);
-      message.success("行驶证附件上传成功");
-    };
-    input.click();
   };
 
   const viewAttachment = async (attachmentKey: string) => {
@@ -490,9 +484,30 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <div className="ve-vehicles-page space-y-4">
-      <div className="ve-vehicles-header">
-        <Space>
+    <PageContainer
+      title="车辆台账"
+      breadcrumb={[
+        { title: "首页", path: "/" },
+        { title: "车辆台账" },
+      ]}
+      extra={
+        canManage ? (
+          <Button
+            type="primary"
+            onClick={() => {
+              setEditing(null);
+              form.resetFields();
+              setOpen(true);
+            }}
+          >
+            新增车辆
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="ve-vehicles-page space-y-4">
+        <div className="ve-vehicles-header flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <Space wrap size={[8, 8]} className="w-full">
           <Input.Search
             placeholder="搜索车牌/品牌/归属"
             defaultValue={q}
@@ -556,26 +571,19 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             options={[{ label: "仅看不完整", value: "yes" }]}
           />
         </Space>
-        {canManage ? (
-          <Button
-            type="primary"
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              setOpen(true);
-            }}
-          >
-            新增车辆
-          </Button>
-        ) : null}
       </div>
 
+      {listLoading ? (
+        <Skeleton active paragraph={{ rows: 12 }} />
+      ) : (
       <Table
         className="ve-vehicles-table"
         size="small"
         tableLayout="auto"
         rowKey="id"
         dataSource={filteredRows}
+        scroll={listTableScroll}
+        sticky={listTableSticky}
         columns={[
           { title: "号牌号码", dataIndex: "plateNo" },
           { title: "车辆类型", dataIndex: "vehicleType" },
@@ -594,8 +602,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             title: "车辆状态",
             render: (_, r) => {
               const m = statusMeta[r.status];
-              const tone = m.color === "green" ? "success" : m.color === "gold" ? "warning" : m.color === "red" ? "danger" : "neutral";
-              return <StatusPill tone={tone} label={m.label} />;
+              return <StatusPill tone={vehicleStatusTone(r.status)} label={m.label} />;
             },
           },
           {
@@ -658,10 +665,21 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           },
         ]}
       />
+      )}
 
-      <Modal title="车辆详情" open={viewOpen} onCancel={() => setViewOpen(false)} footer={null} width={920} style={{ top: 24 }} className="ve-vehicles-modal">
+      <Modal
+        title="车辆详情"
+        open={viewOpen}
+        centered
+        onCancel={() => setViewOpen(false)}
+        footer={null}
+        width={920}
+        className="ve-vehicles-modal"
+      >
         {viewVehicle ? (
-          <Spin spinning={viewLoading}>
+          viewLoading ? (
+            <Skeleton active paragraph={{ rows: 8 }} />
+          ) : (
             <Tabs
               activeKey={viewTab}
               onChange={(k) => setViewTab(k)}
@@ -679,7 +697,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       <Descriptions.Item label="注册日期">{viewVehicle.regDate || "-"}</Descriptions.Item>
                       <Descriptions.Item label="当前里程">{viewVehicle.mileage}</Descriptions.Item>
                       <Descriptions.Item label="车辆状态">
-                        <Tag color={statusMeta[viewVehicle.status].color}>{statusMeta[viewVehicle.status].label}</Tag>
+                        <StatusPill tone={vehicleStatusTone(viewVehicle.status)} label={statusMeta[viewVehicle.status].label} />
                       </Descriptions.Item>
                       <Descriptions.Item label="使用部门">{viewVehicle.ownerDept}</Descriptions.Item>
                       <Descriptions.Item label="责任人">{viewVehicle.ownerPerson}</Descriptions.Item>
@@ -791,15 +809,15 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                 },
               ]}
             />
-          </Spin>
+          )
         ) : null}
       </Modal>
 
       <Modal
         title={editing ? "编辑车辆" : "新增车辆"}
         open={open}
+        centered
         width={920}
-        style={{ top: 24 }}
         onCancel={() => setOpen(false)}
         onOk={submit}
         styles={{
@@ -826,18 +844,23 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                 children: (
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item label="号牌号码" name="plateNo" rules={[{ required: true }]}>
-                        <Input />
+                      <Form.Item
+                        label="号牌号码"
+                        name="plateNo"
+                        initialValue={DEFAULT_PLATE_NO_PREFIX}
+                        rules={[{ required: true }]}
+                      >
+                        <Input placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="车辆类型" name="vehicleType" rules={[{ required: true }]}>
-                        <Select options={vehicleTypeOptions} />
+                        <Select options={vehicleTypeOptions} placeholder="请选择车辆类型" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="能源类型" name="energyType" rules={[{ required: true }]}>
-                        <Select allowClear options={energyTypeOptions} />
+                        <Select allowClear options={energyTypeOptions} placeholder="请选择能源类型" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -847,95 +870,128 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                     </Col>
                     <Col span={12}>
                       <Form.Item label="品牌型号" name="brandModel" rules={[{ required: true }]}>
-                        {renderTextInput("brandModel")}
+                        {renderTextInput("brandModel", "如：丰田凯美瑞")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="车辆识别代号" name="vin" rules={[{ required: true }]}>
-                        <Input />
+                        <Input placeholder="17 位 VIN" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="发动机号" name="engineNo" rules={[{ required: true }]}>
-                        <Input />
+                        <Input placeholder="请输入发动机号" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="注册日期" name="regDate" rules={[{ required: true }]}>
-                        <DatePicker className="w-full" format="YYYY-MM-DD" />
+                        <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择注册日期" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="发证日期" name="issueDate" rules={[{ required: true }]}>
-                        <DatePicker className="w-full" format="YYYY-MM-DD" />
+                        <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择发证日期" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="档案编号" name="archiveNo" rules={[{ required: true }]}>
-                        <Input />
+                        <Input placeholder="请输入档案编号" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="核定载人数" name="loadPeople" rules={[{ required: true }]}>
-                        {renderTextInput("loadPeople")}
+                        {renderTextInput("loadPeople", "如：5 人")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="核定载质量" name="loadWeight" rules={[{ required: true }]}>
-                        {renderTextInput("loadWeight")}
+                        {renderTextInput("loadWeight", "如：3500kg")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="外廓尺寸" name="dimensions" rules={[{ required: true }]}>
-                        {renderTextInput("dimensions")}
+                        {renderTextInput("dimensions", "长×宽×高")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="所有人" name="ownerName" rules={[{ required: true }]}>
-                        <Input />
+                        <AutoComplete
+                          className="w-full"
+                          style={{ width: "100%" }}
+                          options={ownerNameSelectOptions}
+                          placeholder="请选择或输入所有人（系统配置中可维护对照表）"
+                          filterOption={(inputValue, option) =>
+                            (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
+                          }
+                          onSelect={(value) => {
+                            const addr = ownerDirectoryMap.get(value);
+                            if (addr !== undefined) form.setFieldValue("ownerAddress", addr);
+                          }}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="住址" name="ownerAddress" rules={[{ required: true }]}>
-                        {renderTextInput("ownerAddress")}
+                        <Input placeholder="选择所有人后自动填入，也可手动修改" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="本次保养里程" name="mileage" rules={[{ required: true }]}>
-                        <Input type="number" />
+                        <Input type="number" placeholder="当前里程表读数（km）" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="下次保养里程" name="maintNextKm" rules={[{ required: true }]}>
-                        <Input type="number" />
+                        <Input type="number" placeholder="计划保养里程（km）" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="车辆状态" name="status" initialValue="normal" rules={[{ required: true }]}>
-                        <Select options={statusOptions as unknown as { label: string; value: VehicleForm["status"] }[]} />
+                        <Select
+                          placeholder="请选择车辆状态"
+                          options={statusOptions as unknown as { label: string; value: VehicleForm["status"] }[]}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="使用部门" name="ownerDept" rules={[{ required: true }]}>
-                        {renderTextInput("ownerDept")}
+                        <AutoComplete
+                          className="w-full"
+                          style={{ width: "100%" }}
+                          options={ownerDeptSelectOptions}
+                          placeholder="请选择或输入部门"
+                          filterOption={(inputValue, option) =>
+                            (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
+                          }
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="责任人" name="ownerPerson" rules={[{ required: true }]}>
-                        {renderTextInput("ownerPerson")}
+                        {renderTextInput("ownerPerson", "请输入责任人")}
                       </Form.Item>
                     </Col>
                     <Col span={24}>
                       <Form.Item label="行驶证附件Key" name="drivingLicenseAttachmentKey">
-                        <Input />
+                        <Input placeholder="上传后自动填充，或可手动填写" />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Button onClick={uploadDrivingLicense}>上传行驶证</Button>
+                      <Form.Item label="上传行驶证">
+                        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.drivingLicenseAttachmentKey !== cur.drivingLicenseAttachmentKey}>
+                          {() => (
+                            <R2AttachmentUploader
+                              value={form.getFieldValue("drivingLicenseAttachmentKey")}
+                              onUploaded={(key) => form.setFieldValue("drivingLicenseAttachmentKey", key)}
+                              description="拖拽或点击上传行驶证扫描件（图片/PDF）"
+                            />
+                          )}
+                        </Form.Item>
+                      </Form.Item>
                     </Col>
                     <Col span={24}>
                       <Form.Item label="备注" name="remark">
-                        <Input.TextArea rows={4} />
+                        <Input.TextArea rows={4} placeholder="其他补充说明（不含结构化元数据行）" />
                       </Form.Item>
                     </Col>
                   </Row>
@@ -948,12 +1004,12 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                   <Row gutter={16}>
                     <Col span={12}>
                       <Form.Item label="保险类型" name="insuranceType" rules={[{ required: true }]}>
-                        {renderTextInput("insuranceType")}
+                        {renderTextInput("insuranceType", "如：交强险、商业险")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="保险公司" name="insuranceVendor" rules={[{ required: true }]}>
-                        {renderTextInput("insuranceVendor")}
+                        {renderTextInput("insuranceVendor", "请输入保险公司")}
                       </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -968,11 +1024,21 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                     </Col>
                     <Col span={24}>
                       <Form.Item label="保单附件Key" name="insuranceAttachmentKey" rules={[{ required: true }]}>
-                        <Input />
+                        <Input placeholder="上传后自动填充" />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Button onClick={uploadInsurance}>上传保单附件</Button>
+                      <Form.Item label="上传保单">
+                        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.insuranceAttachmentKey !== cur.insuranceAttachmentKey}>
+                          {() => (
+                            <R2AttachmentUploader
+                              value={form.getFieldValue("insuranceAttachmentKey")}
+                              onUploaded={(key) => form.setFieldValue("insuranceAttachmentKey", key)}
+                              description="拖拽或点击上传保单附件"
+                            />
+                          )}
+                        </Form.Item>
+                      </Form.Item>
                     </Col>
                   </Row>
                 ),
@@ -1028,6 +1094,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         </Form>
       </Modal>
     </div>
+    </PageContainer>
   );
 }
 

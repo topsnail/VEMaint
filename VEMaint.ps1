@@ -1,5 +1,5 @@
 ﻿param(
-  [string]$ProjectPath = "C:\Users\Administrator\Desktop\VEMaint",
+  [string]$ProjectPath = "C:\web\VEMaint",
   [int]$Port = 8788,
   [int]$FrontendPort = 5173,
   [switch]$Clean,

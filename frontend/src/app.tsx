@@ -1,14 +1,6 @@
-import {
-  BellOutlined,
-  CarOutlined,
-  FileTextOutlined,
-  LogoutOutlined,
-  PlusOutlined,
-  SearchOutlined,
-  SettingOutlined,
-  UserOutlined,
-} from "@ant-design/icons";
-import { Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Space, Typography, message } from "antd";
+import { BellOutlined, CarOutlined, FileTextOutlined, PlusOutlined, SettingOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
+import { App as AntdApp, Button, ConfigProvider, Menu, Space, Typography } from "antd";
+import zhCN from "antd/locale/zh_CN";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -22,7 +14,8 @@ import {
 import { apiFetch } from "./lib/http";
 import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions, type RolePermissions } from "./lib/permissions";
 import { usePermissions } from "./lib/usePermissions";
-import { DashboardLayout } from "./layouts/DashboardLayout";
+import { AppShellTopbarAccount, AppShellTopbarBrand, AppShellTopbarSearch } from "./components/shell/AppShellTopbar";
+import { DashboardLayout, type MobileDockItem } from "./layouts/DashboardLayout";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -30,8 +23,16 @@ import { MaintenancePage } from "./pages/MaintenancePage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { UsersPage } from "./pages/UsersPage";
 import { VehiclesPage } from "./pages/VehiclesPage";
+import { setGlobalErrorMessenger } from "./lib/errorHandler";
+import { veTheme } from "./theme";
 
 function AppInner() {
+  const { message } = AntdApp.useApp();
+  useEffect(() => {
+    setGlobalErrorMessenger((text) => message.error(text));
+    return () => setGlobalErrorMessenger(null);
+  }, [message]);
+
   const fallbackUser: UserInfo = { userId: "mock_user_fallback", username: "mock", role: "admin" };
   const [user, setCurrentUser] = useState<UserInfo | null>(() => {
     const cachedUser = getUser();
@@ -124,18 +125,18 @@ function AppInner() {
     void loadNotificationCount();
   }, [user]);
 
-  if (!user) return <LoginPage onLoggedIn={loadMe} />;
-  
-  const { 
-    canViewDashboard, 
-    canViewVehicles, 
-    canManageVehicle, 
-    canViewMaintenance, 
-    canEditMaintenance, 
-    canDeleteMaintenance, 
-    canManageUsers, 
-    canManageConfig 
+  const {
+    canViewDashboard,
+    canViewVehicles,
+    canManageVehicle,
+    canViewMaintenance,
+    canEditMaintenance,
+    canDeleteMaintenance,
+    canManageUsers,
+    canManageConfig,
   } = usePermissions(user, rolePermissions);
+
+  if (!user) return <LoginPage onLoggedIn={loadMe} />;
   
   const defaultPath = canViewDashboard
     ? "/dashboard"
@@ -157,6 +158,12 @@ function AppInner() {
     ...(canEditMaintenance ? [{ key: "new-maint", label: "新增维保", target: "/maintenance?create=1" }] : []),
   ];
 
+  const mobileDockItems: MobileDockItem[] = [
+    ...items.map((it) => ({ key: it.key, icon: it.icon, label: it.label })),
+    ...(canManageUsers ? [{ key: "/users", icon: <TeamOutlined />, label: "用户" }] : []),
+    { key: "/profile", icon: <UserOutlined />, label: "我的" },
+  ];
+
   const submitGlobalSearch = (value: string) => {
     const keyword = value.trim();
     if (!keyword) return nav("/dashboard");
@@ -170,69 +177,20 @@ function AppInner() {
     message.success("已退出");
   };
 
-  const shellHeaderLeft = (
-    <div className="flex items-center gap-3">
-      <div className="h-10 w-10 rounded-lg border border-[#E5E7EB] bg-white p-2">
-        <img src="/favicon.png" alt="VEMaint Logo" className="h-full w-full object-contain" />
-      </div>
-      <div className="leading-tight">
-        <div className="text-[16px] font-semibold tracking-tight text-[#1F2937]">VEMaint</div>
-        <div className="text-[14px] text-[#6B7280]">车辆与设备维保</div>
-      </div>
-    </div>
-  );
+  const shellHeaderLeft = <AppShellTopbarBrand />;
 
   const shellHeaderCenter = (
-    <div className="flex justify-center">
-      <Input
-        className="w-full max-w-[720px]"
-        placeholder="搜索车牌、设备、维保记录..."
-        allowClear
-        value={globalSearch}
-        onChange={(e) => setGlobalSearch(e.target.value)}
-        onPressEnter={(e) => submitGlobalSearch((e.target as HTMLInputElement).value)}
-        suffix={
-          <button type="button" className="rounded-md px-2 py-1 text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#1F2937]" onClick={() => submitGlobalSearch(globalSearch)}>
-            <span className="inline-flex items-center">
-              <SearchOutlined />
-            </span>
-          </button>
-        }
-      />
-    </div>
+    <AppShellTopbarSearch value={globalSearch} onChange={setGlobalSearch} onSubmit={submitGlobalSearch} />
   );
 
   const shellHeaderRight = (
-    <div className="flex items-center gap-2">
-      <Badge count={notificationCount} size="small" overflowCount={99} offset={[-2, 2]}>
-        <Button
-          type="text"
-          shape="circle"
-          icon={<BellOutlined />}
-          className="!text-[#6B7280] hover:!bg-[#F3F4F6] hover:!text-[#1F2937]"
-          onClick={() => nav("/dashboard")}
-        />
-      </Badge>
-      <Dropdown
-        menu={{
-          items: [
-            { key: "profile", icon: <UserOutlined />, label: "个人中心" },
-            { type: "divider" },
-            { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
-          ],
-          onClick: ({ key }) => {
-            if (key === "profile") nav("/profile");
-            if (key === "logout") void logout();
-          },
-        }}
-        trigger={["click"]}
-      >
-        <Space className="cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 hover:bg-[#F9FAFB]">
-          <Avatar size="small" icon={<UserOutlined />} />
-          <span className="text-[#1F2937]">{user.username}</span>
-        </Space>
-      </Dropdown>
-    </div>
+    <AppShellTopbarAccount
+      username={user.username}
+      notificationCount={notificationCount}
+      onNotificationsClick={() => nav("/dashboard")}
+      onProfile={() => nav("/profile")}
+      onLogout={logout}
+    />
   );
 
   const shellSider = (
@@ -267,7 +225,13 @@ function AppInner() {
   );
 
   return (
-    <DashboardLayout headerLeft={shellHeaderLeft} headerCenter={shellHeaderCenter} headerRight={shellHeaderRight} sider={shellSider}>
+    <DashboardLayout
+      headerLeft={shellHeaderLeft}
+      headerCenter={shellHeaderCenter}
+      headerRight={shellHeaderRight}
+      sider={shellSider}
+      mobileDockItems={mobileDockItems}
+    >
       <div className="min-h-[calc(100vh-160px)]">
           <Routes>
             <Route path="/" element={<Navigate to={defaultPath} replace />} />
@@ -294,9 +258,13 @@ function AppInner() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AppInner />
-    </BrowserRouter>
+    <ConfigProvider locale={zhCN} theme={veTheme}>
+      <AntdApp>
+        <BrowserRouter>
+          <AppInner />
+        </BrowserRouter>
+      </AntdApp>
+    </ConfigProvider>
   );
 }
 

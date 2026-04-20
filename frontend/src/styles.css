@@ -2,15 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ve-primary: #1677ff;
+  --ve-page-bg: #f8fafc;
+  --ve-radius-main: 6px;
+  --ve-table-zebra: #fafafa;
+  --ve-table-row-line: #f0f0f0;
+}
+
 body {
   margin: 0;
-  background: #f5f7fa;
+  background: var(--ve-page-bg);
   color: #1f2937;
+  font-size: 14px;
+  line-height: 1.5715;
 }
 
 html,
 body {
   min-height: 100%;
+}
+
+/* 纤细滚动条：WebKit + Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c9d4e0 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #c9d4e0;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #a8b8cc;
+}
+
+/* Safety net: ensure mobile dock never shows on desktop */
+@media (min-width: 992px) {
+  .ve-mobile-dock {
+    display: none !important;
+  }
 }
 
 /* 2026.md: prefer subtle borders and restrained shadows */
@@ -105,7 +146,7 @@ body {
 }
 
 .ve-topbar-search.ant-input-affix-wrapper {
-  min-height: 32px;
+  min-height: 38px;
   padding: 0 6px 0 12px !important;
   border: 1px solid #d7dee8 !important;
   border-radius: 6px !important;
@@ -270,26 +311,6 @@ body {
 .ve-content {
   padding: 24px;
   overflow: auto;
-}
-
-.ve-content::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.ve-content::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-}
-
-.ve-content::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
-.ve-content::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
 }
 
 .ve-left-sider .ant-menu {
@@ -484,9 +505,10 @@ body {
 }
 
 .ant-modal-header {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 20px 24px;
-  background: #f8fafc;
+  margin: 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  background: #fff;
 }
 
 .ant-modal-title {
@@ -791,9 +813,10 @@ body {
 }
 
 .ve-vehicles-modal .ant-modal-header {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 20px 24px;
-  background: #f8fafc;
+  margin: 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  background: #fff;
 }
 
 .ve-vehicles-modal .ant-modal-title {
@@ -1026,9 +1049,10 @@ body {
 }
 
 .ve-maintenance-modal .ant-modal-header {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 20px 24px;
-  background: #f8fafc;
+  margin: 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  background: #fff;
 }
 
 .ve-maintenance-modal .ant-modal-title {
@@ -1665,9 +1689,10 @@ body {
 }
 
 .ve-users-modal .ant-modal-header {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 20px 24px;
-  background: #f8fafc;
+  margin: 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  background: #fff;
 }
 
 .ve-users-modal .ant-modal-title {
@@ -1963,5 +1988,56 @@ body {
 
 .ve-config-footer:hover {
   box-shadow: 0 -4px 8px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Phase 1 — 全局 Table：斑马纹、无外框、细行分割线（覆盖历史 .ve-* 表格外框） */
+/* -------------------------------------------------------------------------- */
+.ant-table-wrapper .ant-table {
+  border-radius: var(--ve-radius-main);
+}
+
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) {
+  border: none !important;
+}
+
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) .ant-table-container {
+  border-inline: none !important;
+}
+
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) .ant-table-content table,
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) .ant-table-body table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ant-table-wrapper .ant-table .ant-table-thead > tr > th {
+  border-inline-end: none !important;
+  border-bottom: 1px solid var(--ve-table-row-line) !important;
+}
+
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) .ant-table-tbody > tr > td {
+  border-inline-end: none !important;
+  border-bottom: 1px solid var(--ve-table-row-line) !important;
+}
+
+.ant-table-wrapper
+  .ant-table:not(.ant-table-bordered)
+  .ant-table-tbody
+  > tr.ant-table-row:nth-child(even)
+  > td {
+  background-color: var(--ve-table-zebra) !important;
+}
+
+.ant-table-wrapper .ant-table:not(.ant-table-bordered) .ant-table-tbody > tr.ant-table-row:hover > td {
+  background-color: #f5f5f5 !important;
+}
+
+.ant-table-wrapper
+  .ant-table:not(.ant-table-bordered)
+  .ant-table-tbody
+  > tr.ant-table-row:nth-child(even):hover
+  > td {
+  background-color: #f0f0f0 !important;
 }
 

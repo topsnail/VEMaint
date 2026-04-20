@@ -22,8 +22,17 @@ type VehicleInput = {
   remark: string | null;
 };
 
+function normalizePlateQuery(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[·•\.\-\s]/g, "")
+    .trim();
+}
+
 export async function listVehicles(db: D1Database, q: string): Promise<Vehicle[]> {
-  const keyword = `%${q}%`;
+  const raw = q.trim();
+  const rawKeyword = `%${raw}%`;
+  const normalizedPlateKeyword = `%${normalizePlateQuery(raw)}%`;
   return await d1All<Vehicle>(
     db,
     `
@@ -33,10 +42,15 @@ load_spec as loadSpec, usage_nature as usageNature, owner_dept as ownerDept, own
 purchase_date as purchaseDate, purchase_cost as purchaseCost, service_life_years as serviceLifeYears, scrap_date as scrapDate, disposal_method as disposalMethod,
 remark, created_at as createdAt, updated_at as updatedAt
 from vehicles
-where (?1 = '' or plate_no like ?2 or brand_model like ?2 or owner_dept like ?2)
+where (
+  ?1 = ''
+  or replace(replace(replace(replace(replace(upper(plate_no), '·', ''), '•', ''), '.', ''), '-', ''), ' ', '') like ?2
+  or brand_model like ?3
+  or owner_dept like ?3
+)
 order by updated_at desc
 `,
-    [q, keyword],
+    [raw, normalizedPlateKeyword, rawKeyword],
   );
 }
 

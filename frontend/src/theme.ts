@@ -1,95 +1,105 @@
 import type { ThemeConfig } from "antd";
 
+/** Ant Design 全局主题：与 Tailwind/CSS 变量对齐，单一事实来源（DRY） */
 export const veTheme: ThemeConfig = {
   cssVar: true,
   hashed: true,
   token: {
-    // 2026.md: compact tool UI, 2K friendly
-    fontSize: 16,
+    // 1080P 正文 14px；标题由 Typography / 页面级控制 16–20
+    fontSize: 14,
+    fontSizeLG: 16,
+    fontSizeXL: 20,
+
     controlHeight: 40,
     controlHeightSM: 36,
     controlHeightLG: 48,
 
-    borderRadius: 8,
-    borderRadiusSM: 8,
-    borderRadiusLG: 8,
+    borderRadius: 6,
+    borderRadiusSM: 6,
+    borderRadiusLG: 6,
 
-    // 2026.md: light only
-    colorBgBase: "#F5F7FA",
-    colorBgContainer: "#FFFFFF",
-    colorBgElevated: "#FFFFFF",
-    colorBorder: "#E5E7EB",
-    colorSplit: "#E5E7EB",
+    colorBgBase: "#f8fafc",
+    colorBgLayout: "#f8fafc",
+    colorBgContainer: "#ffffff",
+    colorBgElevated: "#ffffff",
+    colorBorder: "#e5e7eb",
+    colorSplit: "#e5e7eb",
 
-    colorText: "#1F2937",
-    colorTextSecondary: "#6B7280",
-    colorTextTertiary: "#6B7280",
-    colorTextQuaternary: "#9CA3AF",
+    colorText: "#1f2937",
+    colorTextSecondary: "#6b7280",
+    colorTextTertiary: "#6b7280",
+    colorTextQuaternary: "#9ca3af",
 
-    // 2026.md: keep AntD default primary
-    colorPrimary: "#1677FF",
-    colorInfo: "#1677FF",
-    colorLink: "#1677FF",
-    colorLinkHover: "#4096FF",
+    colorPrimary: "#1677ff",
+    colorInfo: "#1677ff",
+    colorLink: "#1677ff",
+    colorLinkHover: "#4096ff",
 
-    // Prefer borders over heavy shadows
     boxShadow: "none",
     boxShadowSecondary: "none",
     lineWidth: 1,
   },
   components: {
     Layout: {
-      bodyBg: "#F5F7FA",
-      headerBg: "#FFFFFF",
-      siderBg: "#FFFFFF",
-      triggerBg: "#FFFFFF",
+      bodyBg: "#f8fafc",
+      headerBg: "#ffffff",
+      siderBg: "#ffffff",
+      triggerBg: "#ffffff",
     },
     Menu: {
       itemHeight: 40,
-      itemBorderRadius: 8,
+      itemBorderRadius: 6,
       itemBg: "transparent",
-      itemHoverBg: "#F3F4F6",
-      itemSelectedBg: "rgba(22,119,255,0.10)",
-      itemSelectedColor: "#1677FF",
+      itemHoverBg: "#f3f4f6",
+      itemSelectedBg: "rgba(22, 119, 255, 0.1)",
+      itemSelectedColor: "#1677ff",
       subMenuItemBg: "transparent",
     },
     Card: {
+      borderRadiusLG: 6,
       paddingLG: 16,
       headerBg: "transparent",
     },
     Table: {
-      headerBg: "#F9FAFB",
-      headerSplitColor: "#E5E7EB",
-      rowHoverBg: "#F9FAFB",
+      borderRadiusLG: 6,
+      headerBg: "#f8fafc",
+      headerSplitColor: "transparent",
+      headerColor: "#334155",
+      rowHoverBg: "#f3f4f6",
       cellPaddingBlock: 12,
       cellPaddingInline: 16,
-      borderColor: "#E5E7EB",
+      borderColor: "#f0f0f0",
     },
     Input: {
+      borderRadius: 6,
       paddingInline: 12,
       paddingBlock: 8,
-      colorBgContainer: "#FFFFFF",
-      activeBg: "#FFFFFF",
+      colorBgContainer: "#ffffff",
+      activeBg: "#ffffff",
     },
     Select: {
-      colorBgContainer: "#FFFFFF",
+      borderRadius: 6,
+      colorBgContainer: "#ffffff",
     },
     Button: {
+      borderRadius: 6,
+      borderRadiusLG: 6,
       controlHeight: 40,
-      borderRadius: 8,
-      defaultBg: "#FFFFFF",
-      defaultBorderColor: "#E5E7EB",
-      defaultHoverBg: "#F9FAFB",
+      defaultBg: "#ffffff",
+      defaultBorderColor: "#e5e7eb",
+      defaultHoverBg: "#f9fafb",
       primaryShadow: "none",
     },
     Modal: {
-      contentBg: "#FFFFFF",
-      headerBg: "#FFFFFF",
-      footerBg: "#FFFFFF",
+      borderRadiusLG: 6,
+      contentBg: "#ffffff",
+      headerBg: "#ffffff",
+      footerBg: "#ffffff",
     },
     Tag: {
+      borderRadiusSM: 6,
       defaultBg: "transparent",
-      defaultColor: "#1F2937",
+      defaultColor: "#1f2937",
     },
     Typography: {
       titleMarginTop: 0,
@@ -97,4 +107,3 @@ export const veTheme: ThemeConfig = {
     },
   },
 };
-

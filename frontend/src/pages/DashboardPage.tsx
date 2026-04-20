@@ -1,173 +1,16 @@
-import { Alert, Button, Card, Col, Input, List, Progress, Row, Space, Statistic, Table, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState, ReactNode } from "react";
+import { Alert, Button, Card, Col, Input, List, Progress, Row, Skeleton, Space, Statistic, Table, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "../lib/http";
-import { REFRESH_INTERVALS, SEARCH_CONFIG } from "../lib/config";
-import { handleApiError } from "../lib/errorHandler";
+import { PageContainer } from "../components/PageContainer";
 import { KpiCard } from "../components/KpiCard";
-import { AlertItem as AlertItemComponent, type AlertItemType } from "../components/AlertItem";
+import { cardTableScroll, cardTableSticky } from "../lib/tableConfig";
+import { AlertItem as AlertItemComponent } from "../components/AlertItem";
 import { PendingAlertItem } from "../components/PendingAlertItem";
-import type { MaintenanceRecord, Vehicle } from "../types";
-
-type AlertItem = {
-  alertKey: string;
-  type: string;
-  level: "within30" | "within7" | "expired";
-  days?: number;
-  kmLeft?: number;
-  vehicleId: string;
-  plateNo: string;
-  ownerDept?: string;
-  ownerPerson?: string;
-  actionStatus?: "open" | "processing" | "resolved";
-  actionHandler?: string | null;
-  actionUpdatedAt?: string | null;
-};
-
-type SearchResult = {
-  vehicles: Array<{ id: string; plateNo: string; brandModel: string }>;
-  maintenance: Array<{ id: string; itemDesc: string; plateNo: string | null; equipmentName: string | null }>;
-};
-
-type DashboardOverview = {
-  snapshotAt: string;
-  kpis: {
-    vehicles: {
-      total: number;
-      normal: number;
-      repairing: number;
-      stopped: number;
-      scrapped: number;
-    };
-    maintenance: {
-      todayCount: number;
-      weekCount: number;
-      monthCount: number;
-      monthCost: number;
-    };
-    alerts: {
-      expired: number;
-      within7: number;
-      within30: number;
-      total: number;
-    };
-  };
-  alerts: AlertItem[];
-  pendingAlerts: AlertItem[];
-  trends: Array<{ day: string; count: number; cost: number }>;
-  responsibility: {
-    byDept: Array<{ ownerDept: string; expired: number; within7: number; within30: number; pending: number; monthCost: number }>;
-    byPerson: Array<{ ownerPerson: string; expired: number; within7: number; within30: number; pending: number; monthCost: number }>;
-  };
-  rankings: {
-    topCostVehicles: Array<{ vehicleId: string | null; plateNo: string; brandModel: string; recordCount: number; totalCost: number }>;
-    topItems: Array<{ itemDesc: string; recordCount: number; totalCost: number }>;
-  };
-};
+import type { DashboardAlertItem } from "../hooks/useDashboardOverview";
+import { useDashboardOverview } from "../hooks/useDashboardOverview";
 
 export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: boolean }) {
   const nav = useNavigate();
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [search, setSearch] = useState<SearchResult>({ vehicles: [], maintenance: [] });
-  const [loading, setLoading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState("");
-
-  const loadOverview = async () => {
-    setLoading(true);
-    try {
-      const res = await apiFetch<DashboardOverview>("/dashboard/overview");
-      if (res.ok) {
-        setOverview(res.data);
-        setLastUpdated(new Date().toLocaleString());
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadOverview();
-    
-    // 优化数据刷新策略
-    let timer: NodeJS.Timeout;
-    let isRefreshing = false;
-    
-    const refreshData = async () => {
-      if (isRefreshing || document.hidden) return;
-      
-      isRefreshing = true;
-      try {
-        await loadOverview();
-      } catch (error) {
-        handleApiError(error);
-      } finally {
-        isRefreshing = false;
-      }
-    };
-    
-    // 初始加载后，设置定时器
-    timer = setInterval(refreshData, REFRESH_INTERVALS.DASHBOARD); // 使用配置的刷新间隔
-    
-    // 监听页面可见性变化，当页面从隐藏变为可见时刷新数据
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void refreshData();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // 添加防抖处理
-  const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
-  
-  const runSearch = async (q: string) => {
-    const key = q.trim();
-    if (!key) return setSearch({ vehicles: [], maintenance: [] });
-    
-    // 清除之前的定时器
-    if (searchTimer) {
-      clearTimeout(searchTimer);
-    }
-    
-    // 设置新的定时器，实现防抖
-    const timer = setTimeout(async () => {
-      try {
-        const [v, m] = await Promise.all([
-          apiFetch<{ vehicles: Vehicle[] }>(`/vehicles?q=${encodeURIComponent(key)}`),
-          apiFetch<{ records: MaintenanceRecord[] }>(`/maintenance?q=${encodeURIComponent(key)}`),
-        ]);
-        setSearch({
-          vehicles: v.ok ? v.data.vehicles.map((x) => ({ id: x.id, plateNo: x.plateNo, brandModel: x.brandModel })) : [],
-          maintenance: m.ok
-            ? m.data.records.map((x) => ({
-                id: x.id,
-                itemDesc: x.itemDesc,
-                plateNo: x.plateNo ?? null,
-                equipmentName: x.equipmentName ?? null,
-              }))
-            : [],
-        });
-      } catch (error) {
-        handleApiError(error);
-        setSearch({ vehicles: [], maintenance: [] });
-      }
-    }, SEARCH_CONFIG.DEBOUNCE_DELAY); // 使用配置的防抖延迟
-    
-    setSearchTimer(timer);
-  };
-
-  const trendSummary = useMemo(() => {
-    const data = overview?.trends ?? [];
-    const totalCost = data.reduce((sum, x) => sum + Number(x.cost || 0), 0);
-    const totalCount = data.reduce((sum, x) => sum + Number(x.count || 0), 0);
-    return { totalCost, totalCount };
-  }, [overview]);
+  const { overview, search, loading, lastUpdated, loadOverview, runSearch, updateAlertStatus, trendSummary } = useDashboardOverview();
 
   const alerts = overview?.alerts ?? [];
   const pendingAlerts = overview?.pendingAlerts ?? [];
@@ -175,35 +18,30 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
     const sp = new URLSearchParams(params);
     nav(`/vehicles?${sp.toString()}`);
   };
-  const openAlertAction = (a: AlertItem) => {
+  const openAlertAction = (a: DashboardAlertItem) => {
     if (a.type === "保险" || a.type === "年审" || a.type === "保养日期") {
       goVehicles({ q: a.plateNo, due: a.level === "expired" ? "overdue" : a.level });
       return;
     }
     goVehicles({ q: a.plateNo });
   };
-  const updateAlertStatus = async (a: AlertItem, status: "open" | "processing" | "resolved") => {
-    try {
-      const res = await apiFetch<{ ok: true }>(`/dashboard/alerts/${encodeURIComponent(a.alertKey)}/action`, {
-        method: "PUT",
-        body: JSON.stringify({ status }),
-      });
-      if (res.ok) {
-        await loadOverview();
-      } else {
-        handleApiError(res);
-      }
-    } catch (error) {
-      handleApiError(error);
-    }
-  };
 
   return (
-    <div className="w-full ve-dashboard space-y-6">
-      {/* 顶部概览卡片 */}
+    <PageContainer
+      title="仪表盘"
+      breadcrumb={[
+        { title: "首页", path: "/" },
+        { title: "仪表盘" },
+      ]}
+    >
+      {loading && !overview ? (
+        <Skeleton active paragraph={{ rows: 16 }} className="mt-2" />
+      ) : (
+      <div className="w-full ve-dashboard space-y-6">
+      {/* Bento：核心 KPI 栅格（12 列） */}
       <Card
         title={<span className="ve-card-title">实时数据概览</span>}
-        className="ve-dash-card ve-dash-overview-card"
+        className="ve-dash-card ve-dash-overview-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
         extra={
           <Space size="middle">
             <Typography.Text type="secondary" className="text-sm">
@@ -215,74 +53,62 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
           </Space>
         }
       >
-        <Row gutter={[16, 16]}>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="车辆总数" 
-              value={overview?.kpis.vehicles.total ?? 0} 
-              valueStyle={{ fontSize: '24px', fontWeight: '600' }}
-              onClick={() => goVehicles({})}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="正常车辆" 
-              value={overview?.kpis.vehicles.normal ?? 0} 
-              valueStyle={{ color: "#16a34a", fontSize: '24px', fontWeight: '600' }}
-              onClick={() => goVehicles({ status: "normal" })}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="维修中" 
-              value={overview?.kpis.vehicles.repairing ?? 0} 
-              valueStyle={{ color: "#d97706", fontSize: '24px', fontWeight: '600' }}
-              onClick={() => goVehicles({ status: "repairing" })}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="停用/报废" 
-              value={(overview?.kpis.vehicles.stopped ?? 0) + (overview?.kpis.vehicles.scrapped ?? 0)} 
-              valueStyle={{ color: "#dc2626", fontSize: '24px', fontWeight: '600' }}
-              onClick={() => goVehicles({ status: "stopped" })}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="今日维保" 
-              value={overview?.kpis.maintenance.todayCount ?? 0} 
-              valueStyle={{ fontSize: '20px' }}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="本周维保" 
-              value={overview?.kpis.maintenance.weekCount ?? 0} 
-              valueStyle={{ fontSize: '20px' }}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="本月维保单数" 
-              value={overview?.kpis.maintenance.monthCount ?? 0} 
-              valueStyle={{ fontSize: '20px' }}
-            />
-          </Col>
-          <Col xs={12} md={6}>
-            <KpiCard 
-              title="本月维保费用" 
-              value={overview?.kpis.maintenance.monthCost ?? 0} 
-              valueStyle={{ fontSize: '20px', color: '#3b82f6' }}
-            />
-          </Col>
-        </Row>
+        <div className="space-y-6">
+          <div>
+            <Typography.Text className="mb-3 block text-xs font-medium uppercase tracking-wide text-[#64748B]">车辆概况</Typography.Text>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-12">
+              <div className="col-span-2 lg:col-span-5">
+                <KpiCard
+                  title="车辆总数"
+                  value={overview?.kpis.vehicles.total ?? 0}
+                  valueStyle={{ fontSize: "26px", fontWeight: "600" }}
+                  onClick={() => goVehicles({})}
+                />
+              </div>
+              <div className="col-span-2 lg:col-span-7">
+                <div className="grid h-full grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+                  <KpiCard
+                    title="正常车辆"
+                    value={overview?.kpis.vehicles.normal ?? 0}
+                    valueStyle={{ color: "#16a34a", fontSize: "22px", fontWeight: "600" }}
+                    onClick={() => goVehicles({ status: "normal" })}
+                  />
+                  <KpiCard
+                    title="维修中"
+                    value={overview?.kpis.vehicles.repairing ?? 0}
+                    valueStyle={{ color: "#d97706", fontSize: "22px", fontWeight: "600" }}
+                    onClick={() => goVehicles({ status: "repairing" })}
+                  />
+                  <KpiCard
+                    title="停用/报废"
+                    value={(overview?.kpis.vehicles.stopped ?? 0) + (overview?.kpis.vehicles.scrapped ?? 0)}
+                    valueStyle={{ color: "#dc2626", fontSize: "22px", fontWeight: "600" }}
+                    onClick={() => goVehicles({ status: "stopped" })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <Typography.Text className="mb-3 block text-xs font-medium uppercase tracking-wide text-[#64748B]">维保概况</Typography.Text>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+              <KpiCard title="今日维保" value={overview?.kpis.maintenance.todayCount ?? 0} valueStyle={{ fontSize: "20px" }} />
+              <KpiCard title="本周维保" value={overview?.kpis.maintenance.weekCount ?? 0} valueStyle={{ fontSize: "20px" }} />
+              <KpiCard title="本月维保单数" value={overview?.kpis.maintenance.monthCount ?? 0} valueStyle={{ fontSize: "20px" }} />
+              <KpiCard
+                title="本月维保费用"
+                value={overview?.kpis.maintenance.monthCost ?? 0}
+                valueStyle={{ fontSize: "20px", color: "#1677ff" }}
+              />
+            </div>
+          </div>
+        </div>
       </Card>
 
       {/* 到期预警中心 */}
-      <Card 
-        title={<span className="ve-card-title">到期预警中心</span>} 
-        className="ve-dash-card ve-dash-alert-card"
+      <Card
+        title={<span className="ve-card-title">到期预警中心</span>}
+        className="ve-dash-card ve-dash-alert-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
       >
         {alerts.length === 0 ? (
           <Alert type="success" showIcon message="暂无到期预警" className="ve-empty-alert" />
@@ -290,7 +116,7 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
           <Space direction="vertical" className="w-full" size="middle">
             <Row gutter={[16, 16]} className="mb-4">
               <Col xs={8}>
-                <Card size="small" className="ve-alert-stat-card">
+                <Card size="small" className="ve-alert-stat-card transition-transform duration-200 ease-out hover:scale-[1.02]">
                   <Statistic 
                     title="已逾期" 
                     value={overview?.kpis.alerts.expired ?? 0} 
@@ -299,7 +125,7 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
                 </Card>
               </Col>
               <Col xs={8}>
-                <Card size="small" className="ve-alert-stat-card">
+                <Card size="small" className="ve-alert-stat-card transition-transform duration-200 ease-out hover:scale-[1.02]">
                   <Statistic 
                     title="7天内" 
                     value={overview?.kpis.alerts.within7 ?? 0} 
@@ -308,7 +134,7 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
                 </Card>
               </Col>
               <Col xs={8}>
-                <Card size="small" className="ve-alert-stat-card">
+                <Card size="small" className="ve-alert-stat-card transition-transform duration-200 ease-out hover:scale-[1.02]">
                   <Statistic 
                     title="30天内" 
                     value={overview?.kpis.alerts.within30 ?? 0} 
@@ -334,9 +160,9 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
       </Card>
 
       {/* 待处理预警 */}
-      <Card 
-        title={<span className="ve-card-title">待处理预警</span>} 
-        className="ve-dash-card ve-dash-pending-card"
+      <Card
+        title={<span className="ve-card-title">待处理预警</span>}
+        className="ve-dash-card ve-dash-pending-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
       >
         {pendingAlerts.length === 0 ? (
           <Alert type="success" showIcon message="暂无待处理预警" className="ve-empty-alert" />
@@ -350,7 +176,7 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
                   key={a.alertKey}
                   item={a} 
                   canHandleAlerts={canHandleAlerts}
-                  onUpdateStatus={(status) => updateAlertStatus(a, status)}
+                  onUpdateStatus={(status) => updateAlertStatus(a.alertKey, status)}
                 />
               )}
             />
@@ -360,14 +186,14 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
       {/* 趋势和高成本车辆 */}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
-          <Card 
-            title={<span className="ve-card-title">近30天维保趋势</span>} 
-            className="ve-dash-card ve-dash-trend-card"
+          <Card
+            title={<span className="ve-card-title">近30天维保趋势</span>}
+            className="ve-dash-card ve-dash-trend-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
           >
             <Space direction="vertical" className="w-full" size="large">
               <Row gutter={[16, 16]}>
                 <Col xs={12}>
-                  <Card size="small" className="ve-trend-stat-card">
+                  <Card size="small" className="ve-trend-stat-card transition-transform duration-200 ease-out hover:scale-[1.02]">
                     <Statistic 
                       title="近30天维保单数" 
                       value={trendSummary.totalCount} 
@@ -376,12 +202,12 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
                   </Card>
                 </Col>
                 <Col xs={12}>
-                  <Card size="small" className="ve-trend-stat-card ve-trend-stat-cost">
+                  <Card size="small" className="ve-trend-stat-card ve-trend-stat-cost transition-transform duration-200 ease-out hover:scale-[1.02]">
                     <Statistic 
                       title="近30天维保费用" 
                       value={trendSummary.totalCost} 
                       precision={2} 
-                      valueStyle={{ fontSize: '20px', color: '#3b82f6' }}
+                      valueStyle={{ fontSize: '20px', color: '#1677ff' }}
                     />
                   </Card>
                 </Col>
@@ -405,14 +231,16 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card 
-            title={<span className="ve-card-title">高成本车辆 TOP5</span>} 
-            className="ve-dash-card ve-dash-ranking-card"
+          <Card
+            title={<span className="ve-card-title">高成本车辆 TOP5</span>}
+            className="ve-dash-card ve-dash-ranking-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
           >
             <Table
               className="ve-dash-table ve-ranking-table"
               size="small"
               pagination={false}
+              scroll={cardTableScroll}
+              sticky={cardTableSticky}
               rowKey={(r) => `${r.plateNo}-${r.totalCost}`}
               dataSource={overview?.rankings.topCostVehicles ?? []}
               columns={[
@@ -446,107 +274,17 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
         </Col>
       </Row>
 
-      {/* 责任维度 */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card 
-            title={<span className="ve-card-title">责任维度（部门）</span>} 
-            className="ve-dash-card ve-dash-responsibility-card"
-          >
-            <Table
-              className="ve-dash-table ve-responsibility-table"
-              size="small"
-              pagination={false}
-              rowKey={(r) => r.ownerDept}
-              dataSource={overview?.responsibility.byDept ?? []}
-              columns={[
-                { title: "部门", dataIndex: "ownerDept" },
-                { 
-                  title: "待处理", 
-                  dataIndex: "pending", 
-                  width: 90,
-                  className: "text-center"
-                },
-                { 
-                  title: "逾期", 
-                  dataIndex: "expired", 
-                  width: 80,
-                  className: "text-center ve-danger-text"
-                },
-                { 
-                  title: "7天内", 
-                  dataIndex: "within7", 
-                  width: 80,
-                  className: "text-center ve-warning-text"
-                },
-                { 
-                  title: "本月费用", 
-                  dataIndex: "monthCost", 
-                  width: 120, 
-                  render: (v) => (
-                    <span className="ve-cost-value">¥{Number(v ?? 0).toFixed(0)}</span>
-                  ),
-                  className: "text-right"
-                },
-              ]}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card 
-            title={<span className="ve-card-title">责任维度（责任人）</span>} 
-            className="ve-dash-card ve-dash-responsibility-card"
-          >
-            <Table
-              className="ve-dash-table ve-responsibility-table"
-              size="small"
-              pagination={false}
-              rowKey={(r) => r.ownerPerson}
-              dataSource={overview?.responsibility.byPerson ?? []}
-              columns={[
-                { title: "责任人", dataIndex: "ownerPerson" },
-                { 
-                  title: "待处理", 
-                  dataIndex: "pending", 
-                  width: 90,
-                  className: "text-center"
-                },
-                { 
-                  title: "逾期", 
-                  dataIndex: "expired", 
-                  width: 80,
-                  className: "text-center ve-danger-text"
-                },
-                { 
-                  title: "7天内", 
-                  dataIndex: "within7", 
-                  width: 80,
-                  className: "text-center ve-warning-text"
-                },
-                { 
-                  title: "本月费用", 
-                  dataIndex: "monthCost", 
-                  width: 120, 
-                  render: (v) => (
-                    <span className="ve-cost-value">¥{Number(v ?? 0).toFixed(0)}</span>
-                  ),
-                  className: "text-right"
-                },
-              ]}
-            />
-          </Card>
-        </Col>
-      </Row>
-
       {/* 高频维保项目 */}
-      <Card 
-        title={<span className="ve-card-title">高频维保项目 TOP5</span>} 
-        className="ve-dash-card ve-dash-top-items-card"
+      <Card
+        title={<span className="ve-card-title">高频维保项目 TOP5</span>}
+        className="ve-dash-card ve-dash-top-items-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
       >
         <Table
           className="ve-dash-table ve-top-items-table"
           size="small"
           pagination={false}
+          scroll={cardTableScroll}
+          sticky={cardTableSticky}
           rowKey={(r) => `${r.itemDesc}-${r.recordCount}`}
           dataSource={overview?.rankings.topItems ?? []}
           columns={[
@@ -575,9 +313,9 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
       </Card>
 
       {/* 全局搜索 */}
-      <Card 
-        title={<span className="ve-card-title">全局搜索</span>} 
-        className="ve-dash-card ve-dash-search-card"
+      <Card
+        title={<span className="ve-card-title">全局搜索</span>}
+        className="ve-dash-card ve-dash-search-card transition-transform duration-200 ease-out hover:scale-[1.01] hover:shadow-card-lg"
       >
         <Input.Search 
           placeholder="输入车牌、项目、设备名称" 
@@ -624,6 +362,8 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
         </div>
       </Card>
     </div>
+      )}
+    </PageContainer>
   );
 }
 

@@ -1,5 +1,5 @@
 import { EyeInvisibleOutlined, EyeOutlined, LockOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Form, Input, message } from "antd";
+import { App, Button, Form, Input } from "antd";
 import { useState } from "react";
 
 import styles from "./LoginPage.module.css";
@@ -8,6 +8,7 @@ import { clearToken, setToken, setUser, setCsrfToken } from "../lib/auth";
 import { AnimatedCharacters } from "../components/AnimatedCharacters";
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
+  const { message } = App.useApp();
   const [form] = Form.useForm<{ username: string; password: string }>();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);

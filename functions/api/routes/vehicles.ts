@@ -20,6 +20,16 @@ function parseVehicleStatus(value: unknown, fallback: VehicleStatus = "normal"):
   return (VEHICLE_STATUSES as readonly string[]).includes(normalized) ? (normalized as VehicleStatus) : null;
 }
 
+/**
+ * 车牌规范化：统一大写并去掉常见分隔符/空白，便于去重与检索。
+ */
+function normalizePlateNo(value: unknown): string {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[·•\.\-\s]/g, "")
+    .trim();
+}
+
 vehiclesRoute.get("/api/vehicles", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   const rows = await listVehicles(c.env.DB, q);
@@ -36,7 +46,7 @@ vehiclesRoute.get("/api/vehicles/:id", async (c) => {
 
 vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
   const body = await readJsonRecord(c);
-  const plateNo = getTrimmedStringField(body, "plateNo").toUpperCase();
+  const plateNo = normalizePlateNo(getTrimmedStringField(body, "plateNo"));
   const vehicleType = getTrimmedStringField(body, "vehicleType");
   const brandModel = getTrimmedStringField(body, "brandModel");
   const vin = getTrimmedStringField(body, "vin").toUpperCase();
@@ -88,7 +98,7 @@ vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
 vehiclesRoute.put("/api/vehicles/:id", permitPerm("vehicle.manage"), async (c) => {
   const id = c.req.param("id").trim();
   const body = await readJsonRecord(c);
-  const plateNo = getTrimmedStringField(body, "plateNo").toUpperCase();
+  const plateNo = normalizePlateNo(getTrimmedStringField(body, "plateNo"));
   const vehicleType = getTrimmedStringField(body, "vehicleType");
   const brandModel = getTrimmedStringField(body, "brandModel");
   const vin = getTrimmedStringField(body, "vin").toUpperCase();

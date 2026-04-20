@@ -5,7 +5,7 @@ import { jsonError, jsonOk } from "../lib/response";
 import { normalizeRolePermissions } from "../lib/permissions";
 import { requireAuth } from "../middleware/require-auth";
 import { permitPerm } from "../middleware/permit";
-import { getSystemConfig, setSystemConfig } from "../services/config";
+import { getSystemConfig, normalizeOwnerDirectory, setSystemConfig } from "../services/config";
 import type { AppEnv } from "../types";
 
 export const configRoute = new Hono<AppEnv>();
@@ -23,6 +23,11 @@ async function putConfigHandler(c: Context<AppEnv>) {
   const warnDays = getNumberField(body, "warnDays", 7);
   const versionNote = getTrimmedStringField(body, "versionNote", "v1.0.0") || "v1.0.0";
   const dropdowns = body.dropdowns && typeof body.dropdowns === "object" ? (body.dropdowns as Record<string, string[]>) : {};
+  const existing = await getSystemConfig(c.env.KV);
+  const ownerDirectory =
+    body.ownerDirectory !== undefined && body.ownerDirectory !== null
+      ? normalizeOwnerDirectory(body.ownerDirectory)
+      : existing.ownerDirectory;
   const permissions = {
     roles: normalizeRolePermissions(body.permissions),
   };
@@ -32,6 +37,7 @@ async function putConfigHandler(c: Context<AppEnv>) {
     warnDays: Number.isFinite(warnDays) ? Math.max(1, Math.min(30, Math.round(warnDays))) : 7,
     versionNote,
     dropdowns,
+    ownerDirectory,
     permissions,
   });
   return jsonOk(c, { ok: true });

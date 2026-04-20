@@ -17,7 +17,7 @@ export const maintenanceRoute = new Hono<AppEnv>();
 maintenanceRoute.use("/api/maintenance/*", requireAuth);
 maintenanceRoute.use("/api/maintenance", requireAuth);
 
-const MAINTENANCE_TARGET_TYPES = ["vehicle", "equipment"] as const;
+const MAINTENANCE_TARGET_TYPES = ["vehicle", "equipment", "other"] as const;
 const MAINTENANCE_TYPES = ["routine", "fault", "accident", "periodic"] as const;
 
 function parseTargetType(value: unknown): (typeof MAINTENANCE_TARGET_TYPES)[number] | null {
@@ -69,7 +69,7 @@ maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async 
   if (!targetType || !maintenanceType) return jsonError(c, "BAD_REQUEST", "维保类型参数无效", 400);
   if (!maintenanceDate || !itemDesc || !Number.isFinite(cost) || cost < 0) return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
   if (targetType === "vehicle" && !vehicleId) return jsonError(c, "BAD_REQUEST", "车辆维保必须选择车辆", 400);
-  if (targetType === "equipment" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备维保必须填写设备名称", 400);
+  if (targetType !== "vehicle" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备/其他维保必须填写对象名称", 400);
   if (targetType === "vehicle" && mileage === null) return jsonError(c, "BAD_REQUEST", "车辆维保必须填写里程", 400);
   const id = await createMaintenance(c.env.DB, {
     targetType,
@@ -108,7 +108,7 @@ maintenanceRoute.put("/api/maintenance/:id", permitPerm("maintenance.edit"), asy
   if (!targetType || !maintenanceType) return jsonError(c, "BAD_REQUEST", "维保类型参数无效", 400);
   if (!id || !maintenanceDate || !itemDesc || !Number.isFinite(cost) || cost < 0) return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
   if (targetType === "vehicle" && !vehicleId) return jsonError(c, "BAD_REQUEST", "车辆维保必须选择车辆", 400);
-  if (targetType === "equipment" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备维保必须填写设备名称", 400);
+  if (targetType !== "vehicle" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备/其他维保必须填写对象名称", 400);
   if (targetType === "vehicle" && mileage === null) return jsonError(c, "BAD_REQUEST", "车辆维保必须填写里程", 400);
   await updateMaintenance(c.env.DB, id, {
     targetType,

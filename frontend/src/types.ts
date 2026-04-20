@@ -47,7 +47,7 @@ export type VehicleCycle = {
 
 export type MaintenanceRecord = {
   id: string;
-  targetType: "vehicle" | "equipment";
+  targetType: "vehicle" | "equipment" | "other";
   vehicleId: string | null;
   equipmentName: string | null;
   maintenanceType: "routine" | "fault" | "accident" | "periodic";
