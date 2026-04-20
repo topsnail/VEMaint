@@ -109,6 +109,7 @@ npm run dev
 - 在 Pages 项目设置中添加 `AUTH_SECRET`
 - 在 Pages 项目设置中添加 `BOOTSTRAP_ADMIN_USER`、`BOOTSTRAP_ADMIN_PASS`（用于初始化唯一管理员账号）
 - 生产环境请使用强随机密钥，禁止保留本地默认值
+- `BOOTSTRAP_ADMIN_PASS` 建议仅配置在 Cloudflare 控制台（不要写入仓库中的 `wrangler.toml`）
 5. 绑定Cloudflare资源（D1/KV/R2）操作步骤
 - D1 绑定名称：`DB`
 - KV 绑定名称：`KV`
