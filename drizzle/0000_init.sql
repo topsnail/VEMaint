@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS vehicle_cycles (
 
 CREATE TABLE IF NOT EXISTS maintenance_records (
   id TEXT PRIMARY KEY NOT NULL,
-  target_type TEXT NOT NULL CHECK (target_type IN ('vehicle', 'equipment')),
+  target_type TEXT NOT NULL CHECK (target_type IN ('vehicle', 'equipment', 'other')),
   vehicle_id TEXT,
   equipment_name TEXT,
   maintenance_type TEXT NOT NULL CHECK (maintenance_type IN ('routine', 'fault', 'accident', 'periodic')),

@@ -12,7 +12,6 @@
 - 其他依赖：Hono、JOSE、GSAP、`@ant-design/icons`
 
 ## 📁 项目目录结构
-展示精简清晰的目录结构，标注核心文件/文件夹用途，突出CF Pages专属配置文件（如_headers、_redirects、functions文件夹等）
 ```plain text
 【VEMaint】
 ├── frontend/               # React 前端源码目录
@@ -42,6 +41,13 @@
 ├── package.json            # 项目脚本、依赖与构建命令
 └── README.md               # 项目说明文档
 ```
+
+维保模块（`/maintenance`）当前采用“页面编排 + 组件分层 + Hook行为抽离”结构：
+- `frontend/src/pages/MaintenancePage.tsx`：页面编排层（数据加载、提交、弹窗、Tab 组装）
+- `frontend/src/components/maintenance/MaintenanceBasicSection.tsx`：基础信息表单区
+- `frontend/src/components/maintenance/MaintenanceCostSection.tsx`：费用与备注表单区
+- `frontend/src/hooks/useMaintenanceColumns.tsx`：表格列定义与编辑回填行为
+- `frontend/src/lib/maintenanceMeta.ts`：维保 remark 元数据解析/拼装与配件统计工具
 
 ## ⚙️ 环境准备
 1. 必备环境：安装 Node.js `【18+/20+ LTS】`、Git。
@@ -113,7 +119,6 @@ npm run dev
 - 如需自定义域名，请在 Pages 后台完成域名绑定和 DNS 配置
 
 ## 🔐 环境变量配置
-列出项目所有必需环境变量、含义、配置位置（CF Pages后台/本地），标注必填/可选
 
 | 变量名 | 必填 | 说明 | 本地配置位置 | Cloudflare Pages 配置位置 |
 | --- | --- | --- | --- | --- |
@@ -138,6 +143,12 @@ npm run dev
 - 操作日志：支持查看系统关键操作记录，便于审计与追踪。
 - 本地联调：支持 D1/KV/R2/Pages Functions 的本地模拟开发。
 
+## 🧩 维保模块说明（2026-04 更新）
+- 维保记录支持 `车辆 / 设备 / 其他` 三类对象录入，基础信息与费用信息分层维护。
+- 费用与备注支持结构化配件明细（名称、规格、单位、数量、单价），并自动汇总配件金额。
+- 维保扩展信息通过 remark 元数据存储（前缀：`__COST_META__`、`__EQUIP_META__`、`__MAINT_META__`），兼容现有后端字段，不强依赖数据库结构变更。
+- 列表页支持配件种类与金额汇总展示，编辑时可自动回填结构化数据。
+
 ## ⚠️ 注意事项
 1. Cloudflare Pages部署注意事项（构建目录、环境变量生效、缓存清理）
 - 构建输出目录必须填写 `dist`，否则 Pages 无法正确部署前端产物。
@@ -155,7 +166,7 @@ npm run dev
 - 禁止在提交中混入 `.wrangler/state`、临时数据库文件、日志文件等本地开发产物。
 - 新增配置项时优先抽离到配置层，避免继续引入硬编码、魔法值和重复常量。
 - 页面组件、路由处理、表单映射逻辑应控制复杂度，避免单文件持续膨胀。
-- 提交前至少执行 `npx tsc --noEmit` 与 `npm run build`。
+- 提交前至少执行 `npx tsc --noEmit` 与 `npm run build`（当前项目未配置 `npm run lint` 脚本）。
 - 代码审查时重点检查：空值判断、边界输入、权限校验、重复代码、命名一致性、异常处理、性能与安全风险。
 
 ## 🐛 常见问题排查

@@ -6,6 +6,7 @@ import styles from "./LoginPage.module.css";
 import { apiFetch } from "../lib/http";
 import { clearToken, setToken, setUser, setCsrfToken } from "../lib/auth";
 import { AnimatedCharacters } from "../components/AnimatedCharacters";
+import logoPng from "../../favicon.png";
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
   const { message } = App.useApp();
@@ -67,7 +68,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
       <div className={styles.leftPanel}>
         <div className={styles.leftTop}>
           <div className={styles.brandMark}>
-            <img src="/favicon.png" alt="VEMaint" className={styles.brandIconImg} />
+            <img src={logoPng} alt="VEMaint" className={styles.brandIconImg} />
           </div>
           <span className={styles.brandName}>VEMaint</span>
         </div>

@@ -18,7 +18,7 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (!claims) return jsonError(c, "UNAUTHORIZED", "登录已失效", 401);
   
   // 验证 CSRF 令牌
-  const csrfToken = c.req.header("X-CSRF-Token") || c.req.body?.csrfToken;
+  const csrfToken = c.req.header("X-CSRF-Token");
   if (!csrfToken || !validateCsrfToken(claims, csrfToken)) {
     return jsonError(c, "FORBIDDEN", "CSRF 验证失败", 403);
   }

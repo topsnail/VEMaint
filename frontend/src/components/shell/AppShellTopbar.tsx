@@ -1,11 +1,12 @@
 import { BellOutlined, LogoutOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
 import { Avatar, Badge, Button, Dropdown, Input, Space } from "antd";
+import logoPng from "../../../favicon.png";
 /** 顶栏左侧：Logo + 产品名 */
 export function AppShellTopbarBrand() {
   return (
     <div className="flex items-center gap-3">
       <div className="h-10 w-10 rounded-lg bg-white p-0.5">
-        <img src="/favicon.png" alt="VEMaint Logo" className="h-full w-full object-contain" />
+        <img src={logoPng} alt="VEMaint Logo" className="h-full w-full object-contain" />
       </div>
       <div className="leading-tight">
         <div className="text-[18px] font-semibold tracking-tight text-[#1F2937]">VEMaint</div>

@@ -30,10 +30,12 @@ function parseFilename(contentDisposition: string | null): string | null {
 }
 
 // 通用请求处理函数
+async function handleRequest<T>(path: string, init?: RequestInit): Promise<ApiResult<T>>;
+async function handleRequest(path: string, init: RequestInit | undefined, isBlob: true): Promise<ApiResult<BlobResult>>;
 async function handleRequest<T>(
-  path: string, 
+  path: string,
   init?: RequestInit,
-  isBlob = false
+  isBlob = false,
 ): Promise<ApiResult<T> | ApiResult<BlobResult>> {
   const token = getToken();
   const csrfToken = getCsrfToken();
@@ -98,7 +100,7 @@ async function handleRequest<T>(
         filename: parseFilename(res.headers.get("Content-Disposition")),
         contentType: res.headers.get("Content-Type"),
       },
-    } as ApiResult<BlobResult>;
+    };
   } else {
     let json: unknown = null;
     try {
@@ -111,7 +113,7 @@ async function handleRequest<T>(
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
-  return handleRequest<T>(path, init) as Promise<ApiResult<T>>;
+  return handleRequest<T>(path, init);
 }
 
 export async function uploadFile(file: File): Promise<ApiResult<{ key: string; url: string }>> {
@@ -134,7 +136,7 @@ export async function uploadFile(file: File): Promise<ApiResult<{ key: string; u
 }
 
 export async function apiFetchBlob(path: string, init?: RequestInit): Promise<ApiResult<BlobResult>> {
-  return handleRequest<BlobResult>(path, init, true) as Promise<ApiResult<BlobResult>>;
+  return handleRequest(path, init, true);
 }
 
 export async function openProtectedFile(path: string) {
