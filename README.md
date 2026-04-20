@@ -107,6 +107,7 @@ npm run dev
 - Node 版本：`【建议与本地保持一致，如 Node 20】`
 4. 环境变量配置：CF后台添加项目所需环境变量
 - 在 Pages 项目设置中添加 `AUTH_SECRET`
+- 在 Pages 项目设置中添加 `BOOTSTRAP_ADMIN_USER`、`BOOTSTRAP_ADMIN_PASS`（用于初始化唯一管理员账号）
 - 生产环境请使用强随机密钥，禁止保留本地默认值
 5. 绑定Cloudflare资源（D1/KV/R2）操作步骤
 - D1 绑定名称：`DB`
@@ -123,12 +124,15 @@ npm run dev
 | 变量名 | 必填 | 说明 | 本地配置位置 | Cloudflare Pages 配置位置 |
 | --- | --- | --- | --- | --- |
 | `AUTH_SECRET` | 是 | JWT 签名密钥，必须使用强随机字符串 | `wrangler.toml` 的 `[vars]` 或本地环境变量 | Pages 项目 Settings -> Environment variables |
+| `BOOTSTRAP_ADMIN_USER` | 是（生产建议） | 初始管理员用户名（仅在系统无管理员时生效） | `wrangler.toml` 的 `[vars]` | Pages 项目 Settings -> Environment variables |
+| `BOOTSTRAP_ADMIN_PASS` | 是（生产建议） | 初始管理员密码（仅在系统无管理员时生效） | `wrangler.toml` 的 `[vars]` | Pages 项目 Settings -> Environment variables |
 | `DB` | 是 | D1 数据库绑定名，不是普通字符串变量 | `wrangler.toml` 的 `[[d1_databases]]` | Pages 项目 Settings -> Bindings -> D1 |
 | `KV` | 是 | KV 命名空间绑定名，用于系统配置与 Token 黑名单 | `wrangler.toml` 的 `[[kv_namespaces]]` | Pages 项目 Settings -> Bindings -> KV |
 | `R2` | 是 | R2 存储桶绑定名，用于附件上传与读取 | `wrangler.toml` 的 `[[r2_buckets]]` | Pages 项目 Settings -> Bindings -> R2 |
 
 补充说明：
 - `AUTH_SECRET` 为必填项，线上环境必须替换 `【local-dev-auth-secret-please-change】`
+- `BOOTSTRAP_ADMIN_USER` / `BOOTSTRAP_ADMIN_PASS` 仅在“系统无管理员账号”时用于自动初始化管理员；初始化成功后可在应用内修改密码
 - `database_id`、`bucket_name`、`kv namespace id` 等资源标识应替换为你自己的 Cloudflare 实例信息
 
 ## 📌 核心功能说明

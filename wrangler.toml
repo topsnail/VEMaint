@@ -4,6 +4,8 @@ pages_build_output_dir = "dist"
 compatibility_flags = ["nodejs_compat"]
 [vars]
 AUTH_SECRET = "local-dev-auth-secret-please-change"
+BOOTSTRAP_ADMIN_USER = "admin"
+BOOTSTRAP_ADMIN_PASS = "change-this-password"
 
 [[d1_databases]]
 binding = "DB"

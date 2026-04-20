@@ -15,6 +15,11 @@ export async function getUserByUsername(db: D1Database, username: string): Promi
   return await d1First<UserRow>(db, "select * from users where username = ?1", [username]);
 }
 
+export async function hasAdminUser(db: D1Database): Promise<boolean> {
+  const row = await d1First<{ total: number }>(db, "select count(1) as total from users where role = 'admin'");
+  return Number(row?.total ?? 0) > 0;
+}
+
 export async function listUsers(db: D1Database): Promise<Array<Omit<UserRow, "password_hash">>> {
   return await d1All<Omit<UserRow, "password_hash">>(
     db,

@@ -5,14 +5,32 @@ import { jsonError, jsonOk } from "../lib/response";
 import { revokeToken, signAccessToken } from "../lib/jwt";
 import { requireAuth } from "../middleware/require-auth";
 import { hashPassword, verifyPassword } from "../lib/password";
-import { createUser, getUserByUsername, updateUserPassword } from "../repositories/users";
+import { createUser, getUserByUsername, hasAdminUser, updateUserPassword } from "../repositories/users";
 import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 
 export const authRoute = new Hono<AppEnv>();
 
+function getEnvBootstrapAdmin(c: Context<AppEnv>): { username: string; password: string } | null {
+  const envVars = c.env as Record<string, unknown>;
+  const username = normalizeUsername(String(envVars.BOOTSTRAP_ADMIN_USER ?? "admin").trim());
+  const password = String(envVars.BOOTSTRAP_ADMIN_PASS ?? "").trim();
+  if (!username || !password) return null;
+  return { username, password };
+}
+
+async function ensureBootstrapAdmin(c: Context<AppEnv>): Promise<boolean> {
+  if (await hasAdminUser(c.env.DB)) return true;
+  const envAdmin = getEnvBootstrapAdmin(c);
+  if (!envAdmin) return false;
+  const passwordHash = await hashPassword(envAdmin.password);
+  await createUser(c.env.DB, { username: envAdmin.username, passwordHash, role: "admin" });
+  return true;
+}
+
 async function loginHandler(c: Context<AppEnv>) {
+  await ensureBootstrapAdmin(c);
   const body = await readJsonRecord(c);
   const username = normalizeUsername(getTrimmedStringField(body, "username"));
   const password = getTrimmedStringField(body, "password");
@@ -47,14 +65,11 @@ authRoute.post("/api/logout", requireAuth, async (c) => {
 });
 
 authRoute.post("/api/bootstrap", async (c) => {
-  const admin = await getUserByUsername(c.env.DB, "admin");
-  if (admin) return jsonError(c, "BOOTSTRAPPED", "系统已初始化", 400);
-  const body = await readJsonRecord(c);
-  const username = normalizeUsername(getTrimmedStringField(body, "username", "admin"));
-  const password = getTrimmedStringField(body, "password");
-  if (!username || !password) return jsonError(c, "BAD_REQUEST", "请提供用户名和密码", 400);
-  const passwordHash = await hashPassword(password);
-  await createUser(c.env.DB, { username, passwordHash, role: "admin" });
+  if (await hasAdminUser(c.env.DB)) return jsonError(c, "BOOTSTRAPPED", "系统已初始化", 400);
+  const ok = await ensureBootstrapAdmin(c);
+  if (!ok) {
+    return jsonError(c, "BAD_REQUEST", "请在 Cloudflare Pages 环境变量中设置 BOOTSTRAP_ADMIN_USER 与 BOOTSTRAP_ADMIN_PASS", 400);
+  }
   return jsonOk(c, { ok: true }, 201);
 });
 

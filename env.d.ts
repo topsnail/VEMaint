@@ -6,6 +6,8 @@ export type CloudflareEnv = {
   R2: R2Bucket;
   AUTH_SECRET?: string;
   TOKEN_BLACKLIST_PREFIX?: string;
+  BOOTSTRAP_ADMIN_USER?: string;
+  BOOTSTRAP_ADMIN_PASS?: string;
 };
 
 declare module "*.module.css" {
