@@ -6,6 +6,7 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "noImplicitAny": false,
     "skipLibCheck": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -13,7 +14,9 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./frontend/src/*"]
+      "@/*": ["./frontend/src/*"],
+      "antd": ["./frontend/src/lib/ui/antd-bridge.tsx"],
+      "@ant-design/icons": ["./frontend/src/lib/ui/icons-bridge.tsx"]
     },
     "types": ["@cloudflare/workers-types"]
   },

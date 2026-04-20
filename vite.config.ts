@@ -1,9 +1,16 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
 
 export default defineConfig({
   root: "frontend",
   plugins: [react()],
+  resolve: {
+    alias: {
+      antd: path.resolve(__dirname, "frontend/src/lib/ui/antd-bridge.tsx"),
+      "@ant-design/icons": path.resolve(__dirname, "frontend/src/lib/ui/icons-bridge.tsx"),
+    },
+  },
   publicDir: "../public",
   optimizeDeps: {
     esbuildOptions: {

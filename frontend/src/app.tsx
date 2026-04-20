@@ -1,6 +1,5 @@
 import { BellOutlined, CarOutlined, FileTextOutlined, PlusOutlined, SettingOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Button, ConfigProvider, Menu, Skeleton, Space, Typography } from "antd";
-import zhCN from "antd/locale/zh_CN";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -144,19 +143,26 @@ function AppInner() {
     : canViewVehicles
       ? "/vehicles"
       : canViewMaintenance
-        ? "/maintenance"
+        ? "/maintenance/vehicles"
         : "/profile";
+
+  const maintenanceItems = canViewMaintenance
+    ? [
+        { key: "/maintenance/vehicles", icon: <FileTextOutlined />, label: "车辆维保" },
+        { key: "/maintenance/equipment", icon: <FileTextOutlined />, label: "设备维保" },
+      ]
+    : [];
 
   const items = [
     ...(canViewDashboard ? [{ key: "/dashboard", icon: <BellOutlined />, label: "仪表盘" }] : []),
     ...(canViewVehicles ? [{ key: "/vehicles", icon: <CarOutlined />, label: "车辆台账" }] : []),
-    ...(canViewMaintenance ? [{ key: "/maintenance", icon: <FileTextOutlined />, label: "维保记录" }] : []),
+    ...maintenanceItems,
     ...(canManageConfig ? [{ key: "/config", icon: <SettingOutlined />, label: "系统配置" }] : []),
   ];
 
   const quickActions = [
     ...(canManageVehicle ? [{ key: "new-vehicle", label: "新增车辆", target: "/vehicles?create=1" }] : []),
-    ...(canEditMaintenance ? [{ key: "new-maint", label: "新增维保", target: "/maintenance?create=1" }] : []),
+    ...(canEditMaintenance ? [{ key: "new-maint", label: "新增维保", target: "/maintenance/vehicles?create=1" }] : []),
   ];
 
   const mobileDockItems: MobileDockItem[] = [
@@ -245,7 +251,19 @@ function AppInner() {
             <Route
               path="/maintenance"
               element={
-                canViewMaintenance ? <MaintenancePage canEdit={canEditMaintenance} canDelete={canDeleteMaintenance} /> : <Navigate to={defaultPath} replace />
+                canViewMaintenance ? <MaintenancePage canEdit={canEditMaintenance} canDelete={canDeleteMaintenance} view="all" /> : <Navigate to={defaultPath} replace />
+              }
+            />
+            <Route
+              path="/maintenance/vehicles"
+              element={
+                canViewMaintenance ? <MaintenancePage canEdit={canEditMaintenance} canDelete={canDeleteMaintenance} view="vehicle" /> : <Navigate to={defaultPath} replace />
+              }
+            />
+            <Route
+              path="/maintenance/equipment"
+              element={
+                canViewMaintenance ? <MaintenancePage canEdit={canEditMaintenance} canDelete={canDeleteMaintenance} view="equipment" /> : <Navigate to={defaultPath} replace />
               }
             />
             <Route path="/profile" element={<ProfilePage />} />
@@ -261,7 +279,7 @@ function AppInner() {
 
 export function App() {
   return (
-    <ConfigProvider locale={zhCN} theme={veTheme}>
+    <ConfigProvider theme={veTheme}>
       <AntdApp>
         <BrowserRouter>
           <AppInner />

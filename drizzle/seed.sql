@@ -1,10 +1,10 @@
 INSERT OR IGNORE INTO users (id, username, password_hash, role, created_at, updated_at) VALUES
-('u-admin', 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin', datetime('now'), datetime('now')),
+('u-admin', 'admin', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'admin', datetime('now'), datetime('now')),
 ('u-maint', 'maintainer', '2eab737d095f86d7e5a1fc616298ac81169cc91b09d1035b44706bc0a1c10ecf', 'maintainer', datetime('now'), datetime('now')),
 ('u-reader', 'reader', '128a1cb71e153e042708de7ea043d9a030fc1a83fa258788e7ef7aa23309eb72', 'reader', datetime('now'), datetime('now'));
 
 INSERT OR IGNORE INTO users (id, username, password_hash, role, disabled, created_at, updated_at) VALUES
-('u-admin-2', 'admin2', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin', 0, datetime('now', '-14 days'), datetime('now', '-14 days')),
+('u-admin-2', 'admin2', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'admin', 0, datetime('now', '-14 days'), datetime('now', '-14 days')),
 ('u-maint-2', 'maint2', '2eab737d095f86d7e5a1fc616298ac81169cc91b09d1035b44706bc0a1c10ecf', 'maintainer', 0, datetime('now', '-10 days'), datetime('now', '-8 days')),
 ('u-maint-3', 'maint3', '2eab737d095f86d7e5a1fc616298ac81169cc91b09d1035b44706bc0a1c10ecf', 'maintainer', 1, datetime('now', '-9 days'), datetime('now', '-1 days')),
 ('u-reader-2', 'reader2', '128a1cb71e153e042708de7ea043d9a030fc1a83fa258788e7ef7aa23309eb72', 'reader', 0, datetime('now', '-7 days'), datetime('now', '-7 days')),

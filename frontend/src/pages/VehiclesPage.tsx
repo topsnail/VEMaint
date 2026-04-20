@@ -3,6 +3,7 @@ import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Form, Input, 
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm as useRhfForm } from "react-hook-form";
 import type { Vehicle, VehicleCycle } from "../types";
 import { R2AttachmentUploader } from "../components/R2AttachmentUploader";
 import { useVehiclesTableData } from "../hooks/useVehiclesTableData";
@@ -16,6 +17,7 @@ import { openProtectedFile } from "../lib/http";
 import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
+import { vehicleSubmitSchema } from "../lib/schemas";
 
 type VehicleForm = {
   plateNo: string;
@@ -79,6 +81,37 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [filterNearDue, setFilterNearDue] = useState<string>(() => initialParams.get("due") ?? "");
   const [filterIncomplete, setFilterIncomplete] = useState<string>("");
   const [form] = Form.useForm<VehicleForm>();
+  const {
+    control,
+    getValues: getRhfValues,
+    reset: resetRhf,
+    setValue: setRhfValue,
+  } = useRhfForm<VehicleForm>({
+    defaultValues: {
+      plateNo: DEFAULT_PLATE_NO_PREFIX,
+      vehicleType: "",
+      energyType: "",
+      usageNature: "",
+      brandModel: "",
+      vin: "",
+      engineNo: "",
+      regDate: "",
+      issueDate: "",
+      archiveNo: "",
+      loadPeople: "",
+      loadWeight: "",
+      dimensions: "",
+      ownerName: "",
+      ownerAddress: "",
+      ownerDept: "",
+      ownerPerson: "",
+      mileage: 0,
+      maintNextKm: 0,
+      status: "normal",
+      drivingLicenseAttachmentKey: "",
+      remark: "",
+    },
+  });
 
   const parseRemarkMeta = (remarkText: string | null | undefined) => {
     const lines = (remarkText ?? "")
@@ -299,6 +332,17 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     if (params.get("create") !== "1" || !canManage) return;
     setEditing(null);
     form.resetFields();
+    resetRhf({
+      plateNo: DEFAULT_PLATE_NO_PREFIX,
+      vehicleType: "",
+      brandModel: "",
+      vin: "",
+      engineNo: "",
+      ownerDept: "",
+      ownerPerson: "",
+      mileage: 0,
+      status: "normal",
+    });
     setOpen(true);
     params.delete("create");
     const next = params.toString();
@@ -308,6 +352,21 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
 
   const submit = async () => {
     const v = await form.validateFields();
+    const rhfValues = getRhfValues();
+    const validated = vehicleSubmitSchema.safeParse({
+      plateNo: rhfValues.plateNo,
+      vehicleType: rhfValues.vehicleType,
+      brandModel: rhfValues.brandModel,
+      vin: rhfValues.vin,
+      engineNo: rhfValues.engineNo,
+      ownerDept: rhfValues.ownerDept,
+      ownerPerson: rhfValues.ownerPerson,
+      mileage: Number(rhfValues.mileage),
+    });
+    if (!validated.success) {
+      message.error(validated.error.issues[0]?.message ?? "表单校验失败");
+      return;
+    }
     const normalizePlateNo = (value: unknown) =>
       String(value ?? "")
         .toUpperCase()
@@ -321,23 +380,24 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       }
       return "";
     };
-    const regDate = normalizeDate(v.regDate);
-    const issueDate = normalizeDate(v.issueDate);
-    const mergedUsageNature = [v.energyType, v.usageNature].filter(Boolean).join(" / ");
-    const mergedLoadSpec = [v.loadPeople, v.loadWeight, v.dimensions].filter(Boolean).join(" / ");
+    const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
+    const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
+    const mergedUsageNature = [rhfValues.energyType, rhfValues.usageNature].filter(Boolean).join(" / ");
+    const mergedLoadSpec = [rhfValues.loadPeople, rhfValues.loadWeight, rhfValues.dimensions].filter(Boolean).join(" / ");
     const mergedRemark = [
-      v.remark,
-      v.archiveNo ? `档案编号: ${v.archiveNo}` : "",
-      v.ownerName ? `所有人: ${v.ownerName}` : "",
+      rhfValues.remark,
+      rhfValues.archiveNo ? `档案编号: ${rhfValues.archiveNo}` : "",
+      rhfValues.ownerName ? `所有人: ${rhfValues.ownerName}` : "",
       issueDate ? `发证日期: ${issueDate}` : "",
-      v.ownerAddress ? `住址: ${v.ownerAddress}` : "",
-      v.drivingLicenseAttachmentKey ? `行驶证附件Key: ${v.drivingLicenseAttachmentKey}` : "",
+      rhfValues.ownerAddress ? `住址: ${rhfValues.ownerAddress}` : "",
+      rhfValues.drivingLicenseAttachmentKey ? `行驶证附件Key: ${rhfValues.drivingLicenseAttachmentKey}` : "",
     ]
       .filter(Boolean)
       .join("\n");
     const payload = {
       ...v,
-      plateNo: normalizePlateNo(v.plateNo),
+      ...rhfValues,
+      plateNo: normalizePlateNo(rhfValues.plateNo),
       regDate: regDate || null,
       loadSpec: mergedLoadSpec || null,
       usageNature: mergedUsageNature || null,
@@ -364,6 +424,30 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     }
     setOpen(false);
     form.resetFields();
+    resetRhf({
+      plateNo: DEFAULT_PLATE_NO_PREFIX,
+      vehicleType: "",
+      energyType: "",
+      usageNature: "",
+      brandModel: "",
+      vin: "",
+      engineNo: "",
+      regDate: "",
+      issueDate: "",
+      archiveNo: "",
+      loadPeople: "",
+      loadWeight: "",
+      dimensions: "",
+      ownerName: "",
+      ownerAddress: "",
+      ownerDept: "",
+      ownerPerson: "",
+      mileage: 0,
+      maintNextKm: 0,
+      status: "normal",
+      drivingLicenseAttachmentKey: "",
+      remark: "",
+    });
     setEditing(null);
     await load(q);
   };
@@ -414,6 +498,28 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
       remark: meta.remarkBody || "",
     });
+    setRhfValue("plateNo", r.plateNo);
+    setRhfValue("vehicleType", r.vehicleType);
+    setRhfValue("energyType", energyType || "");
+    setRhfValue("usageNature", usageNature || "");
+    setRhfValue("brandModel", r.brandModel);
+    setRhfValue("vin", r.vin);
+    setRhfValue("engineNo", r.engineNo);
+    setRhfValue("regDate", r.regDate || "");
+    setRhfValue("issueDate", meta.issueDate || "");
+    setRhfValue("archiveNo", meta.archiveNo || "");
+    setRhfValue("loadPeople", loadPeople || "");
+    setRhfValue("loadWeight", loadWeight || "");
+    setRhfValue("dimensions", dimensions || "");
+    setRhfValue("ownerName", meta.ownerName || "");
+    setRhfValue("ownerAddress", meta.ownerAddress || "");
+    setRhfValue("ownerDept", r.ownerDept);
+    setRhfValue("ownerPerson", r.ownerPerson);
+    setRhfValue("mileage", Number(r.mileage ?? 0));
+    setRhfValue("maintNextKm", Number((r as any).maintNextKm ?? 0));
+    setRhfValue("status", r.status);
+    setRhfValue("drivingLicenseAttachmentKey", meta.drivingLicenseAttachmentKey || "");
+    setRhfValue("remark", meta.remarkBody || "");
 
     void fetchVehicleCycle(r.id)
       .then((cycleRes) => {
@@ -433,6 +539,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             maintNextDate: c.maintNextDate || "",
             maintNextKm: c.maintNextKm ?? undefined,
           });
+          setRhfValue("maintNextKm", Number(c.maintNextKm ?? 0));
         }
       })
       .finally(() => setOpen(true));
@@ -497,6 +604,30 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             onClick={() => {
               setEditing(null);
               form.resetFields();
+              resetRhf({
+                plateNo: DEFAULT_PLATE_NO_PREFIX,
+                vehicleType: "",
+                energyType: "",
+                usageNature: "",
+                brandModel: "",
+                vin: "",
+                engineNo: "",
+                regDate: "",
+                issueDate: "",
+                archiveNo: "",
+                loadPeople: "",
+                loadWeight: "",
+                dimensions: "",
+                ownerName: "",
+                ownerAddress: "",
+                ownerDept: "",
+                ownerPerson: "",
+                mileage: 0,
+                maintNextKm: 0,
+                status: "normal",
+                drivingLicenseAttachmentKey: "",
+                remark: "",
+              });
               setOpen(true);
             }}
           >
@@ -844,154 +975,265 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                 children: (
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item
-                        label="号牌号码"
-                        name="plateNo"
-                        initialValue={DEFAULT_PLATE_NO_PREFIX}
-                        rules={[{ required: true }]}
-                      >
-                        <Input placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀" />
+                      <Form.Item label="号牌号码">
+                        <Controller
+                          name="plateNo"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀" />}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="车辆类型" name="vehicleType" rules={[{ required: true }]}>
-                        <Select options={vehicleTypeOptions} placeholder="请选择车辆类型" />
+                      <Form.Item label="车辆类型">
+                        <Controller
+                          name="vehicleType"
+                          control={control}
+                          render={({ field }) => <Select {...field} options={vehicleTypeOptions} placeholder="请选择车辆类型" />}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="能源类型" name="energyType" rules={[{ required: true }]}>
-                        <Select allowClear options={energyTypeOptions} placeholder="请选择能源类型" />
+                        <Controller
+                          name="energyType"
+                          control={control}
+                          render={({ field }) => <Select {...field} allowClear options={energyTypeOptions} placeholder="请选择能源类型" />}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item label="使用性质" name="usageNature" rules={[{ required: true }]}>
-                        <Select allowClear options={usageNatureOptions} placeholder="如：营运/非营运" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="品牌型号" name="brandModel" rules={[{ required: true }]}>
-                        {renderTextInput("brandModel", "如：丰田凯美瑞")}
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="车辆识别代号" name="vin" rules={[{ required: true }]}>
-                        <Input placeholder="17 位 VIN" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="发动机号" name="engineNo" rules={[{ required: true }]}>
-                        <Input placeholder="请输入发动机号" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="注册日期" name="regDate" rules={[{ required: true }]}>
-                        <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择注册日期" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="发证日期" name="issueDate" rules={[{ required: true }]}>
-                        <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择发证日期" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="档案编号" name="archiveNo" rules={[{ required: true }]}>
-                        <Input placeholder="请输入档案编号" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="核定载人数" name="loadPeople" rules={[{ required: true }]}>
-                        {renderTextInput("loadPeople", "如：5 人")}
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="核定载质量" name="loadWeight" rules={[{ required: true }]}>
-                        {renderTextInput("loadWeight", "如：3500kg")}
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="外廓尺寸" name="dimensions" rules={[{ required: true }]}>
-                        {renderTextInput("dimensions", "长×宽×高")}
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="所有人" name="ownerName" rules={[{ required: true }]}>
-                        <AutoComplete
-                          className="w-full"
-                          style={{ width: "100%" }}
-                          options={ownerNameSelectOptions}
-                          placeholder="请选择或输入所有人（系统配置中可维护对照表）"
-                          filterOption={(inputValue, option) =>
-                            (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
-                          }
-                          onSelect={(value) => {
-                            const addr = ownerDirectoryMap.get(value);
-                            if (addr !== undefined) form.setFieldValue("ownerAddress", addr);
-                          }}
+                        <Controller
+                          name="usageNature"
+                          control={control}
+                          render={({ field }) => <Select {...field} allowClear options={usageNatureOptions} placeholder="如：营运/非营运" />}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="住址" name="ownerAddress" rules={[{ required: true }]}>
-                        <Input placeholder="选择所有人后自动填入，也可手动修改" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="本次保养里程" name="mileage" rules={[{ required: true }]}>
-                        <Input type="number" placeholder="当前里程表读数（km）" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="下次保养里程" name="maintNextKm" rules={[{ required: true }]}>
-                        <Input type="number" placeholder="计划保养里程（km）" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item label="车辆状态" name="status" initialValue="normal" rules={[{ required: true }]}>
-                        <Select
-                          placeholder="请选择车辆状态"
-                          options={statusOptions as unknown as { label: string; value: VehicleForm["status"] }[]}
+                      <Form.Item label="品牌型号">
+                        <Controller
+                          name="brandModel"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="如：丰田凯美瑞" />}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="使用部门" name="ownerDept" rules={[{ required: true }]}>
-                        <AutoComplete
-                          className="w-full"
-                          style={{ width: "100%" }}
-                          options={ownerDeptSelectOptions}
-                          placeholder="请选择或输入部门"
-                          filterOption={(inputValue, option) =>
-                            (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
-                          }
+                      <Form.Item label="车辆识别代号">
+                        <Controller
+                          name="vin"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="17 位 VIN" />}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="责任人" name="ownerPerson" rules={[{ required: true }]}>
-                        {renderTextInput("ownerPerson", "请输入责任人")}
+                      <Form.Item label="发动机号">
+                        <Controller
+                          name="engineNo"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="请输入发动机号" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="注册日期">
+                        <Controller
+                          name="regDate"
+                          control={control}
+                          render={({ field }) => <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择注册日期" value={field.value} onChange={field.onChange} />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="发证日期">
+                        <Controller
+                          name="issueDate"
+                          control={control}
+                          render={({ field }) => <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="选择发证日期" value={field.value} onChange={field.onChange} />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="档案编号">
+                        <Controller
+                          name="archiveNo"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="请输入档案编号" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="核定载人数">
+                        <Controller
+                          name="loadPeople"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="如：5 人" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="核定载质量">
+                        <Controller
+                          name="loadWeight"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="如：3500kg" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="外廓尺寸">
+                        <Controller
+                          name="dimensions"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="长×宽×高" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="所有人">
+                        <Controller
+                          name="ownerName"
+                          control={control}
+                          render={({ field }) => (
+                            <AutoComplete
+                              className="w-full"
+                              style={{ width: "100%" }}
+                              options={ownerNameSelectOptions}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="请选择或输入所有人（系统配置中可维护对照表）"
+                              filterOption={(inputValue, option) =>
+                                (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
+                              }
+                              onSelect={(value) => {
+                                field.onChange(value);
+                                const addr = ownerDirectoryMap.get(value);
+                                if (addr !== undefined) {
+                                  setRhfValue("ownerAddress", addr);
+                                  form.setFieldValue("ownerAddress", addr);
+                                }
+                              }}
+                            />
+                          )}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="住址">
+                        <Controller
+                          name="ownerAddress"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="选择所有人后自动填入，也可手动修改" />}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="本次保养里程">
+                        <Controller
+                          name="mileage"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(Number(e.target.value))}
+                              placeholder="当前里程表读数（km）"
+                            />
+                          )}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="下次保养里程">
+                        <Controller
+                          name="maintNextKm"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(Number(e.target.value))}
+                              placeholder="计划保养里程（km）"
+                            />
+                          )}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="车辆状态">
+                        <Controller
+                          name="status"
+                          control={control}
+                          render={({ field }) => (
+                            <Select
+                              {...field}
+                              placeholder="请选择车辆状态"
+                              options={statusOptions as unknown as { label: string; value: VehicleForm["status"] }[]}
+                            />
+                          )}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="使用部门">
+                        <Controller
+                          name="ownerDept"
+                          control={control}
+                          render={({ field }) => (
+                            <AutoComplete
+                              className="w-full"
+                              style={{ width: "100%" }}
+                              options={ownerDeptSelectOptions}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="请选择或输入部门"
+                              filterOption={(inputValue, option) =>
+                                (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())
+                              }
+                            />
+                          )}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="责任人">
+                        <Controller
+                          name="ownerPerson"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="请输入责任人" />}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Form.Item label="行驶证附件Key" name="drivingLicenseAttachmentKey">
-                        <Input placeholder="上传后自动填充，或可手动填写" />
+                      <Form.Item label="行驶证附件Key">
+                        <Controller
+                          name="drivingLicenseAttachmentKey"
+                          control={control}
+                          render={({ field }) => <Input {...field} placeholder="上传后自动填充，或可手动填写" />}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
                       <Form.Item label="上传行驶证">
-                        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.drivingLicenseAttachmentKey !== cur.drivingLicenseAttachmentKey}>
-                          {() => (
-                            <R2AttachmentUploader
-                              value={form.getFieldValue("drivingLicenseAttachmentKey")}
-                              onUploaded={(key) => form.setFieldValue("drivingLicenseAttachmentKey", key)}
-                              description="拖拽或点击上传行驶证扫描件（图片/PDF）"
-                            />
-                          )}
-                        </Form.Item>
+                        <R2AttachmentUploader
+                          value={getRhfValues().drivingLicenseAttachmentKey}
+                          onUploaded={(key) => {
+                            setRhfValue("drivingLicenseAttachmentKey", key);
+                            form.setFieldValue("drivingLicenseAttachmentKey", key);
+                          }}
+                          description="拖拽或点击上传行驶证扫描件（图片/PDF）"
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Form.Item label="备注" name="remark">
-                        <Input.TextArea rows={4} placeholder="其他补充说明（不含结构化元数据行）" />
+                      <Form.Item label="备注">
+                        <Controller
+                          name="remark"
+                          control={control}
+                          render={({ field }) => <Input.TextArea rows={4} placeholder="其他补充说明（不含结构化元数据行）" value={field.value ?? ""} onChange={field.onChange} />}
+                        />
                       </Form.Item>
                     </Col>
                   </Row>

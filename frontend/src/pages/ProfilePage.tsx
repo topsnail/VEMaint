@@ -1,18 +1,31 @@
-import { App, Button, Form, Input } from "antd";
+import { Button, Input } from "antd";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { PageContainer } from "../components/PageContainer";
 import { useProfilePassword } from "../hooks/useProfilePassword";
+import { profilePasswordSchema, type ProfilePasswordInput } from "../lib/schemas";
 
 export function ProfilePage() {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<{ oldPassword: string; newPassword: string }>();
   const { submitting, changePassword } = useProfilePassword();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ProfilePasswordInput>({
+    resolver: zodResolver(profilePasswordSchema),
+    defaultValues: { oldPassword: "", newPassword: "" },
+  });
 
-  const submit = async () => {
-    const values = await form.validateFields();
+  const submit = async (values: ProfilePasswordInput) => {
     const res = await changePassword(values.oldPassword, values.newPassword);
-    if (!res.ok) return message.error(res.error.message);
-    message.success("密码修改成功");
-    form.resetFields();
+    if (!res.ok) {
+      toast.error(res.error.message);
+      return;
+    }
+    toast.success("密码修改成功");
+    reset();
   };
 
   return (
@@ -24,18 +37,22 @@ export function ProfilePage() {
       ]}
     >
       <div className="max-w-lg">
-      <Form form={form} layout="vertical">
-        <Form.Item label="旧密码" name="oldPassword" rules={[{ required: true }]}>
-          <Input.Password />
-        </Form.Item>
-        <Form.Item label="新密码" name="newPassword" rules={[{ required: true }, { min: 6 }]}>
-          <Input.Password />
-        </Form.Item>
-        <Button type="primary" loading={submitting} onClick={() => void submit()}>
-          修改密码
-        </Button>
-      </Form>
-    </div>
+        <form className="space-y-3" onSubmit={handleSubmit(submit)}>
+          <div>
+            <div className="mb-1 text-sm font-medium text-slate-700">旧密码</div>
+            <Input.Password {...register("oldPassword")} />
+            {errors.oldPassword?.message ? <div className="mt-1 text-xs text-red-500">{errors.oldPassword.message}</div> : null}
+          </div>
+          <div>
+            <div className="mb-1 text-sm font-medium text-slate-700">新密码</div>
+            <Input.Password {...register("newPassword")} />
+            {errors.newPassword?.message ? <div className="mt-1 text-xs text-red-500">{errors.newPassword.message}</div> : null}
+          </div>
+          <Button type="primary" htmlType="submit" loading={submitting}>
+            修改密码
+          </Button>
+        </form>
+      </div>
     </PageContainer>
   );
 }

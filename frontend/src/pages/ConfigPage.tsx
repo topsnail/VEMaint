@@ -7,7 +7,6 @@ import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
 import { downloadProtectedFile, openProtectedFile } from "../lib/http";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
-import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 
 type ConfigForm = {
   siteName: string;
@@ -191,7 +190,7 @@ export function ConfigPage() {
         { title: "系统配置" },
       ]}
     >
-      <div className="ve-config-page max-w-3xl">
+      <div className="ve-config-page w-full">
       <Form form={form} layout="vertical">
         <Tabs
           items={[
@@ -300,12 +299,12 @@ export function ConfigPage() {
                     >
                       <Input.TextArea rows={1} placeholder="例如：一号车间,二号车间,仓库,停车场,其他" className="ve-textarea" />
                     </Form.Item>
-                    <Typography.Text type="secondary" className="mt-2 block">
+                    <Typography.Text type="secondary" className="mt-0.5 block">
                       所有人与住址：在台账中选择「所有人」后自动填充对应「住址」；也可在台账中手输未建档的所有人。
                     </Typography.Text>
                     <Form.List name="ownerDirectory">
                       {(fields, { add, remove }) => (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-1 space-y-1">
                           {fields.map(({ key, name, ...restField }) => (
                             <Space key={key} className="w-full max-w-full" align="start" wrap>
                               <Form.Item
@@ -343,7 +342,7 @@ export function ConfigPage() {
               children: (
                 <Card size="small" title="数据导出与操作日志" className="ve-config-card">
                   <Typography.Text type="secondary">导出为 CSV 文件，以及查看最近操作日志。</Typography.Text>
-                  <div className="mt-3">
+                  <div className="mt-1.5">
                     <Space wrap>
                       <Button
                         type="link"
@@ -374,7 +373,7 @@ export function ConfigPage() {
               label: "角色权限",
               children: (
                 <Card size="small" title="角色权限" className="ve-config-card">
-                  <Space direction="vertical" className="w-full" size={12}>
+                  <Space direction="vertical" className="w-full" size={6}>
                     <Space>
                       <Button type="primary" icon={<TeamOutlined />} onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-primary-btn">
                         用户管理
@@ -383,8 +382,8 @@ export function ConfigPage() {
                         用户列表
                       </Button>
                     </Space>
-                    <div className="ve-permission-container rounded-lg border border-slate-200 bg-white p-3">
-                      <div className="mb-3 flex items-center justify-end gap-6 border-b border-slate-100 pb-3">
+                    <div className="ve-permission-container rounded-lg border border-slate-200 bg-white p-2.5">
+                      <div className="mb-2 flex items-center justify-end gap-3 border-b border-slate-100 pb-2">
                         {(Object.keys(roleLabel) as Array<keyof RolePermissions>).map((role) => (
                           <Space key={role} size={8}>
                             <Typography.Text strong>{roleLabel[role]}</Typography.Text>
@@ -398,7 +397,7 @@ export function ConfigPage() {
                         ))}
                       </div>
                       <Collapse
-                        defaultActiveKey={PERMISSION_GROUPS.map((g) => g.key)}
+                        defaultActiveKey={PERMISSION_GROUPS[0] ? [PERMISSION_GROUPS[0].key] : []}
                         items={PERMISSION_GROUPS.map((group) => ({
                           key: group.key,
                           label: (
@@ -413,8 +412,6 @@ export function ConfigPage() {
                               pagination={false}
                               rowKey={(r) => r.key}
                               className="ve-permission-table"
-                              scroll={listTableScroll}
-                              sticky={listTableSticky}
                               dataSource={group.items.map((item) => ({
                                 key: item.key,
                                 permission: (

@@ -14,16 +14,16 @@ export function PageContainer(props: {
   const { title, breadcrumb, extra, children, className = "" } = props;
 
   return (
-    <div className={`p-4 md:p-6 ${className}`.trim()}>
+    <div className={`p-4 md:p-5 ${className}`.trim()}>
       {breadcrumb?.length ? (
         <Breadcrumb
-          className="mb-3"
+          className="mb-2"
           items={breadcrumb.map((item) => ({
             title: item.path ? <Link to={item.path}>{item.title}</Link> : item.title,
           }))}
         />
       ) : null}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <Typography.Title level={4} className="!mb-0 !text-base md:!text-lg">
           {title}
         </Typography.Title>

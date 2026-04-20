@@ -10,6 +10,7 @@ import { useMaintenancePageData } from "../hooks/useMaintenancePageData";
 import { getUser } from "../lib/auth";
 import { openProtectedFile } from "../lib/http";
 import { calcPartStats, joinRemarkMeta, parseRemarkMeta } from "../lib/maintenanceMeta";
+import { maintenanceSubmitSchema } from "../lib/schemas";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import type { MaintenanceRecord } from "../types";
 
@@ -43,7 +44,17 @@ type FormModel = {
   attachmentKey?: string | null;
 };
 
-export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
+type MaintenanceViewMode = "all" | "vehicle" | "equipment";
+
+export function MaintenancePage({
+  canEdit,
+  canDelete,
+  view = "all",
+}: {
+  canEdit: boolean;
+  canDelete: boolean;
+  view?: MaintenanceViewMode;
+}) {
   const { message } = App.useApp();
   const currentUserName = getUser()?.username ?? "当前用户";
   const { rows, vehicles, dropdowns, loading: pageLoading, load, loadDropdowns, removeRecord, saveRecord } = useMaintenancePageData();
@@ -61,12 +72,15 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
     if (params.get("create") !== "1" || !canEdit) return;
     setEditing(null);
     form.resetFields();
+    if (view === "vehicle" || view === "equipment") {
+      form.setFieldValue("targetType", view);
+    }
     setOpen(true);
     params.delete("create");
     const next = params.toString();
     const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [canEdit, form]);
+  }, [canEdit, form, view]);
 
   const maintenanceTypeDefaults = ["日常保养", "故障维修", "事故维修", "定期检修"];
   const maintenanceTypeCodes: FormModel["maintenanceType"][] = ["routine", "fault", "accident", "periodic"];
@@ -143,6 +157,20 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
       return;
     }
     const itemDesc = v.itemDesc === "其他" ? (v.itemDescOther ?? "").trim() || "其他" : v.itemDesc;
+    const validated = maintenanceSubmitSchema.safeParse({
+      targetType: v.targetType,
+      vehicleId: v.vehicleId,
+      equipmentName: v.equipmentName,
+      maintenanceType: v.maintenanceType,
+      maintenanceDate,
+      itemDesc,
+      cost: mergedCost,
+      mileage: v.mileage,
+    });
+    if (!validated.success) {
+      message.error(validated.error.issues[0]?.message ?? "维保表单校验失败");
+      return;
+    }
     const payload = {
       targetType: v.targetType,
       vehicleId: v.targetType === "vehicle" ? v.vehicleId : null,
@@ -193,11 +221,17 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
     setOpen(true);
   };
 
-  const parsedRemarkMap = useMemo(() => new Map(rows.map((row) => [row.id, parseRemarkMeta(row.remark)])), [rows]);
+  const visibleRows = useMemo(() => {
+    if (view === "vehicle") return rows.filter((row) => row.targetType === "vehicle");
+    if (view === "equipment") return rows.filter((row) => row.targetType === "equipment");
+    return rows;
+  }, [rows, view]);
+
+  const parsedRemarkMap = useMemo(() => new Map(visibleRows.map((row) => [row.id, parseRemarkMeta(row.remark)])), [visibleRows]);
 
   const maintenanceSummary = useMemo(
     () =>
-      rows.reduce(
+      visibleRows.reduce(
         (acc, r) => {
           const parsed = parsedRemarkMap.get(r.id);
           const partStats = calcPartStats(parsed?.partDetails);
@@ -207,7 +241,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
         },
         { partsKinds: 0, partsAmount: 0 },
       ),
-    [rows, parsedRemarkMap],
+    [parsedRemarkMap, visibleRows],
   );
 
   const columns = useMaintenanceColumns({
@@ -225,12 +259,15 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
     },
   });
 
+  const pageTitle = view === "vehicle" ? "车辆维保" : view === "equipment" ? "设备维保" : "维保记录";
+  const defaultCreateTargetType: FormModel["targetType"] = view === "vehicle" ? "vehicle" : view === "equipment" ? "equipment" : "vehicle";
+
   return (
     <PageContainer
-      title="维保记录"
+      title={pageTitle}
       breadcrumb={[
         { title: "首页", path: "/" },
-        { title: "维保记录" },
+        { title: pageTitle },
       ]}
       extra={
         canEdit ? (
@@ -240,6 +277,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
             onClick={() => {
               setEditing(null);
               form.resetFields();
+              form.setFieldValue("targetType", defaultCreateTargetType);
               setOpen(true);
             }}
           >
@@ -267,7 +305,7 @@ export function MaintenancePage({ canEdit, canDelete }: { canEdit: boolean; canD
         size="small"
         tableLayout="auto"
         rowKey="id"
-        dataSource={rows}
+        dataSource={visibleRows}
         scroll={listTableScroll}
         sticky={listTableSticky}
         columns={columns}

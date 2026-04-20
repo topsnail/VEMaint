@@ -64,6 +64,34 @@ body {
   box-shadow: none !important;
 }
 
+/* Global density (compact): reduce vertical padding without breaking layout */
+.ant-card .ant-card-body {
+  padding: 12px !important;
+}
+
+.ant-card .ant-card-head {
+  padding: 8px 12px !important;
+  min-height: 0 !important;
+}
+
+.ant-card .ant-card-head-title,
+.ant-card .ant-card-extra {
+  padding: 0 !important;
+}
+
+.ant-collapse-header {
+  padding: 6px 10px !important;
+}
+
+.ant-collapse-content-box {
+  padding: 6px 10px !important;
+}
+
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td {
+  padding: 6px 8px !important;
+}
+
 /* Keep legacy shell styles inert (layout now controls structure) */
 .ve-shell,
 .ve-topbar,
@@ -456,7 +484,7 @@ body {
 
 /* 表单样式 */
 .ant-form-item {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .ant-form-item-label {
@@ -534,13 +562,13 @@ body {
 
 .ant-tabs-nav {
   margin: 0;
-  padding: 0 16px;
+  padding: 0 12px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
 
 .ant-tabs-tab {
-  padding: 12px 16px;
+  padding: 8px 12px;
   margin: 0;
   transition: all 0.3s ease;
   border-radius: 6px 6px 0 0;
@@ -559,7 +587,7 @@ body {
 }
 
 .ant-tabs-content {
-  padding: 20px;
+  padding: 12px;
   background: white;
 }
 
@@ -1416,6 +1444,8 @@ body {
 
 .ve-dashboard .ve-trend-stat-cost {
   /* 删除左侧彩色竖条 */
+  border-left: 0 !important;
+  padding-left: 0 !important;
 }
 
 .ve-dashboard .ve-trend-chart {
@@ -1786,14 +1816,45 @@ body {
   padding: 0;
 }
 
+.ve-config-page form {
+  /* Reserve space for sticky footer to avoid overlap */
+  padding-bottom: 56px;
+}
+
+.ve-config-page .ant-tabs-nav {
+  margin-bottom: 8px !important;
+}
+
+.ve-config-page .ant-tabs-tab {
+  padding: 6px 10px !important;
+  margin: 0 6px 0 0 !important;
+}
+
+.ve-config-page .ant-tabs-tab-btn {
+  line-height: 1.1 !important;
+}
+
+.ve-config-page .ant-form-item {
+  margin-bottom: 8px !important;
+}
+
+.ve-config-page .ant-form-item-label {
+  padding-bottom: 2px !important;
+}
+
+.ve-config-page .ant-form-item-label > label {
+  height: auto !important;
+  line-height: 1.1 !important;
+}
+
 .ve-config-basic {
-  padding: 20px;
+  padding: 14px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   transition: all 0.3s ease;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .ve-config-basic:hover {
@@ -1806,7 +1867,7 @@ body {
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   transition: all 0.3s ease;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   overflow: hidden;
 }
 
@@ -1820,8 +1881,23 @@ body {
   background: #f8fafc;
 }
 
+.ve-config-card .ant-card-head {
+  min-height: 0 !important;
+  padding: 8px 12px !important;
+}
+
+.ve-config-card .ant-card-head-title {
+  padding: 0 !important;
+  font-size: 13px !important;
+  line-height: 1.15 !important;
+}
+
+.ve-config-card .ant-card-extra {
+  padding: 0 !important;
+}
+
 .ve-config-card .ant-card-body {
-  padding: 20px;
+  padding: 12px;
 }
 
 .ve-input {
@@ -1907,10 +1983,22 @@ body {
   border: 1px solid #e2e8f0 !important;
   background: rgba(255, 255, 255, 0.9) !important;
   backdrop-filter: blur(8px);
-  padding: 20px !important;
+  padding: 12px !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
   transition: all 0.3s ease !important;
-  margin-top: 16px !important;
+  margin-top: 8px !important;
+}
+
+.ve-permission-container .ant-collapse-header {
+  padding: 6px 10px !important;
+}
+
+.ve-permission-container .ant-collapse-content-box {
+  padding: 6px 10px !important;
+}
+
+.ve-permission-container .ant-collapse-item {
+  border-bottom-color: #f1f5f9 !important;
 }
 
 .ve-permission-container:hover {
@@ -1922,7 +2010,7 @@ body {
   overflow: hidden !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
   border: 1px solid #e2e8f0 !important;
-  margin-top: 16px !important;
+  margin-top: 8px !important;
   transition: all 0.3s ease !important;
 }
 
@@ -1938,6 +2026,25 @@ body {
   transition: all 0.3s ease !important;
 }
 
+.ve-permission-table .ant-table-thead > tr > th,
+.ve-permission-table .ant-table-tbody > tr > td {
+  padding: 5px 8px !important;
+  font-size: 12px !important;
+}
+
+.ve-permission-table .ant-table-tbody > tr > td {
+  vertical-align: top;
+}
+
+.ve-permission-item {
+  padding: 6px 0 !important;
+  transition: all 0.3s ease !important;
+}
+
+.ve-permission-item .text-xs {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+}
 .ve-permission-table .ant-table-thead > tr > th:hover {
   background: #f1f5f9 !important;
 }
@@ -1949,11 +2056,6 @@ body {
 
 .ve-permission-table .ant-table-tbody > tr:hover > td {
   background: #f8fafc !important;
-}
-
-.ve-permission-item {
-  padding: 8px 0 !important;
-  transition: all 0.3s ease !important;
 }
 
 .ve-permission-item:hover {
@@ -1978,8 +2080,8 @@ body {
   border-top: 1px solid #e2e8f0 !important;
   background: rgba(255, 255, 255, 0.9) !important;
   backdrop-filter: blur(8px);
-  padding: 20px !important;
-  margin-top: 20px !important;
+  padding: 12px !important;
+  margin-top: 0 !important;
   display: flex !important;
   justify-content: flex-end !important;
   box-shadow: 0 -2px 4px rgba(15, 23, 42, 0.05) !important;

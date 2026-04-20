@@ -74,10 +74,27 @@ cd 【项目目录名】
 ```bash
 npm install
 ```
-4. 本地启动开发服务（附命令）
+4. 本地启动开发服务（完整模拟 CF Pages：Functions + D1 + KV + R2）
+
+推荐方式（Windows）：直接运行 `VEMaint.ps1`，会自动执行：
+- `npm run build`
+- D1 初始化/迁移/Seed（本地）
+- `wrangler pages dev dist`
+- 前端 `vite dev`（HMR）
+
+或使用命令行方式：
 ```bash
+npx wrangler --version
+
+# 1) 创建本地变量文件（一次性）
+copy .dev.vars.example .dev.vars
+
+# 2) 初始化/迁移/种子（本地 D1）
 npm run db:init:local
+npm run db:migrate:local
 npm run db:seed:local
+
+# 3) 启动 Pages 本地联调（会模拟 KV/R2/D1/Functions）
 npm run pages:dev
 ```
 如需仅调试前端界面，也可单独运行：
@@ -134,6 +151,7 @@ npm run dev
 补充说明：
 - `AUTH_SECRET` 为必填项，线上环境必须替换 `【local-dev-auth-secret-please-change】`
 - `BOOTSTRAP_ADMIN_USER` / `BOOTSTRAP_ADMIN_PASS` 仅在“系统无管理员账号”时用于自动初始化管理员；初始化成功后可在应用内修改密码
+- 本地联调建议使用 `.dev.vars`（Wrangler 会自动读取），示例见 `.dev.vars.example`
 - `database_id`、`bucket_name`、`kv namespace id` 等资源标识应替换为你自己的 Cloudflare 实例信息
 
 ## 📌 核心功能说明
