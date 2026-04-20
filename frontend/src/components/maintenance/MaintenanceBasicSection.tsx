@@ -1,5 +1,5 @@
-import { AutoComplete, Col, DatePicker, Form, InputNumber, Row, Select } from "antd";
-import type { FormInstance } from "antd";
+import { AutoComplete, Col, DatePicker, Form, InputNumber, Row, Select } from "@/components/ui/legacy";
+import type { FormInstance } from "@/components/ui/legacy";
 
 type SelectOption = { value: string; label: string };
 

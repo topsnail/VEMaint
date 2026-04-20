@@ -1,4 +1,3 @@
-import { Breadcrumb, Typography } from "antd";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -16,17 +15,23 @@ export function PageContainer(props: {
   return (
     <div className={`p-4 md:p-5 ${className}`.trim()}>
       {breadcrumb?.length ? (
-        <Breadcrumb
-          className="mb-2"
-          items={breadcrumb.map((item) => ({
-            title: item.path ? <Link to={item.path}>{item.title}</Link> : item.title,
-          }))}
-        />
+        <nav className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+          {breadcrumb.map((item, idx) => (
+            <span key={`${item.title}-${idx}`} className="inline-flex items-center gap-1">
+              {idx > 0 ? <span className="text-slate-300">/</span> : null}
+              {item.path ? (
+                <Link to={item.path} className="hover:text-slate-700">
+                  {item.title}
+                </Link>
+              ) : (
+                <span>{item.title}</span>
+              )}
+            </span>
+          ))}
+        </nav>
       ) : null}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <Typography.Title level={4} className="!mb-0 !text-base md:!text-lg">
-          {title}
-        </Typography.Title>
+        <div className="text-base font-semibold text-slate-900 md:text-lg">{title}</div>
         {extra ? <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">{extra}</div> : null}
       </div>
       {children}

@@ -1,5 +1,5 @@
-import { Button, Col, Form, Input, InputNumber, Row, Select, Space } from "antd";
-import type { FormInstance } from "antd";
+import { Button, Col, Form, Input, InputNumber, Row, Select, Space } from "@/components/ui/legacy";
+import type { FormInstance } from "@/components/ui/legacy";
 
 type SelectOption = { value: string; label: string };
 

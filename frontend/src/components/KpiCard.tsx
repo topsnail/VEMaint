@@ -1,20 +1,23 @@
-import { Card, Statistic } from "antd";
 import React from "react";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface KpiCardProps {
   title: string;
   value: number;
-  valueStyle?: object;
+  valueStyle?: React.CSSProperties;
   onClick?: () => void;
 }
 
 export const KpiCard: React.FC<KpiCardProps> = React.memo(({ title, value, valueStyle, onClick }) => (
   <Card
-    size="small"
-    hoverable={!!onClick}
-    className="ve-kpi-card transition-transform duration-200 ease-out hover:scale-[1.02] hover:shadow-card-lg"
+    className="ve-kpi-card border-slate-200 shadow-none transition-colors hover:bg-slate-50"
     onClick={onClick}
   >
-    <Statistic title={title} value={value} valueStyle={valueStyle} />
+    <CardContent>
+      <div className="text-xs font-medium text-slate-500">{title}</div>
+      <div className="mt-1 text-2xl font-semibold text-slate-900" style={valueStyle}>
+        {value}
+      </div>
+    </CardContent>
   </Card>
 ));

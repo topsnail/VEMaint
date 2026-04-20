@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getNullableTrimmedStringField, getNumberField, getOptionalNumberField, readJsonRecord } from "../lib/request";
+import { validateBody } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
 import { permitPerm } from "../middleware/permit";
@@ -12,27 +12,11 @@ import {
 } from "../repositories/maintenance";
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
+import { maintenanceUpsertBodySchema } from "../lib/validation";
 
 export const maintenanceRoute = new Hono<AppEnv>();
 maintenanceRoute.use("/api/maintenance/*", requireAuth);
 maintenanceRoute.use("/api/maintenance", requireAuth);
-
-const MAINTENANCE_TARGET_TYPES = ["vehicle", "equipment", "other"] as const;
-const MAINTENANCE_TYPES = ["routine", "fault", "accident", "periodic"] as const;
-
-function parseTargetType(value: unknown): (typeof MAINTENANCE_TARGET_TYPES)[number] | null {
-  const normalized = String(value ?? "vehicle").trim();
-  return (MAINTENANCE_TARGET_TYPES as readonly string[]).includes(normalized)
-    ? (normalized as (typeof MAINTENANCE_TARGET_TYPES)[number])
-    : null;
-}
-
-function parseMaintenanceType(value: unknown): (typeof MAINTENANCE_TYPES)[number] | null {
-  const normalized = String(value ?? "routine").trim();
-  return (MAINTENANCE_TYPES as readonly string[]).includes(normalized)
-    ? (normalized as (typeof MAINTENANCE_TYPES)[number])
-    : null;
-}
 
 maintenanceRoute.get("/api/maintenance", async (c) => {
   const rows = await listMaintenance(c.env.DB, {
@@ -53,24 +37,20 @@ maintenanceRoute.get("/api/maintenance/:id", async (c) => {
 });
 
 maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async (c) => {
-  const body = await readJsonRecord(c);
-  const targetType = parseTargetType(body.targetType);
-  const vehicleId = getNullableTrimmedStringField(body, "vehicleId");
-  const equipmentName = getNullableTrimmedStringField(body, "equipmentName");
-  const maintenanceType = parseMaintenanceType(body.maintenanceType);
-  const maintenanceDate = getNullableTrimmedStringField(body, "maintenanceDate") ?? "";
-  const itemDesc = getNullableTrimmedStringField(body, "itemDesc") ?? "";
-  const cost = getNumberField(body, "cost", 0);
-  const vendor = getNullableTrimmedStringField(body, "vendor");
-  const parts = getNullableTrimmedStringField(body, "parts");
-  const mileage = getOptionalNumberField(body, "mileage");
-  const remark = getNullableTrimmedStringField(body, "remark");
-  const attachmentKey = getNullableTrimmedStringField(body, "attachmentKey");
-  if (!targetType || !maintenanceType) return jsonError(c, "BAD_REQUEST", "维保类型参数无效", 400);
-  if (!maintenanceDate || !itemDesc || !Number.isFinite(cost) || cost < 0) return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
-  if (targetType === "vehicle" && !vehicleId) return jsonError(c, "BAD_REQUEST", "车辆维保必须选择车辆", 400);
-  if (targetType !== "vehicle" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备/其他维保必须填写对象名称", 400);
-  if (targetType === "vehicle" && mileage === null) return jsonError(c, "BAD_REQUEST", "车辆维保必须填写里程", 400);
+  const parsed = await validateBody(c, maintenanceUpsertBodySchema, "参数不完整");
+  if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const targetType = parsed.data.targetType;
+  const vehicleId = parsed.data.vehicleId ?? null;
+  const equipmentName = parsed.data.equipmentName ?? null;
+  const maintenanceType = parsed.data.maintenanceType;
+  const maintenanceDate = parsed.data.maintenanceDate;
+  const itemDesc = parsed.data.itemDesc;
+  const cost = parsed.data.cost;
+  const vendor = parsed.data.vendor ?? null;
+  const parts = parsed.data.parts ?? null;
+  const mileage = parsed.data.mileage ?? null;
+  const remark = parsed.data.remark ?? null;
+  const attachmentKey = parsed.data.attachmentKey ?? null;
   const id = await createMaintenance(c.env.DB, {
     targetType,
     vehicleId,
@@ -92,24 +72,21 @@ maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async 
 
 maintenanceRoute.put("/api/maintenance/:id", permitPerm("maintenance.edit"), async (c) => {
   const id = c.req.param("id").trim();
-  const body = await readJsonRecord(c);
-  const targetType = parseTargetType(body.targetType);
-  const vehicleId = getNullableTrimmedStringField(body, "vehicleId");
-  const equipmentName = getNullableTrimmedStringField(body, "equipmentName");
-  const maintenanceType = parseMaintenanceType(body.maintenanceType);
-  const maintenanceDate = getNullableTrimmedStringField(body, "maintenanceDate") ?? "";
-  const itemDesc = getNullableTrimmedStringField(body, "itemDesc") ?? "";
-  const cost = getNumberField(body, "cost", 0);
-  const vendor = getNullableTrimmedStringField(body, "vendor");
-  const parts = getNullableTrimmedStringField(body, "parts");
-  const mileage = getOptionalNumberField(body, "mileage");
-  const remark = getNullableTrimmedStringField(body, "remark");
-  const attachmentKey = getNullableTrimmedStringField(body, "attachmentKey");
-  if (!targetType || !maintenanceType) return jsonError(c, "BAD_REQUEST", "维保类型参数无效", 400);
-  if (!id || !maintenanceDate || !itemDesc || !Number.isFinite(cost) || cost < 0) return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
-  if (targetType === "vehicle" && !vehicleId) return jsonError(c, "BAD_REQUEST", "车辆维保必须选择车辆", 400);
-  if (targetType !== "vehicle" && !equipmentName) return jsonError(c, "BAD_REQUEST", "设备/其他维保必须填写对象名称", 400);
-  if (targetType === "vehicle" && mileage === null) return jsonError(c, "BAD_REQUEST", "车辆维保必须填写里程", 400);
+  const parsed = await validateBody(c, maintenanceUpsertBodySchema, "参数不完整");
+  if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  if (!id) return jsonError(c, "BAD_REQUEST", "参数不完整", 400);
+  const targetType = parsed.data.targetType;
+  const vehicleId = parsed.data.vehicleId ?? null;
+  const equipmentName = parsed.data.equipmentName ?? null;
+  const maintenanceType = parsed.data.maintenanceType;
+  const maintenanceDate = parsed.data.maintenanceDate;
+  const itemDesc = parsed.data.itemDesc;
+  const cost = parsed.data.cost;
+  const vendor = parsed.data.vendor ?? null;
+  const parts = parsed.data.parts ?? null;
+  const mileage = parsed.data.mileage ?? null;
+  const remark = parsed.data.remark ?? null;
+  const attachmentKey = parsed.data.attachmentKey ?? null;
   await updateMaintenance(c.env.DB, id, {
     targetType,
     vehicleId,

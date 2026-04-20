@@ -1,21 +1,25 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
 
 const config: Config = {
+  darkMode: ["class"],
   content: ["./frontend/index.html", "./frontend/src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       borderRadius: {
-        /** 与 Ant Design `token.borderRadius` 统一为 6px */
-        main: "6px",
+        /** 全局统一使用 4px 圆角 */
+        main: "4px",
       },
       colors: {
-        /** 与 `veTheme.token.colorPrimary` 对齐，供 Tailwind 原子类复用 */
-        primary: "#1677ff",
+        /** 主色：Blue-600 (#2563eb) */
+        primary: "#2563eb",
         page: "#f8fafc",
       },
       fontSize: {
-        /** 1080P 正文；与 AntD `fontSize` 一致 */
+        /** 基础正文：14px */
         body: ["14px", { lineHeight: "1.5715" }],
+        /** 表头、标签、次要说明：12px */
+        xs: ["12px", { lineHeight: "1.5" }],
         /** 页面小标题 */
         heading: ["16px", { lineHeight: "1.5", fontWeight: "600" }],
         /** 模块标题 */
@@ -29,15 +33,9 @@ const config: Config = {
         "layout-lg": "32px",
         "layout-xl": "40px",
       },
-      boxShadow: {
-        /** 轻阴影层级，避免页面硬编码 rgba */
-        card: "0 1px 2px 0 rgb(15 23 42 / 0.04)",
-        "card-md": "0 1px 3px 0 rgb(15 23 42 / 0.06)",
-        "card-lg": "0 4px 12px 0 rgb(15 23 42 / 0.08)",
-      },
     },
   },
-  plugins: [],
+  plugins: [animate],
 };
 
 export default config;

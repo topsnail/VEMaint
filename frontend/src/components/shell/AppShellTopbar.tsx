@@ -1,6 +1,6 @@
-import { BellOutlined, LogoutOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
-import { Avatar, Badge, Button, Dropdown, Input, Space } from "antd";
+import { Avatar, Badge, Button, Dropdown, Input, Space } from "@/components/ui/legacy";
 import logoPng from "../../../favicon.png";
+import { Bell, LogOut, Search, User } from "lucide-react";
 /** 顶栏左侧：Logo + 产品名 */
 export function AppShellTopbarBrand() {
   return (
@@ -25,9 +25,9 @@ export type AppShellTopbarSearchProps = {
 /** 顶栏中部：全局搜索 */
 export function AppShellTopbarSearch({ value, onChange, onSubmit }: AppShellTopbarSearchProps) {
   return (
-    <div className="flex justify-center">
+    <div className="flex justify-start">
       <Input
-        className="ve-topbar-search w-full max-w-[720px]"
+        className="ve-topbar-search h-8 w-64"
         placeholder="搜索车牌、设备、维保记录..."
         allowClear
         value={value}
@@ -36,7 +36,7 @@ export function AppShellTopbarSearch({ value, onChange, onSubmit }: AppShellTopb
         suffix={
           <button type="button" className="ve-topbar-search-inline-btn" onClick={() => onSubmit(value)}>
             <span className="inline-flex items-center">
-              <SearchOutlined />
+              <Search className="h-4 w-4" strokeWidth={1.5} />
             </span>
           </button>
         }
@@ -67,7 +67,7 @@ export function AppShellTopbarAccount({
         <Button
           type="text"
           shape="circle"
-          icon={<BellOutlined />}
+          icon={<Bell className="h-4 w-4" strokeWidth={1.5} />}
           className="!text-[20px] !text-[#6B7280] hover:!bg-[#F3F4F6] hover:!text-[#1F2937]"
           onClick={onNotificationsClick}
         />
@@ -75,9 +75,9 @@ export function AppShellTopbarAccount({
       <Dropdown
         menu={{
           items: [
-            { key: "profile", icon: <UserOutlined />, label: "个人中心" },
+            { key: "profile", icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "个人中心" },
             { type: "divider" },
-            { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
+            { key: "logout", icon: <LogOut className="h-4 w-4" strokeWidth={1.5} />, label: "退出登录", danger: true },
           ],
           onClick: ({ key }) => {
             if (key === "profile") onProfile();
@@ -87,7 +87,7 @@ export function AppShellTopbarAccount({
         trigger={["click"]}
       >
         <Space className="cursor-pointer rounded-lg bg-white px-3 py-2 hover:bg-[#F9FAFB]">
-          <Avatar size={30} icon={<UserOutlined />} />
+          <Avatar size={28} icon={<User className="h-4 w-4" strokeWidth={1.5} />} />
           <span className="text-[#1F2937]">{username}</span>
         </Space>
       </Dropdown>

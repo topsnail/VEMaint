@@ -1,8 +1,8 @@
-import { Button, List, Space } from "antd";
 import React from "react";
 
 import { AlertItemType } from "./AlertItem";
 import { StatusPill } from "./StatusPill";
+import { Button } from "@/components/ui/button";
 
 interface PendingAlertItemProps {
   item: AlertItemType & { ownerDept?: string; ownerPerson?: string };
@@ -16,8 +16,8 @@ const levelTone = (level: string): "danger" | "warning" => {
 };
 
 export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ item, canHandleAlerts, onUpdateStatus }) => (
-  <List.Item className="ve-pending-item">
-    <Space wrap size="middle" className="w-full items-center">
+  <div className="ve-pending-item">
+    <div className="flex w-full flex-wrap items-center gap-3">
       <StatusPill
         tone={levelTone(item.level)}
         label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
@@ -28,9 +28,10 @@ export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ i
         {item.ownerDept ?? "-"}/{item.ownerPerson ?? "-"}
       </span>
       {canHandleAlerts && (
-        <Space size="small" className="ml-auto">
+        <div className="ml-auto flex flex-wrap gap-2">
           <Button
-            size="small"
+            size="sm"
+            variant="outline"
             onClick={() => onUpdateStatus("processing")}
             disabled={item.actionStatus === "processing"}
             className="ve-status-btn ve-status-processing"
@@ -38,16 +39,16 @@ export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ i
             标记处理中
           </Button>
           <Button
-            size="small"
-            type="primary"
+            size="sm"
+            variant="primary"
             onClick={() => onUpdateStatus("resolved")}
             disabled={item.actionStatus === "resolved"}
             className="ve-status-btn ve-status-resolved"
           >
             标记已处理
           </Button>
-        </Space>
+        </div>
       )}
-    </Space>
-  </List.Item>
+    </div>
+  </div>
 ));

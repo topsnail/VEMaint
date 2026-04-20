@@ -14,9 +14,7 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./frontend/src/*"],
-      "antd": ["./frontend/src/lib/ui/antd-bridge.tsx"],
-      "@ant-design/icons": ["./frontend/src/lib/ui/icons-bridge.tsx"]
+      "@/*": ["./frontend/src/*"]
     },
     "types": ["@cloudflare/workers-types"]
   },

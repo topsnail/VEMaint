@@ -1,9 +1,9 @@
-import { MenuOutlined } from "@ant-design/icons";
-import { Button, Drawer, Layout } from "antd";
+import { Button, Drawer, Layout } from "@/components/ui/legacy";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEnterMotion } from "../lib/useEnterMotion";
+import { Menu } from "lucide-react";
 
 export type MobileDockItem = { key: string; icon: ReactNode; label: string };
 
@@ -38,50 +38,52 @@ export function DashboardLayout(props: {
 
   const dockItems = props.mobileDockItems ?? [];
 
-  const shellClass = "mx-auto w-full max-w-[1440px] px-4 md:px-6";
+  const shellClass = "mx-auto w-full max-w-[1440px] px-4";
 
   return (
     <Layout className="min-h-screen bg-page text-[#1F2937]">
-      <div className={shellClass}>
-        <Layout.Header className="sticky top-0 z-30 !m-0 !h-[52px] !w-full !max-w-none !bg-transparent !p-0 !leading-none">
-          <div className="flex h-[52px] w-full items-center gap-2 overflow-hidden rounded-t-main border-b border-[#E5E7EB] bg-white/95 backdrop-blur-sm md:gap-3">
+      <div className="w-full">
+        <Layout.Header className="sticky top-0 z-30 !m-0 !h-12 !w-full !max-w-none !bg-transparent !p-0 !leading-none">
+          <div className="flex h-12 w-full items-center gap-2 overflow-hidden border-b border-slate-200 bg-white md:gap-3">
             {isMobile ? (
-              <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" className="!shrink-0" />
+              <Button type="text" icon={<Menu className="h-4 w-4" strokeWidth={1.5} />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" className="!shrink-0" />
             ) : null}
             <div className="flex min-w-0 shrink items-center gap-3">{props.headerLeft}</div>
             {props.headerCenter ? (
-              <div className="mx-4 hidden min-w-0 flex-1 lg:block">{props.headerCenter}</div>
+              <div className="mx-4 flex min-w-0 flex-1">{props.headerCenter}</div>
             ) : (
-              <div className="hidden flex-1 lg:block" />
+              <div className="flex-1" />
             )}
             <div className="ml-auto flex shrink-0 items-center">{props.headerRight}</div>
           </div>
         </Layout.Header>
 
-        {isMobile ? (
-          <Layout className="!min-h-[calc(100vh-3.25rem)] !w-full !bg-transparent">
-            <Layout.Content className="!bg-transparent pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
-              <div className="min-h-[calc(100vh-7.25rem)] w-full py-4 md:py-6">
-                <div ref={contentRef} className="rounded-main border border-[#E5E7EB] bg-white shadow-card-md">
+        <div className={shellClass}>
+          {isMobile ? (
+            <Layout className="!min-h-[calc(100vh-3rem)] !w-full !bg-transparent">
+              <Layout.Content className="!bg-transparent pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+                <div className="min-h-[calc(100vh-7rem)] w-full py-4">
+                  <div ref={contentRef} className="border border-slate-200 bg-white">
+                    {props.children}
+                  </div>
+                </div>
+              </Layout.Content>
+            </Layout>
+          ) : (
+            <div className="flex min-h-[calc(100vh-3rem)] w-full items-start gap-0 py-4">
+              <aside className="w-52 shrink-0">
+                <div className="sticky top-[3.75rem]">
+                  <div className="border-r border-slate-200 bg-slate-50 p-2.5">{props.sider}</div>
+                </div>
+              </aside>
+              <div className="min-w-0 flex-1">
+                <div ref={contentRef} className="border border-slate-200 bg-white p-4">
                   {props.children}
                 </div>
               </div>
-            </Layout.Content>
-          </Layout>
-        ) : (
-          <div className="flex min-h-[calc(100vh-3.25rem)] w-full items-start gap-4 py-4">
-            <aside className="w-[240px] shrink-0">
-              <div className="sticky top-[68px]">
-                <div className="rounded-main border border-[#E5E7EB] bg-white p-3">{props.sider}</div>
-              </div>
-            </aside>
-            <div className="min-w-0 flex-1">
-              <div ref={contentRef} className="rounded-main border border-[#E5E7EB] bg-white shadow-card-md">
-                {props.children}
-              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <Drawer

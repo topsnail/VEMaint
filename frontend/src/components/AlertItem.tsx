@@ -1,6 +1,6 @@
-import { Button, List, Space } from "antd";
 import React from "react";
 import { StatusPill } from "./StatusPill";
+import { Button } from "@/components/ui/button";
 
 export interface AlertItemType {
   alertKey: string;
@@ -29,8 +29,8 @@ const statusTone = (actionStatus: string | undefined): "success" | "info" | "neu
 };
 
 export const AlertItem: React.FC<AlertItemProps> = React.memo(({ item, onAction }) => (
-  <List.Item className="ve-alert-item">
-    <Space size="middle" className="w-full">
+  <div className="ve-alert-item">
+    <div className="flex w-full flex-wrap items-center gap-3">
       <StatusPill
         tone={levelTone(item.level)}
         label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
@@ -45,9 +45,9 @@ export const AlertItem: React.FC<AlertItemProps> = React.memo(({ item, onAction 
           item.actionStatus === "resolved" ? "已处理" : item.actionStatus === "processing" ? "处理中" : "未处理"
         }
       />
-      <Button size="small" type="link" onClick={onAction} className="ve-alert-action">
+      <Button variant="ghost" size="sm" onClick={onAction} className="ve-alert-action h-8 px-2">
         处理
       </Button>
-    </Space>
-  </List.Item>
+    </div>
+  </div>
 ));

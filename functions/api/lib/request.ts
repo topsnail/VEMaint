@@ -1,10 +1,24 @@
 import type { Context } from "hono";
+import type { ZodTypeAny, infer as ZodInfer } from "zod";
 
 type JsonRecord = Record<string, unknown>;
 
 export async function readJsonRecord(c: Context): Promise<JsonRecord> {
   const body = await c.req.json().catch(() => null);
   return body && typeof body === "object" && !Array.isArray(body) ? (body as JsonRecord) : {};
+}
+
+export async function validateBody<TSchema extends ZodTypeAny>(
+  c: Context,
+  schema: TSchema,
+  fallbackMessage = "参数错误",
+): Promise<{ ok: true; data: ZodInfer<TSchema> } | { ok: false; message: string }> {
+  const body = await readJsonRecord(c);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? fallbackMessage };
+  }
+  return { ok: true, data: parsed.data };
 }
 
 export function getStringField(body: JsonRecord, key: string, fallback = ""): string {

@@ -1,10 +1,11 @@
-import { Button, Input } from "antd";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { PageContainer } from "../components/PageContainer";
 import { useProfilePassword } from "../hooks/useProfilePassword";
 import { profilePasswordSchema, type ProfilePasswordInput } from "../lib/schemas";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function ProfilePage() {
   const { submitting, changePassword } = useProfilePassword();
@@ -40,15 +41,15 @@ export function ProfilePage() {
         <form className="space-y-3" onSubmit={handleSubmit(submit)}>
           <div>
             <div className="mb-1 text-sm font-medium text-slate-700">旧密码</div>
-            <Input.Password {...register("oldPassword")} />
+            <Input type="password" {...register("oldPassword")} />
             {errors.oldPassword?.message ? <div className="mt-1 text-xs text-red-500">{errors.oldPassword.message}</div> : null}
           </div>
           <div>
             <div className="mb-1 text-sm font-medium text-slate-700">新密码</div>
-            <Input.Password {...register("newPassword")} />
+            <Input type="password" {...register("newPassword")} />
             {errors.newPassword?.message ? <div className="mt-1 text-xs text-red-500">{errors.newPassword.message}</div> : null}
           </div>
-          <Button type="primary" htmlType="submit" loading={submitting}>
+          <Button type="submit" variant="primary" disabled={submitting}>
             修改密码
           </Button>
         </form>

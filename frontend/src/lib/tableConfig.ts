@@ -1,7 +1,7 @@
-import type { TableProps } from "antd";
+import type { TableProps } from "@/components/ui/legacy";
 
-/** 顶栏高度（52px），避免 sticky 表头与固定顶栏重叠 */
-export const TABLE_STICKY_OFFSET_HEADER = 52;
+/** 顶栏高度（48px），避免 sticky 表头与固定顶栏重叠 */
+export const TABLE_STICKY_OFFSET_HEADER = 48;
 
 /** 列表页：1080p 下预留 PageContainer、筛选区、分页等后的可视高度 */
 export const listTableScroll: NonNullable<TableProps<unknown>["scroll"]> = {

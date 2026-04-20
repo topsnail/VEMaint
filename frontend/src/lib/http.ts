@@ -4,6 +4,7 @@ import { API_CONFIG } from "./config";
 export type ApiOk<T> = { ok: true; data: T };
 export type ApiErr = { ok: false; error: { code: string; message: string } };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
+type ErrorEnvelope = { error?: { message?: unknown } };
 export type BlobResult = {
   blob: Blob;
   filename: string | null;
@@ -75,7 +76,7 @@ async function handleRequest<T>(
     try {
       const json = await res.json();
       if (json && typeof json === "object" && "error" in json) {
-        errorMessage = String((json as any).error?.message ?? errorMessage);
+        errorMessage = String((json as ErrorEnvelope).error?.message ?? errorMessage);
       }
     } catch {
       try {

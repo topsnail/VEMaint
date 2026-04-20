@@ -1,5 +1,4 @@
-import { MinusCircleOutlined, PlusOutlined, TeamOutlined } from "@ant-design/icons";
-import { App, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Space, Table, Tabs, Typography } from "antd";
+import { App, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Space, Table, Tabs, Typography } from "@/components/ui/legacy";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUser } from "../lib/auth";
@@ -7,6 +6,7 @@ import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
 import { downloadProtectedFile, openProtectedFile } from "../lib/http";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
+import { MinusCircle, Plus, Users } from "lucide-react";
 
 type ConfigForm = {
   siteName: string;
@@ -323,10 +323,10 @@ export function ConfigPage() {
                               >
                                 <Input placeholder="对应住址" className="ve-input" />
                               </Form.Item>
-                              <Button type="text" danger icon={<MinusCircleOutlined />} onClick={() => remove(name)} aria-label="删除此行" />
+                              <Button type="text" danger icon={<MinusCircle className="h-4 w-4" />} onClick={() => remove(name)} aria-label="删除此行" />
                             </Space>
                           ))}
-                          <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} className="max-w-md">
+                          <Button type="dashed" onClick={() => add()} block icon={<Plus className="h-4 w-4" />} className="max-w-md">
                             添加所有人与住址
                           </Button>
                         </div>
@@ -375,7 +375,7 @@ export function ConfigPage() {
                 <Card size="small" title="角色权限" className="ve-config-card">
                   <Space direction="vertical" className="w-full" size={6}>
                     <Space>
-                      <Button type="primary" icon={<TeamOutlined />} onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-primary-btn">
+                      <Button type="primary" icon={<Users className="h-4 w-4" />} onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-primary-btn">
                         用户管理
                       </Button>
                       <Button onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-btn">

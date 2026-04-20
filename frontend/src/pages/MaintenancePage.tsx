@@ -1,4 +1,4 @@
-import { App, Button, Form, Input, Modal, Skeleton, Table, Tabs } from "antd";
+import { App, Button, Form, Input, Modal, Skeleton, Table, Tabs } from "@/components/ui/legacy";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { MaintenanceBasicSection } from "../components/maintenance/MaintenanceBasicSection";

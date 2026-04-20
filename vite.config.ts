@@ -7,8 +7,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      antd: path.resolve(__dirname, "frontend/src/lib/ui/antd-bridge.tsx"),
-      "@ant-design/icons": path.resolve(__dirname, "frontend/src/lib/ui/icons-bridge.tsx"),
+      "@": path.resolve(__dirname, "frontend/src"),
     },
   },
   publicDir: "../public",
@@ -28,7 +27,7 @@ export default defineConfig({
 
           if (id.includes("react") || id.includes("scheduler")) return "vendor-ui";
           if (id.includes("react-router-dom") || id.includes("@remix-run")) return "vendor-router";
-          if (id.includes("antd") || id.includes("@ant-design") || id.includes("rc-")) return "vendor-ui";
+          if (id.includes("@radix-ui")) return "vendor-ui";
           if (id.includes("i18next") || id.includes("react-i18next")) return "vendor-i18n";
           if (id.includes("gsap") || id.includes("@gsap/react")) return "vendor-gsap";
 

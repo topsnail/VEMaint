@@ -1,9 +1,9 @@
-import { DeleteOutlined, KeyOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tooltip } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tooltip } from "@/components/ui/legacy";
 import { useEffect, useState } from "react";
 import { PageContainer } from "../components/PageContainer";
 import { useUsersAdmin } from "../hooks/useUsersAdmin";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
+import { Key, Trash2 } from "lucide-react";
 
 type Model = { username: string; password: string; role: "admin" | "maintainer" | "reader" };
 type RoleTemplate = "admin" | "maintainer" | "reader";
@@ -133,11 +133,11 @@ export function UsersPage() {
                 render: (_, r) => (
                   <Space size={6}>
                     <Tooltip title="重置密码">
-                      <Button type="text" size="small" icon={<KeyOutlined />} className="ve-reset-btn" onClick={() => openResetPassword(r.id)} />
+                      <Button type="text" size="small" icon={<Key className="h-4 w-4" />} className="ve-reset-btn" onClick={() => openResetPassword(r.id)} />
                     </Tooltip>
                     <Popconfirm title="确认删除该用户？" onConfirm={() => remove(r.id)}>
                       <Tooltip title="删除">
-                        <Button danger type="text" size="small" icon={<DeleteOutlined />} className="ve-delete-btn" />
+                        <Button danger type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className="ve-delete-btn" />
                       </Tooltip>
                     </Popconfirm>
                   </Space>

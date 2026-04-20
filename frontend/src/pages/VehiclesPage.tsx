@@ -1,5 +1,4 @@
-import { DeleteOutlined, EditOutlined, EyeOutlined, ShareAltOutlined } from "@ant-design/icons";
-import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "antd";
+import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Dropdown, Form, Input, Modal, Popconfirm, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "@/components/ui/legacy";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +17,7 @@ import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { vehicleSubmitSchema } from "../lib/schemas";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 type VehicleForm = {
   plateNo: string;
@@ -713,13 +713,20 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         tableLayout="auto"
         rowKey="id"
         dataSource={filteredRows}
-        scroll={listTableScroll}
-        sticky={listTableSticky}
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+        sticky={{
+          header: {
+            offsetHeader: 48
+          }
+        }}
+        rowClassName={(record, index) => index % 2 === 1 ? 'bg-slate-50/50' : ''}
         columns={[
-          { title: "号牌号码", dataIndex: "plateNo" },
-          { title: "车辆类型", dataIndex: "vehicleType" },
+          { title: "号牌号码", dataIndex: "plateNo", className: "py-2 px-3" },
+          { title: "车辆类型", dataIndex: "vehicleType", className: "py-2 px-3" },
           {
             title: "能源类型",
+            className: "py-2 px-3",
             render: (_, r) => {
               const text = (r.usageNature ?? "").trim();
               if (!text) return "-";
@@ -727,10 +734,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
               return energy.trim() || "-";
             },
           },
-          { title: "使用部门", dataIndex: "ownerDept" },
-          { title: "责任人", dataIndex: "ownerPerson" },
+          { title: "使用部门", dataIndex: "ownerDept", className: "py-2 px-3" },
+          { title: "责任人", dataIndex: "ownerPerson", className: "py-2 px-3" },
           {
             title: "车辆状态",
+            className: "py-2 px-3",
             render: (_, r) => {
               const m = statusMeta[r.status];
               return <StatusPill tone={vehicleStatusTone(r.status)} label={m.label} />;
@@ -738,19 +746,22 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           },
           {
             title: "台账完整度",
+            className: "py-2 px-3",
             render: (_, r) => {
               const c = getVehicleCompleteness(r, cyclesByVehicleId[r.id]);
               const tone = c.percent === 100 ? "success" : c.percent >= 80 ? "warning" : "danger";
               return <StatusPill tone={tone} label={`${c.percent}% (${c.filled}/${c.total})`} />;
             },
           },
-          { title: "本次保养里程", dataIndex: "mileage" },
+          { title: "本次保养里程", dataIndex: "mileage", className: "py-2 px-3" },
           {
             title: "下次保养里程",
+            className: "py-2 px-3",
             render: (_, r) => cyclesByVehicleId[r.id]?.maintNextKm ?? "-",
           },
           {
             title: "到期提醒",
+            className: "py-2 px-3",
             render: (_, r) => {
               const hint = getDueHint(cyclesByVehicleId[r.id]);
               const tone =
@@ -766,32 +777,37 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           },
           {
             title: "备注",
+            className: "py-2 px-3",
             render: (_, r) => parseRemarkMeta(r.remark).remarkBody || "-",
           },
           {
             title: "操作",
-            width: 160,
+            width: 48,
+            className: "py-2 px-3",
             render: (_, r) => (
-              <Space size={6}>
-                <Tooltip title="查看车辆详情">
-                  <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openView(r)} />
-                </Tooltip>
-                {canManage ? (
-                  <Tooltip title="编辑">
-                    <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r, "basic")} />
-                  </Tooltip>
-                ) : null}
-                {canManage ? (
-                  <Popconfirm title="确认删除该车辆？" description="将车辆状态设置为“报废”" onConfirm={() => setStatus(r.id, "scrapped")}>
-                    <Tooltip title="删除">
-                      <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                    </Tooltip>
-                  </Popconfirm>
-                ) : null}
-                <Tooltip title="分享">
-                  <Button type="text" size="small" icon={<ShareAltOutlined />} onClick={() => shareVehicle(r)} />
-                </Tooltip>
-              </Space>
+              canManage ? (
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    items: [
+                      { key: "edit", label: "编辑" },
+                      { key: "delete", label: "删除", danger: true },
+                    ],
+                    onClick: ({ key }) => {
+                      if (key === "edit") openEdit(r, "basic");
+                      if (key === "delete") {
+                        if (window.confirm("确认删除该车辆？将车辆状态设置为“报废”")) {
+                          void setStatus(r.id, "scrapped");
+                        }
+                      }
+                    },
+                  }}
+                >
+                  <Button type="text" icon={<MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />} />
+                </Dropdown>
+              ) : (
+                "-"
+              )
             ),
           },
         ]}
@@ -944,26 +960,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         ) : null}
       </Modal>
 
-      <Modal
-        title={editing ? "编辑车辆" : "新增车辆"}
-        open={open}
-        centered
-        width={920}
-        onCancel={() => setOpen(false)}
-        onOk={submit}
-        styles={{
-          body: { maxHeight: "70vh", overflowY: "auto" },
-          footer: {
-            position: "sticky",
-            bottom: 0,
-            marginTop: 0,
-            background: "#fff",
-            zIndex: 2,
-            paddingTop: 12,
-          },
-        }}
-        className="ve-vehicles-modal"
-      >
+      {open ? (
+        <div className="rounded-sm border border-slate-200 bg-white">
+          <div className="sticky top-12 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
+            <div className="text-sm font-medium text-slate-900">{editing ? "编辑车辆" : "新增车辆"}</div>
+            <Space size={8}>
+              <Button onClick={() => setOpen(false)}>取消</Button>
+              <Button type="primary" onClick={() => void submit()}>
+                保存
+              </Button>
+            </Space>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto p-4">
         <Form form={form} layout="vertical">
           <Tabs
             activeKey={editTab}
@@ -1334,7 +1342,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             ]}
           />
         </Form>
-      </Modal>
+          </div>
+        </div>
+      ) : null}
     </div>
     </PageContainer>
   );

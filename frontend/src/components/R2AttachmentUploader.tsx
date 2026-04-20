@@ -1,8 +1,8 @@
-import { InboxOutlined } from "@ant-design/icons";
-import { App, Typography, Upload } from "antd";
-import type { UploadProps } from "antd";
+import { App, Typography, Upload } from "@/components/ui/legacy";
+import type { UploadProps } from "@/components/ui/legacy";
 import { useEffect, useState } from "react";
 import { uploadFile } from "../lib/http";
+import { Inbox } from "lucide-react";
 
 type Props = {
   /** 已上传对象的 Key（展示用，可与表单受控） */
@@ -65,7 +65,7 @@ export function R2AttachmentUploader({
         className="rounded-main"
       >
         <p className="ant-upload-drag-icon">
-          <InboxOutlined className="text-primary text-4xl" />
+          <Inbox className="text-primary h-10 w-10" />
         </p>
         <p className="ant-upload-text">点击或拖拽文件到此区域</p>
         <p className="ant-upload-hint text-[#64748b]">{description}</p>

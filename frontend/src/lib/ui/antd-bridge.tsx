@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { Children, cloneElement, createContext, isValidElement, useContext, useRef, useState } from "react";
+import React, { Children, cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 
@@ -20,15 +20,17 @@ const setByPath = (obj: AnyObj, name: any, value: any): AnyObj => {
   return next;
 };
 
-type FormInstance<T extends AnyObj = AnyObj> = {
+export type FormInstance<T extends AnyObj = AnyObj> = {
   getFieldValue: (name: any) => any;
   getFieldsValue: () => T;
   setFieldValue: (name: any, value: any) => void;
   setFieldsValue: (next: Partial<T>) => void;
   resetFields: () => void;
   validateFields: () => Promise<T>;
-  __setValues?: React.Dispatch<React.SetStateAction<T>>;
-  __initial?: T;
+  // Internal fields for the bridge implementation.
+  // Keep them `any` so FormInstance<T> stays assignable across call sites.
+  __setValues?: React.Dispatch<React.SetStateAction<any>>;
+  __initial?: any;
   __items?: Map<string, { rules?: Array<{ required?: boolean; min?: number; message?: string }> }>;
 };
 
@@ -157,7 +159,7 @@ const FormObj = Object.assign(FormComp, {
   useForm: <T = any>() => [createFormInstance<T>()],
 }) as FormComponent;
 
-const inputBase = "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400";
+const inputBase = "h-8 w-full rounded-sm border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-slate-400";
 
 const Input: any = Object.assign(
   React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>((props, ref) => <input ref={ref} {...props} className={`${inputBase} ${props.className ?? ""}`} />),
@@ -166,7 +168,7 @@ const Input: any = Object.assign(
       <input ref={ref} type="password" {...props} className={`${inputBase} ${props.className ?? ""}`} />
     )),
     TextArea: React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>((props, ref) => (
-      <textarea ref={ref} {...props} className={`min-h-[84px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none ${props.className ?? ""}`} />
+      <textarea ref={ref} {...props} className={`min-h-[84px] w-full rounded-sm border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none ${props.className ?? ""}`} />
     )),
     Search: ({ onSearch, onChange, value, placeholder, className }: any) => (
       <div className={`flex gap-2 ${className ?? ""}`}>
@@ -181,6 +183,7 @@ const Input: any = Object.assign(
 
 const Button: any = ({
   type,
+  htmlType,
   danger,
   icon,
   loading,
@@ -191,7 +194,8 @@ const Button: any = ({
 }: any) => (
   <button
     {...rest}
-    className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition ${
+    type={htmlType ?? "button"}
+    className={`inline-flex h-8 items-center justify-center gap-2 rounded-sm border px-2.5 text-sm transition ${
       type === "primary"
         ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
         : type === "text"
@@ -282,12 +286,13 @@ const Modal: any = ({ open, onCancel, onOk, title, children, footer, width }: an
   ) : null;
 
 const Tabs: any = ({ items, activeKey, onChange }: any) => {
-  const [internal, setInternal] = useState(items[0]?.key);
+  const safeItems = Array.isArray(items) ? items : [];
+  const [internal, setInternal] = useState(safeItems[0]?.key);
   const active = activeKey ?? internal;
   return (
     <div>
       <div className="mb-3 flex gap-2 border-b">
-        {items.map((it) => (
+        {safeItems.map((it) => (
           <button
             key={it.key}
             className={`px-3 py-2 text-sm ${active === it.key ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-600"}`}
@@ -300,18 +305,18 @@ const Tabs: any = ({ items, activeKey, onChange }: any) => {
           </button>
         ))}
       </div>
-      {items.find((it) => it.key === active)?.children}
+      {safeItems.find((it) => it.key === active)?.children}
     </div>
   );
 };
 
 const Table: any = ({ columns = [], dataSource = [], rowKey }: any) => (
-  <div className="overflow-x-auto rounded-md border">
+  <div className="overflow-auto rounded-sm border border-slate-200">
     <table className="w-full text-sm">
-      <thead className="bg-slate-50">
+      <thead className="sticky top-12 z-10 bg-slate-50">
         <tr>
           {columns.map((col: any) => (
-            <th key={col.key ?? col.dataIndex ?? col.title} className="px-3 py-2 text-left font-medium text-slate-700">
+            <th key={col.key ?? col.dataIndex ?? col.title} className="px-3 py-2 text-left text-xs font-medium text-slate-700">
               {col.title}
             </th>
           ))}
@@ -319,11 +324,11 @@ const Table: any = ({ columns = [], dataSource = [], rowKey }: any) => (
       </thead>
       <tbody>
         {dataSource.map((record: any, idx: number) => (
-          <tr key={record?.[rowKey] ?? idx} className="border-t">
+          <tr key={record?.[rowKey] ?? idx} className={`border-t border-slate-200 ${idx % 2 === 1 ? "bg-slate-50/50" : ""}`}>
             {columns.map((col: any) => {
               const value = col.dataIndex ? record[col.dataIndex] : undefined;
               return (
-                <td key={col.key ?? col.dataIndex ?? col.title} className="px-3 py-2 align-top">
+                <td key={col.key ?? col.dataIndex ?? col.title} className="px-3 py-2 align-top text-sm">
                   {typeof col.render === "function" ? col.render(value, record, idx) : value}
                 </td>
               );
@@ -351,7 +356,8 @@ const Select: any = ({ options = [], value, onChange, placeholder, className }: 
 );
 
 const AutoComplete: any = ({ options = [], value, onChange, placeholder, className }: any) => {
-  const listId = `ac-${Math.random().toString(36).slice(2)}`;
+  const reactId = useId();
+  const listId = `ac-${reactId.replace(/:/g, "")}`;
   return (
     <>
       <input className={`${inputBase} ${className ?? ""}`} list={listId} value={value ?? ""} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder} />
@@ -396,10 +402,25 @@ const Avatar: any = ({ icon, children, className, size }: any) => <span classNam
 
 const Dropdown: any = ({ menu, children }: any) => {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const child = Children.only(children) as ReactElement;
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
   return (
-    <div className="relative inline-flex">
-      {cloneElement(child, { onClick: () => setOpen((v) => !v) })}
+    <div ref={rootRef} className="relative inline-flex">
+      {cloneElement(child, {
+        onClick: (e: any) => {
+          child.props.onClick?.(e);
+          if (e?.defaultPrevented) return;
+          setOpen((v) => !v);
+        },
+      })}
       {open ? (
         <div className="absolute right-0 top-full z-20 mt-1 min-w-40 rounded-md border bg-white p-1 shadow">
           {(menu?.items ?? []).map((item: any, idx: number) =>
@@ -430,6 +451,8 @@ const Popconfirm: any = ({ title, onConfirm, children }: any) => {
   const child = Children.only(children) as ReactElement;
   return cloneElement(child, {
     onClick: (e: any) => {
+      child.props.onClick?.(e);
+      if (e?.defaultPrevented) return;
       e.preventDefault();
       if (window.confirm(typeof title === "string" ? title : "确认执行此操作？")) onConfirm?.();
     },
@@ -583,6 +606,5 @@ export {
 };
 
 export type UploadProps = AnyObj;
-export type FormInstance<T = any> = any;
 export type TableProps<T = any> = any;
 export type ThemeConfig = any;

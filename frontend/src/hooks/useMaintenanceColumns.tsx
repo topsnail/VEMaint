@@ -1,10 +1,10 @@
-import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
-import { Button, Popconfirm, Space, Tooltip } from "antd";
-import type { FormInstance } from "antd";
+import { Button, Popconfirm, Space, Tooltip } from "@/components/ui/legacy";
+import type { FormInstance } from "@/components/ui/legacy";
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { calcPartStats, parseRemarkMeta } from "../lib/maintenanceMeta";
 import type { MaintenanceRecord } from "../types";
+import { Pencil, Trash2 } from "lucide-react";
 
 type FormModel = {
   vehicleId?: string;
@@ -102,7 +102,7 @@ export function useMaintenanceColumns({
                 <Button
                   type="text"
                   size="small"
-                  icon={<EditOutlined />}
+                  icon={<Pencil className="h-4 w-4" />}
                   className="ve-edit-btn"
                   onClick={() => {
                     const parsed = parsedRemarkMap.get(record.id) ?? parseRemarkMeta(record.remark);
@@ -138,7 +138,7 @@ export function useMaintenanceColumns({
             {canDelete ? (
               <Popconfirm title="确认删除该记录？" onConfirm={() => onDelete(record.id)}>
                 <Tooltip title="删除">
-                  <Button type="text" size="small" danger icon={<DeleteOutlined />} className="ve-delete-btn" />
+                  <Button type="text" size="small" danger icon={<Trash2 className="h-4 w-4" />} className="ve-delete-btn" />
                 </Tooltip>
               </Popconfirm>
             ) : null}

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { getTrimmedStringField, readJsonRecord } from "../lib/request";
+import { validateBody } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { revokeToken, signAccessToken } from "../lib/jwt";
 import { requireAuth } from "../middleware/require-auth";
@@ -9,6 +9,7 @@ import { createUser, getUserByUsername, hasAdminUser, updateUserPassword } from 
 import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
+import { loginBodySchema, profilePasswordBodySchema } from "../lib/validation";
 
 export const authRoute = new Hono<AppEnv>();
 
@@ -31,10 +32,10 @@ async function ensureBootstrapAdmin(c: Context<AppEnv>): Promise<boolean> {
 
 async function loginHandler(c: Context<AppEnv>) {
   await ensureBootstrapAdmin(c);
-  const body = await readJsonRecord(c);
-  const username = normalizeUsername(getTrimmedStringField(body, "username"));
-  const password = getTrimmedStringField(body, "password");
-  if (!username || !password) return jsonError(c, "BAD_REQUEST", "请输入用户名和密码", 400);
+  const parsed = await validateBody(c, loginBodySchema, "请输入用户名和密码");
+  if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const username = normalizeUsername(parsed.data.username);
+  const password = parsed.data.password;
 
   const user = await getUserByUsername(c.env.DB, username);
   if (!user) return jsonError(c, "INVALID_CREDENTIALS", "用户名或密码错误", 401);
@@ -75,10 +76,10 @@ authRoute.post("/api/bootstrap", async (c) => {
 
 authRoute.put("/api/profile/password", requireAuth, async (c) => {
   const me = c.get("auth");
-  const body = await readJsonRecord(c);
-  const oldPassword = getTrimmedStringField(body, "oldPassword");
-  const newPassword = getTrimmedStringField(body, "newPassword");
-  if (!oldPassword || !newPassword) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
+  const parsed = await validateBody(c, profilePasswordBodySchema, "参数错误");
+  if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const oldPassword = parsed.data.oldPassword;
+  const newPassword = parsed.data.newPassword;
   const user = await getUserByUsername(c.env.DB, me.username);
   if (!user) return jsonError(c, "NOT_FOUND", "用户不存在", 404);
   const ok = await verifyPassword(oldPassword, user.password_hash);

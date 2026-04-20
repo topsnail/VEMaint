@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, Input, List, Progress, Row, Skeleton, Space, Statistic, Table, Typography } from "antd";
+import { Alert, Button, Card, Col, Input, List, Progress, Row, Skeleton, Space, Statistic, Table, Typography } from "@/components/ui/legacy";
 import { useNavigate } from "react-router-dom";
 import { PageContainer } from "../components/PageContainer";
 import { KpiCard } from "../components/KpiCard";

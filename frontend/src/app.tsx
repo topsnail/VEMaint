@@ -1,7 +1,7 @@
-import { BellOutlined, CarOutlined, FileTextOutlined, PlusOutlined, SettingOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Button, ConfigProvider, Menu, Skeleton, Space, Typography } from "antd";
+import { Bell, Car, FileText, Plus, Settings, Users, User } from "lucide-react";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Toaster, toast } from "sonner";
 import {
   clearToken,
   getToken,
@@ -17,7 +17,8 @@ import { AppShellTopbarAccount, AppShellTopbarBrand, AppShellTopbarSearch } from
 import { DashboardLayout, type MobileDockItem } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { setGlobalErrorMessenger } from "./lib/errorHandler";
-import { veTheme } from "./theme";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const VehiclesPage = lazy(() => import("./pages/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
@@ -27,11 +28,10 @@ const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default:
 const ConfigPage = lazy(() => import("./pages/ConfigPage").then((m) => ({ default: m.ConfigPage })));
 
 function AppInner() {
-  const { message } = AntdApp.useApp();
   useEffect(() => {
-    setGlobalErrorMessenger((text) => message.error(text));
+    setGlobalErrorMessenger((text) => toast.error(text));
     return () => setGlobalErrorMessenger(null);
-  }, [message]);
+  }, []);
 
   const fallbackUser: UserInfo = { userId: "mock_user_fallback", username: "mock", role: "admin" };
   const [user, setCurrentUser] = useState<UserInfo | null>(() => {
@@ -148,16 +148,16 @@ function AppInner() {
 
   const maintenanceItems = canViewMaintenance
     ? [
-        { key: "/maintenance/vehicles", icon: <FileTextOutlined />, label: "车辆维保" },
-        { key: "/maintenance/equipment", icon: <FileTextOutlined />, label: "设备维保" },
+        { key: "/maintenance/vehicles", icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "车辆维保" },
+        { key: "/maintenance/equipment", icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "设备维保" },
       ]
     : [];
 
   const items = [
-    ...(canViewDashboard ? [{ key: "/dashboard", icon: <BellOutlined />, label: "仪表盘" }] : []),
-    ...(canViewVehicles ? [{ key: "/vehicles", icon: <CarOutlined />, label: "车辆台账" }] : []),
+    ...(canViewDashboard ? [{ key: "/dashboard", icon: <Bell className="h-4 w-4" strokeWidth={1.5} />, label: "仪表盘" }] : []),
+    ...(canViewVehicles ? [{ key: "/vehicles", icon: <Car className="h-4 w-4" strokeWidth={1.5} />, label: "车辆台账" }] : []),
     ...maintenanceItems,
-    ...(canManageConfig ? [{ key: "/config", icon: <SettingOutlined />, label: "系统配置" }] : []),
+    ...(canManageConfig ? [{ key: "/config", icon: <Settings className="h-4 w-4" strokeWidth={1.5} />, label: "系统配置" }] : []),
   ];
 
   const quickActions = [
@@ -167,8 +167,8 @@ function AppInner() {
 
   const mobileDockItems: MobileDockItem[] = [
     ...items.map((it) => ({ key: it.key, icon: it.icon, label: it.label })),
-    ...(canManageUsers ? [{ key: "/users", icon: <TeamOutlined />, label: "用户" }] : []),
-    { key: "/profile", icon: <UserOutlined />, label: "我的" },
+    ...(canManageUsers ? [{ key: "/users", icon: <Users className="h-4 w-4" strokeWidth={1.5} />, label: "用户" }] : []),
+    { key: "/profile", icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "我的" },
   ];
 
   const submitGlobalSearch = (value: string) => {
@@ -181,7 +181,7 @@ function AppInner() {
     await apiFetch("/logout", { method: "POST" });
     clearToken();
     setCurrentUser(null);
-    message.success("已退出");
+    toast.success("已退出");
   };
 
   const shellHeaderLeft = <AppShellTopbarBrand />;
@@ -203,30 +203,42 @@ function AppInner() {
   const shellSider = (
     <div className="space-y-4">
       <div>
-        <Typography.Text className="text-xs uppercase tracking-wide text-[#6B7280]">概览</Typography.Text>
-        <Menu
-          className="mt-2 !border-0 !bg-transparent"
-          selectedKeys={[loc.pathname]}
-          onClick={({ key }) => nav(key)}
-          items={items}
-          mode="inline"
-        />
+        <div className="text-xs uppercase tracking-wide text-[#6B7280]">概览</div>
+        <div className="mt-2 space-y-1">
+          {items.map((it) => {
+            const active = loc.pathname === it.key;
+            return (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => nav(it.key)}
+                className={`flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-sm transition ${
+                  active ? "bg-blue-50 font-medium text-blue-600" : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {it.icon}
+                <span>{it.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div>
-        <Typography.Text className="text-xs uppercase tracking-wide text-[#6B7280]">快捷新增</Typography.Text>
-        <Space direction="vertical" className="mt-2 w-full">
+        <div className="text-xs uppercase tracking-wide text-[#6B7280]">快捷新增</div>
+        <div className="mt-2 space-y-2">
           {quickActions.map((action) => (
             <Button
               key={action.key}
-              block
-              icon={<PlusOutlined />}
-              className="!h-10 !justify-start !rounded-lg !border-[#E5E7EB] !bg-white !text-[#1F2937] hover:!bg-[#F9FAFB]"
+              fullWidth
+              variant="outline"
+              className="h-8 justify-start rounded-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
               onClick={() => nav(action.target)}
             >
+              <Plus className="h-4 w-4" strokeWidth={1.5} />
               {action.label}
             </Button>
           ))}
-        </Space>
+        </div>
       </div>
     </div>
   );
@@ -240,7 +252,15 @@ function AppInner() {
       mobileDockItems={mobileDockItems}
     >
       <div className="min-h-[calc(100vh-160px)]">
-        <Suspense fallback={<Skeleton active paragraph={{ rows: 10 }} />}>
+        <Suspense
+          fallback={
+            <div className="space-y-2">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <Skeleton key={i} className="h-4 w-full" />
+              ))}
+            </div>
+          }
+        >
           <Routes>
             <Route path="/" element={<Navigate to={defaultPath} replace />} />
             <Route
@@ -279,13 +299,12 @@ function AppInner() {
 
 export function App() {
   return (
-    <ConfigProvider theme={veTheme}>
-      <AntdApp>
-        <BrowserRouter>
-          <AppInner />
-        </BrowserRouter>
-      </AntdApp>
-    </ConfigProvider>
+    <>
+      <BrowserRouter>
+        <AppInner />
+      </BrowserRouter>
+      <Toaster richColors position="top-right" />
+    </>
   );
 }
 

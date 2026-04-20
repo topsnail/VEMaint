@@ -28,11 +28,13 @@ export async function listUsers(db: D1Database): Promise<Array<Omit<UserRow, "pa
 }
 
 export async function createUser(db: D1Database, input: { username: string; passwordHash: string; role: UserRole }) {
+  const id = crypto.randomUUID();
   await d1Run(
     db,
     "insert into users (id, username, password_hash, role, disabled, created_at, updated_at) values (?1, ?2, ?3, ?4, 0, datetime('now'), datetime('now'))",
-    [crypto.randomUUID(), input.username, input.passwordHash, input.role],
+    [id, input.username, input.passwordHash, input.role],
   );
+  return id;
 }
 
 export async function updateUserRole(db: D1Database, id: string, role: UserRole) {
