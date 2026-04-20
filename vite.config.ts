@@ -14,6 +14,21 @@ export default defineConfig({
     outDir: "../dist",
     emptyOutDir: true,
     target: "es2022",
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+
+          if (id.includes("react") || id.includes("scheduler")) return "vendor-ui";
+          if (id.includes("react-router-dom") || id.includes("@remix-run")) return "vendor-router";
+          if (id.includes("antd") || id.includes("@ant-design") || id.includes("rc-")) return "vendor-ui";
+          if (id.includes("i18next") || id.includes("react-i18next")) return "vendor-i18n";
+          if (id.includes("gsap") || id.includes("@gsap/react")) return "vendor-gsap";
+
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,

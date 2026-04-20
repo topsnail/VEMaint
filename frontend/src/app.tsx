@@ -1,7 +1,7 @@
 import { BellOutlined, CarOutlined, FileTextOutlined, PlusOutlined, SettingOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Button, ConfigProvider, Menu, Space, Typography } from "antd";
+import { App as AntdApp, Button, ConfigProvider, Menu, Skeleton, Space, Typography } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -16,15 +16,16 @@ import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions, type RolePermission
 import { usePermissions } from "./lib/usePermissions";
 import { AppShellTopbarAccount, AppShellTopbarBrand, AppShellTopbarSearch } from "./components/shell/AppShellTopbar";
 import { DashboardLayout, type MobileDockItem } from "./layouts/DashboardLayout";
-import { ConfigPage } from "./pages/ConfigPage";
-import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
-import { MaintenancePage } from "./pages/MaintenancePage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { UsersPage } from "./pages/UsersPage";
-import { VehiclesPage } from "./pages/VehiclesPage";
 import { setGlobalErrorMessenger } from "./lib/errorHandler";
 import { veTheme } from "./theme";
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const VehiclesPage = lazy(() => import("./pages/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
+const MaintenancePage = lazy(() => import("./pages/MaintenancePage").then((m) => ({ default: m.MaintenancePage })));
+const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default: m.UsersPage })));
+const ConfigPage = lazy(() => import("./pages/ConfigPage").then((m) => ({ default: m.ConfigPage })));
 
 function AppInner() {
   const { message } = AntdApp.useApp();
@@ -233,6 +234,7 @@ function AppInner() {
       mobileDockItems={mobileDockItems}
     >
       <div className="min-h-[calc(100vh-160px)]">
+        <Suspense fallback={<Skeleton active paragraph={{ rows: 10 }} />}>
           <Routes>
             <Route path="/" element={<Navigate to={defaultPath} replace />} />
             <Route
@@ -251,6 +253,7 @@ function AppInner() {
             {canManageConfig ? <Route path="/config" element={<ConfigPage />} /> : null}
             <Route path="*" element={<Navigate to={defaultPath} replace />} />
           </Routes>
+        </Suspense>
       </div>
     </DashboardLayout>
   );
