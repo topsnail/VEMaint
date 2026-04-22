@@ -1,5 +1,6 @@
 import { Button, Col, Form, Input, InputNumber, Row, Select, Space } from "@/components/ui/legacy";
 import type { FormInstance } from "@/components/ui/legacy";
+import { actionBtn } from "../../lib/ui/buttonTokens";
 
 type SelectOption = { value: string; label: string };
 
@@ -145,7 +146,7 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
                                   </Form.Item>
                                 </Col>
                                 <Col span={1}>
-                                  <Button danger type="text" onClick={() => remove(field.name)}>
+                                  <Button type="text" className={actionBtn.textDanger} onClick={() => remove(field.name)}>
                                     删
                                   </Button>
                                 </Col>
@@ -159,7 +160,7 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
                   </Col>
                 </Row>
                 <div className="mt-3 flex justify-end">
-                  <Button size="small" onClick={() => form.setFieldValue("cost", Number.isFinite(total) ? total : 0)}>
+                  <Button size="small" className={actionBtn.smallNeutral} onClick={() => form.setFieldValue("cost", Number.isFinite(total) ? total : 0)}>
                     用合计覆盖总计
                   </Button>
                 </div>

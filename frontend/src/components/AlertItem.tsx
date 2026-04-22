@@ -29,25 +29,35 @@ const statusTone = (actionStatus: string | undefined): "success" | "info" | "neu
 };
 
 export const AlertItem: React.FC<AlertItemProps> = React.memo(({ item, onAction }) => (
-  <div className="ve-alert-item">
-    <div className="flex w-full flex-wrap items-center gap-3">
+  <div className="border-b border-slate-100 px-3 py-1.5 transition-colors last:border-b-0 hover:bg-slate-50">
+    <div className="flex w-full flex-wrap items-center gap-1.5">
       <StatusPill
         tone={levelTone(item.level)}
         label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
       />
-      <span className="ve-alert-plateNo font-medium">{item.plateNo}</span>
-      <span className="ve-alert-type">{item.type}</span>
-      {typeof item.days === "number" && <span className="ve-alert-days">{item.days} 天</span>}
-      {typeof item.kmLeft === "number" && <span className="ve-alert-km">{item.kmLeft} km</span>}
+      <span className="font-medium text-slate-900">{item.plateNo}</span>
+      <span className="text-sm text-slate-500">{item.type}</span>
+      {typeof item.days === "number" && (
+        <span className="rounded-[6px] bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          {item.days} 天
+        </span>
+      )}
+      {typeof item.kmLeft === "number" && (
+        <span className="rounded-[6px] bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          {item.kmLeft} km
+        </span>
+      )}
       <StatusPill
         tone={statusTone(item.actionStatus)}
         label={
           item.actionStatus === "resolved" ? "已处理" : item.actionStatus === "processing" ? "处理中" : "未处理"
         }
       />
-      <Button variant="ghost" size="sm" onClick={onAction} className="ve-alert-action h-8 px-2">
+      <div className="ml-auto">
+        <Button variant="ghost" size="sm" onClick={onAction} className="h-6 px-2 text-blue-700 hover:bg-blue-50 hover:text-blue-800">
         处理
-      </Button>
+        </Button>
+      </div>
     </div>
   </div>
 ));

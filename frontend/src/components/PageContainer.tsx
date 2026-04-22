@@ -31,7 +31,7 @@ export function PageContainer(props: {
         </nav>
       ) : null}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="text-base font-semibold text-slate-900 md:text-lg">{title}</div>
+        <div className="text-base font-semibold tracking-tight text-slate-900 md:text-lg">{title}</div>
         {extra ? <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">{extra}</div> : null}
       </div>
       {children}

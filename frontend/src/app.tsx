@@ -1,4 +1,4 @@
-import { Bell, Car, FileText, Plus, Settings, Users, User } from "lucide-react";
+import { Bell, Car, FileText, Settings, Users, User } from "lucide-react";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Toaster, toast } from "sonner";
@@ -19,6 +19,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { setGlobalErrorMessenger } from "./lib/errorHandler";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const VehiclesPage = lazy(() => import("./pages/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
@@ -106,25 +107,6 @@ function AppInner() {
     loadMe();
   }, []);
 
-  useEffect(() => {
-    const loadNotificationCount = async () => {
-      if (!user) {
-        setNotificationCount(0);
-        return;
-      }
-      try {
-        const res = await apiFetch<{ kpis?: { alerts?: { total?: number } } }>("/dashboard/overview");
-        if (res.ok) {
-          setNotificationCount(Number(res.data.kpis?.alerts?.total ?? 0));
-          return;
-        }
-      } catch {
-        // ignore and keep existing count
-      }
-    };
-    void loadNotificationCount();
-  }, [user]);
-
   const {
     canViewDashboard,
     canViewVehicles,
@@ -135,6 +117,29 @@ function AppInner() {
     canManageUsers,
     canManageConfig,
   } = usePermissions(user, rolePermissions);
+
+  useEffect(() => {
+    const loadNotificationCount = async () => {
+      if (!user || !canViewDashboard) {
+        setNotificationCount(0);
+        return;
+      }
+      try {
+        const res = await apiFetch<{ kpis?: { alerts?: { total?: number } } }>("/dashboard/overview");
+        if (res.ok) {
+          setNotificationCount(Number(res.data.kpis?.alerts?.total ?? 0));
+          return;
+        }
+        // No dashboard permission or other non-fatal errors: keep UI stable.
+        if (res.error.code === "HTTP_403") {
+          setNotificationCount(0);
+        }
+      } catch {
+        // ignore and keep existing count
+      }
+    };
+    void loadNotificationCount();
+  }, [user, canViewDashboard]);
 
   if (!user) return <LoginPage onLoggedIn={loadMe} />;
   
@@ -161,8 +166,19 @@ function AppInner() {
   ];
 
   const quickActions = [
-    ...(canManageVehicle ? [{ key: "new-vehicle", label: "新增车辆", target: "/vehicles?create=1" }] : []),
-    ...(canEditMaintenance ? [{ key: "new-maint", label: "新增维保", target: "/maintenance/vehicles?create=1" }] : []),
+    ...(canManageVehicle
+      ? [{ key: "new-vehicle", label: "新增车辆", target: "/vehicles?create=1", icon: <Car className="h-4 w-4 shrink-0" strokeWidth={1.5} /> }]
+      : []),
+    ...(canEditMaintenance
+      ? [
+          {
+            key: "new-maint",
+            label: "新增维保",
+            target: "/maintenance/vehicles?create=1",
+            icon: <FileText className="h-4 w-4 shrink-0" strokeWidth={1.5} />,
+          },
+        ]
+      : []),
   ];
 
   const mobileDockItems: MobileDockItem[] = [
@@ -193,6 +209,7 @@ function AppInner() {
   const shellHeaderRight = (
     <AppShellTopbarAccount
       username={user.username}
+      roleLabel={user.role === "admin" ? "管理员" : user.role === "maintainer" ? "维保员" : "只读"}
       notificationCount={notificationCount}
       onNotificationsClick={() => nav("/dashboard")}
       onProfile={() => nav("/profile")}
@@ -201,10 +218,10 @@ function AppInner() {
   );
 
   const shellSider = (
-    <div className="space-y-4">
+    <div className="space-y-0">
       <div>
-        <div className="text-xs uppercase tracking-wide text-[#6B7280]">概览</div>
-        <div className="mt-2 space-y-1">
+        <div className="text-xs font-medium tracking-wide text-slate-500">概览</div>
+        <nav className="mt-2.5 space-y-0.5" aria-label="主导航">
           {items.map((it) => {
             const active = loc.pathname === it.key;
             return (
@@ -212,34 +229,39 @@ function AppInner() {
                 key={it.key}
                 type="button"
                 onClick={() => nav(it.key)}
-                className={`flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-sm transition ${
-                  active ? "bg-blue-50 font-medium text-blue-600" : "text-slate-700 hover:bg-slate-100"
+                aria-current={active ? "page" : undefined}
+                className={`flex min-h-9 w-full items-center gap-2 rounded-md border-l-2 px-2.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40 ${
+                  active
+                    ? "border-l-blue-600 bg-blue-50 font-medium text-blue-800"
+                    : "border-l-transparent text-slate-700 hover:bg-slate-100/90"
                 }`}
               >
                 {it.icon}
-                <span>{it.label}</span>
+                <span className="min-w-0 truncate">{it.label}</span>
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
-      <div>
-        <div className="text-xs uppercase tracking-wide text-[#6B7280]">快捷新增</div>
-        <div className="mt-2 space-y-2">
-          {quickActions.map((action) => (
-            <Button
-              key={action.key}
-              fullWidth
-              variant="outline"
-              className="h-8 justify-start rounded-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-              onClick={() => nav(action.target)}
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
-              {action.label}
-            </Button>
-          ))}
+      {quickActions.length > 0 ? (
+        <div className="mt-5 border-t border-slate-200/90 pt-5">
+          <div className="text-xs font-medium tracking-wide text-slate-500">快捷新增</div>
+          <div className="mt-2.5 space-y-2">
+            {quickActions.map((action) => (
+              <Button
+                key={action.key}
+                fullWidth
+                variant="outline"
+                className="h-9 justify-start rounded-md border-blue-200/90 bg-blue-50/50 text-blue-900 hover:border-blue-300 hover:bg-blue-50 focus-visible:ring-blue-400/40"
+                onClick={() => nav(action.target)}
+              >
+                {action.icon}
+                {action.label}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 
@@ -299,12 +321,19 @@ function AppInner() {
 
 export function App() {
   return (
-    <>
-      <BrowserRouter>
+    <TooltipProvider delayDuration={300}>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppInner />
       </BrowserRouter>
-      <Toaster richColors position="top-right" />
-    </>
+      <Toaster
+        richColors
+        position="top-right"
+        toastOptions={{
+          className:
+            "rounded-[6px] border border-slate-200 bg-white text-slate-900 shadow-sm shadow-slate-900/5",
+        }}
+      />
+    </TooltipProvider>
   );
 }
 

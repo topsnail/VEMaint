@@ -67,10 +67,16 @@ export function useDashboardOverview() {
     setLoading(true);
     try {
       const res = await apiFetch<DashboardOverview>("/dashboard/overview");
-      if (res.ok) {
-        setOverview(res.data);
-        setLastUpdated(new Date().toLocaleString());
+      if (!res.ok) {
+        handleApiError(res);
+        return false;
       }
+      setOverview(res.data);
+      setLastUpdated(new Date().toLocaleString());
+      return true;
+    } catch (error) {
+      handleApiError(error);
+      return false;
     } finally {
       setLoading(false);
     }

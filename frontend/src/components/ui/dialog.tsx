@@ -30,14 +30,14 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-[10vh] z-50 w-[92vw] max-w-lg -translate-x-1/2 rounded-sm border border-slate-200 bg-white p-4 outline-none data-[state=open]:animate-in data-[state=closed]:animate-out",
+        "fixed left-1/2 top-[10vh] z-50 w-[92vw] max-w-lg -translate-x-1/2 rounded-[6px] border border-slate-200 bg-white p-4 outline-none data-[state=open]:animate-in data-[state=closed]:animate-out",
         className,
       )}
       {...props}
     >
       {children}
       {hideClose ? null : (
-        <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+        <DialogPrimitive.Close className="absolute right-3 top-3 rounded-[6px] p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

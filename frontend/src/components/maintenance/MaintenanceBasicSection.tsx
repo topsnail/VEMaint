@@ -1,5 +1,6 @@
 import { AutoComplete, Col, DatePicker, Form, InputNumber, Row, Select } from "@/components/ui/legacy";
 import type { FormInstance } from "@/components/ui/legacy";
+import { useEffect } from "react";
 
 type SelectOption = { value: string; label: string };
 
@@ -15,8 +16,8 @@ type MaintenanceBasicSectionProps = {
   equipmentNameOptions: SelectOption[];
   equipmentTypeOptions: SelectOption[];
   equipmentCategoryOptions: SelectOption[];
-  equipmentLocationOptions: SelectOption[];
   maintenanceTypeOptions: SelectOption[];
+  fixedTargetType?: "vehicle" | "equipment";
 };
 
 export function MaintenanceBasicSection({
@@ -25,23 +26,34 @@ export function MaintenanceBasicSection({
   equipmentNameOptions,
   equipmentTypeOptions,
   equipmentCategoryOptions,
-  equipmentLocationOptions,
   maintenanceTypeOptions,
+  fixedTargetType,
 }: MaintenanceBasicSectionProps) {
+  useEffect(() => {
+    if (!fixedTargetType) return;
+    form.setFieldValue("targetType", fixedTargetType);
+  }, [fixedTargetType, form]);
+
   return (
     <Row gutter={16}>
-      <Col span={12}>
-        <Form.Item label="关联类型" name="targetType" initialValue="vehicle" rules={[{ required: true }]}>
-          <Select
-            options={[
-              { value: "vehicle", label: "车辆" },
-              { value: "equipment", label: "设备" },
-              { value: "other", label: "其他" },
-            ]}
-            placeholder="请选择关联类型"
-          />
+      {fixedTargetType ? (
+        <Form.Item name="targetType" initialValue={fixedTargetType} noStyle>
+          <input type="hidden" />
         </Form.Item>
-      </Col>
+      ) : (
+        <Col span={12}>
+          <Form.Item label="关联类型" name="targetType" initialValue="vehicle" rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: "vehicle", label: "车辆" },
+                { value: "equipment", label: "设备" },
+                { value: "other", label: "其他" },
+              ]}
+              placeholder="请选择关联类型"
+            />
+          </Form.Item>
+        </Col>
+      )}
       <Col span={12}>
         <Form.Item noStyle shouldUpdate>
           {({ getFieldValue }) =>
@@ -55,11 +67,11 @@ export function MaintenanceBasicSection({
                 />
               </Form.Item>
             ) : (
-              <Form.Item label="对象名称" name="equipmentName" rules={[{ required: true }]}>
+              <Form.Item label={fixedTargetType === "equipment" ? "设备名称" : "对象名称"} name="equipmentName" rules={[{ required: true }]}>
                 <AutoComplete
                   className="w-full"
                   options={equipmentNameOptions}
-                  placeholder="请选择或输入设备/其他对象名称"
+                  placeholder={fixedTargetType === "equipment" ? "请选择或输入设备名称" : "请选择或输入设备/其他对象名称"}
                   filterOption={(inputValue, option) => (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())}
                 />
               </Form.Item>
@@ -79,11 +91,6 @@ export function MaintenanceBasicSection({
               <Col span={12}>
                 <Form.Item label="设备分类" name="equipmentCategory">
                   <Select allowClear options={equipmentCategoryOptions} placeholder="选择设备分类（可选）" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item label="设备位置" name="equipmentLocation">
-                  <Select allowClear options={equipmentLocationOptions} placeholder="选择设备位置（可选）" />
                 </Form.Item>
               </Col>
             </>

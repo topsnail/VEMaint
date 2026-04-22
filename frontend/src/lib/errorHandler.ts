@@ -11,7 +11,7 @@ export type AppError = {
 let onGlobalErrorMessage: ((text: string) => void) | null = null;
 
 /**
- * 由 React 根组件注入，用于全局错误提示（避免直接使用 antd 静态 message）。
+ * 由 React 根组件注入，用于全局错误提示（使用 Sonner toast）。
  */
 export function setGlobalErrorMessenger(fn: ((text: string) => void) | null) {
   onGlobalErrorMessage = fn;

@@ -22,12 +22,14 @@ export function useMaintenancePageData() {
       };
     },
     refetchInterval: MAINTENANCE_AUTO_REFRESH_MS,
+    refetchOnWindowFocus: false,
   });
 
   const dropdownsQuery = useQuery({
     queryKey: ["maintenance-dropdowns"],
     queryFn: fetchSettingsDropdowns,
     refetchInterval: MAINTENANCE_AUTO_REFRESH_MS,
+    refetchOnWindowFocus: false,
   });
 
   const removeMutation = useMutation({
@@ -71,7 +73,9 @@ export function useMaintenancePageData() {
     rows,
     vehicles,
     dropdowns,
-    loading: baseQuery.isFetching || dropdownsQuery.isFetching || removeMutation.isPending || saveMutation.isPending,
+    loading: baseQuery.isLoading || dropdownsQuery.isLoading || removeMutation.isPending || saveMutation.isPending,
+    savePending: saveMutation.isPending,
+    removePending: removeMutation.isPending,
     load,
     loadDropdowns,
     removeRecord,

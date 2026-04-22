@@ -15,12 +15,14 @@ export function useVehiclesTableData() {
     queryKey: ["vehicles-table", search],
     queryFn: () => fetchVehiclesWithCyclesMap(search),
     refetchInterval: VEHICLES_AUTO_REFRESH_MS,
+    refetchOnWindowFocus: false,
   });
 
   const settingsQuery = useQuery({
     queryKey: ["settings-snapshot"],
     queryFn: fetchSettingsSnapshot,
     refetchInterval: VEHICLES_AUTO_REFRESH_MS,
+    refetchOnWindowFocus: false,
   });
 
   const rows = useMemo(() => vehiclesQuery.data?.vehicles ?? [], [vehiclesQuery.data?.vehicles]);
@@ -54,7 +56,7 @@ export function useVehiclesTableData() {
     setCyclesByVehicleId,
     dropdowns,
     ownerDirectory,
-    loading: vehiclesQuery.isFetching || settingsQuery.isFetching,
+    loading: vehiclesQuery.isLoading || settingsQuery.isLoading,
     load,
     loadDropdowns,
   };

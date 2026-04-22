@@ -1,5 +1,6 @@
-// Transitional UI layer:
-// Re-export the existing in-house UI primitives (previously imported as "antd")
-// so the codebase no longer depends on the "antd" module name.
-export * from "@/lib/ui/antd-bridge";
+/**
+ * 应用级 UI 兼容导出：底层为 shadcn/Radix（见 `shadcn-compat.tsx`），
+ * 保留类 Ant Design 的组件 API，便于渐进式改为直接使用 `@/components/ui/*`。
+ */
+export * from "@/lib/ui/shadcn-compat";
 

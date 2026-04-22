@@ -15,7 +15,6 @@ export type ParsedMaintenanceMeta = {
   miscCost?: number;
   equipmentType?: string;
   equipmentCategory?: string;
-  equipmentLocation?: string;
   resultStatus?: MaintenanceResultStatus;
   partDetails: PartDetail[];
 };
@@ -51,7 +50,6 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
       miscCost: undefined,
       equipmentType: undefined,
       equipmentCategory: undefined,
-      equipmentLocation: undefined,
       resultStatus: undefined,
       partDetails: [],
     };
@@ -73,7 +71,6 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
     miscCost: undefined,
     equipmentType: undefined,
     equipmentCategory: undefined,
-    equipmentLocation: undefined,
     resultStatus: undefined,
     partDetails: [],
   };
@@ -96,11 +93,9 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
       const equip = JSON.parse(equipMetaJson) as {
         equipmentType?: unknown;
         equipmentCategory?: unknown;
-        equipmentLocation?: unknown;
       };
       parsed.equipmentType = toSafeString(equip.equipmentType);
       parsed.equipmentCategory = toSafeString(equip.equipmentCategory);
-      parsed.equipmentLocation = toSafeString(equip.equipmentLocation);
     }
   } catch {
     // ignore malformed meta
@@ -145,16 +140,15 @@ type JoinRemarkMetaParams = {
   miscCost?: number;
   equipmentType?: string;
   equipmentCategory?: string;
-  equipmentLocation?: string;
   resultStatus?: MaintenanceResultStatus;
   partDetails?: PartDetail[];
 };
 
 export function joinRemarkMeta(params: JoinRemarkMetaParams): string | null {
-  const { remark, laborCost, materialCost, miscCost, equipmentType, equipmentCategory, equipmentLocation, resultStatus, partDetails } = params;
+  const { remark, laborCost, materialCost, miscCost, equipmentType, equipmentCategory, resultStatus, partDetails } = params;
   const cleanRemark = (remark ?? "").trim();
   const hasBreakdown = [laborCost, materialCost, miscCost].some((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
-  const hasEquipMeta = [equipmentType, equipmentCategory, equipmentLocation].some((value) => !!String(value ?? "").trim());
+  const hasEquipMeta = [equipmentType, equipmentCategory].some((value) => !!String(value ?? "").trim());
   const cleanParts =
     partDetails
       ?.map((row) => ({
@@ -183,7 +177,6 @@ export function joinRemarkMeta(params: JoinRemarkMetaParams): string | null {
       `${EQUIP_META_PREFIX}${JSON.stringify({
         equipmentType: toSafeString(equipmentType),
         equipmentCategory: toSafeString(equipmentCategory),
-        equipmentLocation: toSafeString(equipmentLocation),
       })}`,
     );
   }

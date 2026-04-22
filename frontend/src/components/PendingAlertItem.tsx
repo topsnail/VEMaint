@@ -16,15 +16,15 @@ const levelTone = (level: string): "danger" | "warning" => {
 };
 
 export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ item, canHandleAlerts, onUpdateStatus }) => (
-  <div className="ve-pending-item">
-    <div className="flex w-full flex-wrap items-center gap-3">
+  <div className="border-b border-slate-100 px-3 py-1.5 transition-colors last:border-b-0 hover:bg-slate-50">
+    <div className="flex w-full flex-wrap items-center gap-1.5">
       <StatusPill
         tone={levelTone(item.level)}
         label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
       />
-      <span className="ve-alert-plateNo font-medium">{item.plateNo}</span>
-      <span className="ve-alert-type">{item.type}</span>
-      <span className="ve-alert-owner text-slate-500">
+      <span className="font-medium text-slate-900">{item.plateNo}</span>
+      <span className="text-sm text-slate-500">{item.type}</span>
+      <span className="text-xs text-slate-500">
         {item.ownerDept ?? "-"}/{item.ownerPerson ?? "-"}
       </span>
       {canHandleAlerts && (
@@ -34,7 +34,7 @@ export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ i
             variant="outline"
             onClick={() => onUpdateStatus("processing")}
             disabled={item.actionStatus === "processing"}
-            className="ve-status-btn ve-status-processing"
+            className="h-6 rounded-[6px] border-blue-200 px-2 text-xs text-blue-700 hover:bg-blue-50 disabled:opacity-60"
           >
             标记处理中
           </Button>
@@ -43,7 +43,7 @@ export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ i
             variant="primary"
             onClick={() => onUpdateStatus("resolved")}
             disabled={item.actionStatus === "resolved"}
-            className="ve-status-btn ve-status-resolved"
+            className="h-6 rounded-[6px] px-2 text-xs disabled:opacity-60"
           >
             标记已处理
           </Button>

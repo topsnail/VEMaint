@@ -5,6 +5,7 @@ import { getUser } from "../lib/auth";
 import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
 import { downloadProtectedFile, openProtectedFile } from "../lib/http";
+import { actionBtn } from "../lib/ui/buttonTokens";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
 import { MinusCircle, Plus, Users } from "lucide-react";
 
@@ -20,7 +21,6 @@ type ConfigForm = {
   equipmentNameOptions: string;
   equipmentTypeOptions: string;
   equipmentCategoryOptions: string;
-  equipmentLocationOptions: string;
 };
 
 type ConfigFormValues = ConfigForm & {
@@ -28,18 +28,17 @@ type ConfigFormValues = ConfigForm & {
 };
 
 const FIXED_ENUMS: Array<{ key: string; label: string; options: string[] }> = [
-  { key: "vehicleType", label: "车辆类型", options: ["轿车", "SUV", "客车", "货车", "面包车", "工程车", "特种车", "其他"] },
-  { key: "energyType", label: "能源类型", options: ["汽油", "柴油", "纯电", "插电混动", "油电混动", "天然气", "氢能", "其他"] },
-  { key: "usageNature", label: "使用性质", options: ["营运", "非营运", "公务", "生产作业", "租赁", "其他"] },
+  { key: "vehicleType", label: "车辆类型", options: ["轿车", "SUV", "客车", "货车", "面包车", "工程车", "特种车", "皮卡", "冷藏车", "危化品运输车", "公务用车", "其他"] },
+  { key: "energyType", label: "能源类型", options: ["汽油", "柴油", "纯电", "插电混动", "油电混动", "天然气", "氢能", "甲醇", "其他"] },
+  { key: "usageNature", label: "使用性质", options: ["营运", "非营运", "公务", "生产作业", "租赁", "货运", "通勤", "应急保障", "其他"] },
   { key: "maintenanceType", label: "维保类型", options: ["日常保养", "故障维修", "事故维修", "定期检修"] },
 ];
 
 /** 使用部门（ownerDept）默认候选项，可在配置页修改 */
-const DEFAULT_OWNER_DEPT_OPTIONS = ["综合部", "运输部", "仓储部", "车务部", "其他"];
-const DEFAULT_EQUIPMENT_NAME_OPTIONS = ["空压机", "发电机", "液压泵", "叉车", "其他设备"];
-const DEFAULT_EQUIPMENT_TYPE_OPTIONS = ["动力设备", "液压设备", "搬运设备", "电气设备", "其他"];
-const DEFAULT_EQUIPMENT_CATEGORY_OPTIONS = ["生产", "保障", "检测", "安防", "其他"];
-const DEFAULT_EQUIPMENT_LOCATION_OPTIONS = ["一号车间", "二号车间", "仓库", "停车场", "其他"];
+const DEFAULT_OWNER_DEPT_OPTIONS = ["综合办公室", "工程一部", "工程二部", "工程三部", "后勤保障部", "通勤车队", "仓储物流部", "销售部", "物流部", "质检中心", "安全管理部", "信息化部"];
+const DEFAULT_EQUIPMENT_NAME_OPTIONS = ["空压机", "发电机", "液压泵", "叉车", "升降机", "焊机", "水泵", "安防主机", "空调机组", "变频柜", "传送带", "除尘机", "喷涂机", "锅炉", "冷却塔"];
+const DEFAULT_EQUIPMENT_TYPE_OPTIONS = ["动力设备", "液压设备", "搬运设备", "电气设备", "安防设备", "制冷设备", "传动设备", "环保设备", "公用设施", "其他"];
+const DEFAULT_EQUIPMENT_CATEGORY_OPTIONS = ["生产", "保障", "检测", "安防", "行政", "环保", "能源", "仓储", "其他"];
 
 function parseOptions(text: string): string[] {
   const seen = new Set<string>();
@@ -66,7 +65,7 @@ function toCommaSeparatedText(options: string[]): string {
 function validateCommaSeparated(_: unknown, value?: string) {
   const text = (value ?? "").trim();
   if (!text) return Promise.reject(new Error("不能为空"));
-  if (/[\/、;\n\r]/.test(text)) return Promise.reject(new Error("格式错误：仅支持逗号分隔"));
+  if (/[\/、;\n\r]/.test(text)) return Promise.reject(new Error("格式错误：仅支持中文或英文逗号分隔"));
   return Promise.resolve();
 }
 
@@ -101,7 +100,6 @@ export function ConfigPage() {
       equipmentNameOptions: toCommaSeparatedText(dropdowns.equipmentName ?? DEFAULT_EQUIPMENT_NAME_OPTIONS),
       equipmentTypeOptions: toCommaSeparatedText(dropdowns.equipmentType ?? DEFAULT_EQUIPMENT_TYPE_OPTIONS),
       equipmentCategoryOptions: toCommaSeparatedText(dropdowns.equipmentCategory ?? DEFAULT_EQUIPMENT_CATEGORY_OPTIONS),
-      equipmentLocationOptions: toCommaSeparatedText(dropdowns.equipmentLocation ?? DEFAULT_EQUIPMENT_LOCATION_OPTIONS),
       ownerDirectory: cfg.ownerDirectory?.length ? cfg.ownerDirectory : [],
     });
   };
@@ -135,7 +133,6 @@ export function ConfigPage() {
         equipmentName: parseOptions(values.equipmentNameOptions),
         equipmentType: parseOptions(values.equipmentTypeOptions),
         equipmentCategory: parseOptions(values.equipmentCategoryOptions),
-        equipmentLocation: parseOptions(values.equipmentLocationOptions),
       },
       ownerDirectory,
       permissions: {
@@ -196,17 +193,17 @@ export function ConfigPage() {
           items={[
             {
               key: "basic",
-              label: "基础设置",
+              label: "系统参数",
               children: (
                 <div className="ve-config-basic">
                   <Form.Item label="系统名称" name="siteName" rules={[{ required: true }]}>
-                    <Input className="ve-input" placeholder="显示在浏览器标题等位置" />
+                    <Input className="ve-input" placeholder="用于页面标题与系统展示名称" />
                   </Form.Item>
                   <Form.Item label="预警提前天数" name="warnDays" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={30} className="ve-input" placeholder="1–30" />
+                    <InputNumber min={1} max={30} className="ve-input" placeholder="建议 1-30 天" />
                   </Form.Item>
                   <Form.Item label="系统版本说明" name="versionNote" rules={[{ required: true }]}>
-                    <Input className="ve-input" placeholder="当前版本或更新说明" />
+                    <Input className="ve-input" placeholder="用于显示版本号或更新说明（例如 v1.2.0）" />
                   </Form.Item>
                 </div>
               ),
@@ -217,35 +214,35 @@ export function ConfigPage() {
               children: (
                 <Card
                   size="small"
-                  title="固定枚举（车辆/设备录入下拉）"
-                  extra={<Typography.Text type="secondary">仅管理员可编辑</Typography.Text>}
+                  title="台账与维保字典（录入下拉选项）"
+                  extra={<Typography.Text type="secondary">建议按业务口径维护，保存后全站生效</Typography.Text>}
                   className="ve-config-card"
                 >
-                  <Typography.Text type="secondary">输入格式统一为：`选项1,选项2,选项3`</Typography.Text>
+                  <Typography.Text type="secondary">输入格式统一为：中文逗号或英文逗号分隔（示例：选项1,选项2,选项3）。</Typography.Text>
                   <Space direction="vertical" className="w-full" size={8}>
                     <Form.Item
-                      label="车辆类型（vehicleType）"
+                      label="车辆类型"
                       name="vehicleTypeOptions"
                       rules={[{ required: true, message: "请输入车辆类型" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="仅支持逗号分隔，例如：轿车,SUV,客车" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：轿车,SUV,客车,货车,工程车" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="能源类型（energyType）"
+                      label="能源类型"
                       name="energyTypeOptions"
                       rules={[{ required: true, message: "请输入能源类型" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="仅支持逗号分隔，例如：汽油,柴油,纯电" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：汽油,柴油,纯电,插电混动" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="使用性质（usageNature）"
+                      label="使用性质"
                       name="usageNatureOptions"
                       rules={[{ required: true, message: "请输入使用性质" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="仅支持逗号分隔，例如：营运,非营运,公务" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：营运,非营运,公务,生产作业" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="维保类型（maintenanceType）"
+                      label="维保类型"
                       name="maintenanceTypeOptions"
                       rules={[
                         { required: true, message: "请输入维保类型" },
@@ -258,49 +255,42 @@ export function ConfigPage() {
                         },
                       ]}
                     >
-                      <Input.TextArea rows={1} placeholder="仅支持逗号分隔，建议4项：日常保养,故障维修,事故维修,定期检修" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="建议固定 4 项：日常保养,故障维修,事故维修,定期检修" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="使用部门（ownerDept）"
+                      label="使用部门"
                       name="ownerDeptOptions"
                       rules={[{ required: true, message: "请输入使用部门" }, { validator: validateCommaSeparated }]}
                     >
                       <Input.TextArea
                         rows={1}
-                        placeholder="仅支持逗号分隔，例如：综合部,运输部,仓储部（车辆/设备台账「使用部门」下拉候选项）"
+                        placeholder="例如：综合办公室,工程一部,仓储物流部（用于车辆/设备台账“使用部门”下拉）"
                         className="ve-textarea"
                       />
                     </Form.Item>
                     <Form.Item
-                      label="设备名称（equipmentName）"
+                      label="设备名称"
                       name="equipmentNameOptions"
                       rules={[{ required: true, message: "请输入设备名称字典" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="例如：空压机,发电机,液压泵,叉车,其他设备" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：空压机,发电机,液压泵,叉车,冷却塔" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="设备类型（equipmentType）"
+                      label="设备类型"
                       name="equipmentTypeOptions"
                       rules={[{ required: true, message: "请输入设备类型字典" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="例如：动力设备,液压设备,搬运设备,电气设备,其他" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：动力设备,液压设备,搬运设备,电气设备,公用设施" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="设备分类（equipmentCategory）"
+                      label="设备分类"
                       name="equipmentCategoryOptions"
                       rules={[{ required: true, message: "请输入设备分类字典" }, { validator: validateCommaSeparated }]}
                     >
-                      <Input.TextArea rows={1} placeholder="例如：生产,保障,检测,安防,其他" className="ve-textarea" />
-                    </Form.Item>
-                    <Form.Item
-                      label="设备位置（equipmentLocation）"
-                      name="equipmentLocationOptions"
-                      rules={[{ required: true, message: "请输入设备位置字典" }, { validator: validateCommaSeparated }]}
-                    >
-                      <Input.TextArea rows={1} placeholder="例如：一号车间,二号车间,仓库,停车场,其他" className="ve-textarea" />
+                      <Input.TextArea rows={1} placeholder="例如：生产,保障,检测,安防,能源,仓储" className="ve-textarea" />
                     </Form.Item>
                     <Typography.Text type="secondary" className="mt-0.5 block">
-                      所有人与住址：在台账中选择「所有人」后自动填充对应「住址」；也可在台账中手输未建档的所有人。
+                      所有人与住址：在台账中选择“所有人”后会自动填充对应“住址”；也可手动输入未建档对象。
                     </Typography.Text>
                     <Form.List name="ownerDirectory">
                       {(fields, { add, remove }) => (
@@ -313,7 +303,7 @@ export function ConfigPage() {
                                 rules={[{ required: true, message: "填写所有人" }]}
                                 className="!mb-0 min-w-[140px] flex-1"
                               >
-                                <Input placeholder="所有人姓名或单位" className="ve-input" />
+                                <Input placeholder="所有人（个人/单位）" className="ve-input" />
                               </Form.Item>
                               <Form.Item
                                 {...restField}
@@ -321,13 +311,13 @@ export function ConfigPage() {
                                 rules={[{ required: true, message: "填写住址" }]}
                                 className="!mb-0 min-w-[200px] flex-[2]"
                               >
-                                <Input placeholder="对应住址" className="ve-input" />
+                                <Input placeholder="对应住址（将用于台账自动回填）" className="ve-input" />
                               </Form.Item>
-                              <Button type="text" danger icon={<MinusCircle className="h-4 w-4" />} onClick={() => remove(name)} aria-label="删除此行" />
+                              <Button type="text" icon={<MinusCircle className="h-4 w-4" />} className={actionBtn.textDanger} onClick={() => remove(name)} aria-label="删除此行" />
                             </Space>
                           ))}
                           <Button type="dashed" onClick={() => add()} block icon={<Plus className="h-4 w-4" />} className="max-w-md">
-                            添加所有人与住址
+                            新增所有人与住址映射
                           </Button>
                         </div>
                       )}
@@ -338,29 +328,19 @@ export function ConfigPage() {
             },
             {
               key: "tools",
-              label: "导出与日志",
+              label: "数据导出与日志",
               children: (
                 <Card size="small" title="数据导出与操作日志" className="ve-config-card">
-                  <Typography.Text type="secondary">导出为 CSV 文件，以及查看最近操作日志。</Typography.Text>
+                  <Typography.Text type="secondary">支持导出 CSV，并查看系统操作日志。</Typography.Text>
                   <div className="mt-1.5">
                     <Space wrap>
-                      <Button
-                        type="link"
-                        disabled={!canExportVehicles}
-                        className="ve-link-btn"
-                        onClick={() => void handleExport("/export/vehicles", "vehicles.csv")}
-                      >
+                      <Button type="link" disabled={!canExportVehicles} className={actionBtn.link} onClick={() => void handleExport("/export/vehicles", "vehicles.csv")}>
                         导出车辆
                       </Button>
-                      <Button
-                        type="link"
-                        disabled={!canExportMaintenance}
-                        className="ve-link-btn"
-                        onClick={() => void handleExport("/export/maintenance", "maintenance.csv")}
-                      >
+                      <Button type="link" disabled={!canExportMaintenance} className={actionBtn.link} onClick={() => void handleExport("/export/maintenance", "maintenance.csv")}>
                         导出维保
                       </Button>
-                      <Button type="link" disabled={!canViewLogs} className="ve-link-btn" onClick={() => void handleOpenLogs()}>
+                      <Button type="link" disabled={!canViewLogs} className={actionBtn.link} onClick={() => void handleOpenLogs()}>
                         查看日志
                       </Button>
                     </Space>
@@ -375,11 +355,11 @@ export function ConfigPage() {
                 <Card size="small" title="角色权限" className="ve-config-card">
                   <Space direction="vertical" className="w-full" size={6}>
                     <Space>
-                      <Button type="primary" icon={<Users className="h-4 w-4" />} onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-primary-btn">
+                      <Button type="primary" icon={<Users className="h-4 w-4" />} onClick={() => nav("/users")} disabled={!canManageUsers} className={actionBtn.primary}>
                         用户管理
                       </Button>
-                      <Button onClick={() => nav("/users")} disabled={!canManageUsers} className="ve-btn">
-                        用户列表
+                      <Button onClick={() => nav("/users")} disabled={!canManageUsers} className={actionBtn.neutral}>
+                        打开用户列表
                       </Button>
                     </Space>
                     <div className="ve-permission-container rounded-lg border border-slate-200 bg-white p-2.5">
@@ -387,10 +367,10 @@ export function ConfigPage() {
                         {(Object.keys(roleLabel) as Array<keyof RolePermissions>).map((role) => (
                           <Space key={role} size={8}>
                             <Typography.Text strong>{roleLabel[role]}</Typography.Text>
-                            <Button size="small" onClick={() => setRoleAll(role, true)} className="ve-small-btn">
+                            <Button size="small" onClick={() => setRoleAll(role, true)} className={actionBtn.smallNeutral}>
                               全选
                             </Button>
-                            <Button size="small" onClick={() => setRoleAll(role, false)} className="ve-small-btn">
+                            <Button size="small" onClick={() => setRoleAll(role, false)} className={actionBtn.smallNeutral}>
                               清空
                             </Button>
                           </Space>
@@ -466,7 +446,7 @@ export function ConfigPage() {
           ]}
         />
         <div className="ve-config-footer sticky bottom-0 mt-4 border-t border-slate-200 bg-white pt-3">
-          <Button type="primary" onClick={submit} className="ve-primary-btn">
+          <Button type="primary" onClick={submit} className={actionBtn.primary}>
             保存配置
           </Button>
         </div>

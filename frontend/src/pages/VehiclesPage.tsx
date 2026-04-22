@@ -1,4 +1,4 @@
-import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Dropdown, Form, Input, Modal, Popconfirm, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "@/components/ui/legacy";
+import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Dropdown, Form, Input, Modal, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "@/components/ui/legacy";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
@@ -17,7 +17,8 @@ import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { vehicleSubmitSchema } from "../lib/schemas";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Eye, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
+import { actionBtn } from "../lib/ui/buttonTokens";
 
 type VehicleForm = {
   plateNo: string;
@@ -75,6 +76,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [viewCycle, setViewCycle] = useState<VehicleCycle | null>(null);
   const [viewTab, setViewTab] = useState("base");
   const [editTab, setEditTab] = useState("basic");
+  const [pendingScrap, setPendingScrap] = useState<Vehicle | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>(() => initialParams.get("status") ?? "");
   const [filterVehicleType, setFilterVehicleType] = useState<string>("");
   const [filterOwnerDept, setFilterOwnerDept] = useState<string>("");
@@ -240,12 +242,10 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       !!meta.archiveNo,
       !!meta.ownerName,
       !!meta.ownerAddress,
-      !!meta.drivingLicenseAttachmentKey,
       !!cycle?.insuranceType,
       !!cycle?.insuranceVendor,
       !!cycle?.insuranceStart,
       !!cycle?.insuranceExpiry,
-      !!cycle?.insuranceAttachmentKey,
       !!cycle?.annualLastDate,
       !!cycle?.annualExpiry,
       !!cycle?.maintLastDate,
@@ -351,105 +351,114 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   }, [canManage, form]);
 
   const submit = async () => {
-    const v = await form.validateFields();
-    const rhfValues = getRhfValues();
-    const validated = vehicleSubmitSchema.safeParse({
-      plateNo: rhfValues.plateNo,
-      vehicleType: rhfValues.vehicleType,
-      brandModel: rhfValues.brandModel,
-      vin: rhfValues.vin,
-      engineNo: rhfValues.engineNo,
-      ownerDept: rhfValues.ownerDept,
-      ownerPerson: rhfValues.ownerPerson,
-      mileage: Number(rhfValues.mileage),
-    });
-    if (!validated.success) {
-      message.error(validated.error.issues[0]?.message ?? "表单校验失败");
-      return;
-    }
-    const normalizePlateNo = (value: unknown) =>
-      String(value ?? "")
-        .toUpperCase()
-        .replace(/[·•\.\-\s]/g, "")
-        .trim();
-    const normalizeDate = (value: unknown) => {
-      if (!value) return "";
-      if (typeof value === "string") return value.trim();
-      if (typeof (value as { format?: (pattern: string) => string }).format === "function") {
-        return (value as { format: (pattern: string) => string }).format("YYYY-MM-DD");
-      }
-      return "";
-    };
-    const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
-    const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
-    const mergedUsageNature = [rhfValues.energyType, rhfValues.usageNature].filter(Boolean).join(" / ");
-    const mergedLoadSpec = [rhfValues.loadPeople, rhfValues.loadWeight, rhfValues.dimensions].filter(Boolean).join(" / ");
-    const mergedRemark = [
-      rhfValues.remark,
-      rhfValues.archiveNo ? `档案编号: ${rhfValues.archiveNo}` : "",
-      rhfValues.ownerName ? `所有人: ${rhfValues.ownerName}` : "",
-      issueDate ? `发证日期: ${issueDate}` : "",
-      rhfValues.ownerAddress ? `住址: ${rhfValues.ownerAddress}` : "",
-      rhfValues.drivingLicenseAttachmentKey ? `行驶证附件Key: ${rhfValues.drivingLicenseAttachmentKey}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    const payload = {
-      ...v,
-      ...rhfValues,
-      plateNo: normalizePlateNo(rhfValues.plateNo),
-      regDate: regDate || null,
-      loadSpec: mergedLoadSpec || null,
-      usageNature: mergedUsageNature || null,
-      remark: mergedRemark || null,
-    };
-    const res = await requestUpsertVehicle(editing?.id ?? null, payload);
-    if (!res.ok) return message.error(res.error.message);
-    const vehicleId = editing ? editing.id : res.data.id;
-    if (vehicleId) {
-      await requestPutVehicleCycles(vehicleId, {
-        insuranceType: v.insuranceType || null,
-        insuranceVendor: v.insuranceVendor || null,
-        insuranceStart: v.insuranceStart || null,
-        insuranceExpiry: v.insuranceExpiry || null,
-        insuranceAttachmentKey: v.insuranceAttachmentKey || null,
-        annualLastDate: v.annualLastDate || null,
-        annualExpiry: v.annualExpiry || null,
-        maintLastDate: v.maintLastDate || null,
-        maintIntervalDays: v.maintIntervalDays ?? null,
-        maintIntervalKm: v.maintIntervalKm ?? null,
-        maintNextDate: v.maintNextDate || null,
-        maintNextKm: v.maintNextKm ?? null,
+    try {
+      const v = await form.validateFields();
+      const rhfValues = getRhfValues();
+      const validated = vehicleSubmitSchema.safeParse({
+        plateNo: rhfValues.plateNo,
+        vehicleType: rhfValues.vehicleType,
+        brandModel: rhfValues.brandModel,
+        vin: rhfValues.vin,
+        engineNo: rhfValues.engineNo,
+        ownerDept: rhfValues.ownerDept,
+        ownerPerson: rhfValues.ownerPerson,
+        mileage: Number(rhfValues.mileage),
       });
+      if (!validated.success) {
+        message.error(validated.error.issues[0]?.message ?? "表单校验失败");
+        return;
+      }
+      const normalizePlateNo = (value: unknown) =>
+        String(value ?? "")
+          .toUpperCase()
+          .replace(/[·•\.\-\s]/g, "")
+          .trim();
+      const normalizeDate = (value: unknown) => {
+        if (!value) return "";
+        if (typeof value === "string") return value.trim();
+        if (typeof (value as { format?: (pattern: string) => string }).format === "function") {
+          return (value as { format: (pattern: string) => string }).format("YYYY-MM-DD");
+        }
+        return "";
+      };
+      const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
+      const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
+      const mergedUsageNature = [rhfValues.energyType, rhfValues.usageNature].filter(Boolean).join(" / ");
+      const mergedLoadSpec = [rhfValues.loadPeople, rhfValues.loadWeight, rhfValues.dimensions].filter(Boolean).join(" / ");
+      const mergedRemark = [
+        rhfValues.remark,
+        rhfValues.archiveNo ? `档案编号: ${rhfValues.archiveNo}` : "",
+        rhfValues.ownerName ? `所有人: ${rhfValues.ownerName}` : "",
+        issueDate ? `发证日期: ${issueDate}` : "",
+        rhfValues.ownerAddress ? `住址: ${rhfValues.ownerAddress}` : "",
+        rhfValues.drivingLicenseAttachmentKey ? `行驶证附件Key: ${rhfValues.drivingLicenseAttachmentKey}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const payload = {
+        ...v,
+        ...rhfValues,
+        plateNo: normalizePlateNo(rhfValues.plateNo),
+        regDate: regDate || null,
+        loadSpec: mergedLoadSpec || null,
+        usageNature: mergedUsageNature || null,
+        remark: mergedRemark || null,
+      };
+      const res = await requestUpsertVehicle(editing?.id ?? null, payload);
+      if (!res.ok) return message.error(res.error.message);
+      const vehicleId = editing ? editing.id : res.data.id;
+      if (vehicleId) {
+        const cycleRes = await requestPutVehicleCycles(vehicleId, {
+          insuranceType: v.insuranceType || null,
+          insuranceVendor: v.insuranceVendor || null,
+          insuranceStart: v.insuranceStart || null,
+          insuranceExpiry: v.insuranceExpiry || null,
+          insuranceAttachmentKey: v.insuranceAttachmentKey || null,
+          annualLastDate: v.annualLastDate || null,
+          annualExpiry: v.annualExpiry || null,
+          maintLastDate: v.maintLastDate || null,
+          maintIntervalDays: v.maintIntervalDays ?? null,
+          maintIntervalKm: v.maintIntervalKm ?? null,
+          maintNextDate: v.maintNextDate || null,
+          maintNextKm: v.maintNextKm ?? null,
+        });
+        if (!cycleRes.ok) {
+          message.error(cycleRes.error.message || "周期信息保存失败，请重试");
+          return;
+        }
+      }
+      setOpen(false);
+      form.resetFields();
+      resetRhf({
+        plateNo: DEFAULT_PLATE_NO_PREFIX,
+        vehicleType: "",
+        energyType: "",
+        usageNature: "",
+        brandModel: "",
+        vin: "",
+        engineNo: "",
+        regDate: "",
+        issueDate: "",
+        archiveNo: "",
+        loadPeople: "",
+        loadWeight: "",
+        dimensions: "",
+        ownerName: "",
+        ownerAddress: "",
+        ownerDept: "",
+        ownerPerson: "",
+        mileage: 0,
+        maintNextKm: 0,
+        status: "normal",
+        drivingLicenseAttachmentKey: "",
+        remark: "",
+      });
+      setEditing(null);
+      await load(q);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "表单校验失败";
+      message.error(msg);
     }
-    setOpen(false);
-    form.resetFields();
-    resetRhf({
-      plateNo: DEFAULT_PLATE_NO_PREFIX,
-      vehicleType: "",
-      energyType: "",
-      usageNature: "",
-      brandModel: "",
-      vin: "",
-      engineNo: "",
-      regDate: "",
-      issueDate: "",
-      archiveNo: "",
-      loadPeople: "",
-      loadWeight: "",
-      dimensions: "",
-      ownerName: "",
-      ownerAddress: "",
-      ownerDept: "",
-      ownerPerson: "",
-      mileage: 0,
-      maintNextKm: 0,
-      status: "normal",
-      drivingLicenseAttachmentKey: "",
-      remark: "",
-    });
-    setEditing(null);
-    await load(q);
   };
 
   const setStatus = async (id: string, status: Vehicle["status"]) => {
@@ -471,9 +480,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     const [energyType, usageNature] = splitCombined(r.usageNature);
     const [loadPeople, loadWeight, dimensions] = splitCombined(r.loadSpec);
     const meta = parseRemarkMeta(r.remark);
+    const cachedCycle = cyclesByVehicleId[r.id];
 
     setEditing(r);
     setEditTab(tab);
+    setOpen(true);
     form.setFieldsValue({
       plateNo: r.plateNo,
       vehicleType: r.vehicleType,
@@ -497,52 +508,65 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       status: r.status,
       drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
       remark: meta.remarkBody || "",
+      insuranceType: cachedCycle?.insuranceType || "",
+      insuranceVendor: cachedCycle?.insuranceVendor || "",
+      insuranceStart: cachedCycle?.insuranceStart || "",
+      insuranceExpiry: cachedCycle?.insuranceExpiry || "",
+      insuranceAttachmentKey: cachedCycle?.insuranceAttachmentKey || "",
+      annualLastDate: cachedCycle?.annualLastDate || "",
+      annualExpiry: cachedCycle?.annualExpiry || "",
+      maintLastDate: cachedCycle?.maintLastDate || "",
+      maintIntervalDays: cachedCycle?.maintIntervalDays ?? undefined,
+      maintIntervalKm: cachedCycle?.maintIntervalKm ?? undefined,
+      maintNextDate: cachedCycle?.maintNextDate || "",
+      maintNextKm: cachedCycle?.maintNextKm ?? undefined,
     });
-    setRhfValue("plateNo", r.plateNo);
-    setRhfValue("vehicleType", r.vehicleType);
-    setRhfValue("energyType", energyType || "");
-    setRhfValue("usageNature", usageNature || "");
-    setRhfValue("brandModel", r.brandModel);
-    setRhfValue("vin", r.vin);
-    setRhfValue("engineNo", r.engineNo);
-    setRhfValue("regDate", r.regDate || "");
-    setRhfValue("issueDate", meta.issueDate || "");
-    setRhfValue("archiveNo", meta.archiveNo || "");
-    setRhfValue("loadPeople", loadPeople || "");
-    setRhfValue("loadWeight", loadWeight || "");
-    setRhfValue("dimensions", dimensions || "");
-    setRhfValue("ownerName", meta.ownerName || "");
-    setRhfValue("ownerAddress", meta.ownerAddress || "");
-    setRhfValue("ownerDept", r.ownerDept);
-    setRhfValue("ownerPerson", r.ownerPerson);
-    setRhfValue("mileage", Number(r.mileage ?? 0));
-    setRhfValue("maintNextKm", Number((r as any).maintNextKm ?? 0));
-    setRhfValue("status", r.status);
-    setRhfValue("drivingLicenseAttachmentKey", meta.drivingLicenseAttachmentKey || "");
-    setRhfValue("remark", meta.remarkBody || "");
+    // Use one-shot reset to avoid partial/empty values when reopening edit modal.
+    resetRhf({
+      plateNo: r.plateNo,
+      vehicleType: r.vehicleType,
+      energyType: energyType || "",
+      usageNature: usageNature || "",
+      brandModel: r.brandModel,
+      vin: r.vin,
+      engineNo: r.engineNo,
+      regDate: r.regDate || "",
+      issueDate: meta.issueDate || "",
+      archiveNo: meta.archiveNo || "",
+      loadPeople: loadPeople || "",
+      loadWeight: loadWeight || "",
+      dimensions: dimensions || "",
+      ownerName: meta.ownerName || "",
+      ownerAddress: meta.ownerAddress || "",
+      ownerDept: r.ownerDept,
+      ownerPerson: r.ownerPerson,
+      mileage: Number(r.mileage ?? 0),
+      maintNextKm: Number(cachedCycle?.maintNextKm ?? (r as any).maintNextKm ?? 0),
+      status: r.status,
+      drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
+      remark: meta.remarkBody || "",
+    });
 
-    void fetchVehicleCycle(r.id)
-      .then((cycleRes) => {
-        if (cycleRes.ok && cycleRes.data.cycle) {
-          const c = cycleRes.data.cycle;
-          form.setFieldsValue({
-            insuranceType: c.insuranceType || "",
-            insuranceVendor: c.insuranceVendor || "",
-            insuranceStart: c.insuranceStart || "",
-            insuranceExpiry: c.insuranceExpiry || "",
-            insuranceAttachmentKey: c.insuranceAttachmentKey || "",
-            annualLastDate: c.annualLastDate || "",
-            annualExpiry: c.annualExpiry || "",
-            maintLastDate: c.maintLastDate || "",
-            maintIntervalDays: c.maintIntervalDays ?? undefined,
-            maintIntervalKm: c.maintIntervalKm ?? undefined,
-            maintNextDate: c.maintNextDate || "",
-            maintNextKm: c.maintNextKm ?? undefined,
-          });
-          setRhfValue("maintNextKm", Number(c.maintNextKm ?? 0));
-        }
-      })
-      .finally(() => setOpen(true));
+    void fetchVehicleCycle(r.id).then((cycleRes) => {
+      if (!cycleRes.ok || !cycleRes.data.cycle) return;
+      const c = cycleRes.data.cycle;
+      // Modal/form is already open; apply latest cycle fields once fetched.
+      form.setFieldsValue({
+        insuranceType: c.insuranceType || "",
+        insuranceVendor: c.insuranceVendor || "",
+        insuranceStart: c.insuranceStart || "",
+        insuranceExpiry: c.insuranceExpiry || "",
+        insuranceAttachmentKey: c.insuranceAttachmentKey || "",
+        annualLastDate: c.annualLastDate || "",
+        annualExpiry: c.annualExpiry || "",
+        maintLastDate: c.maintLastDate || "",
+        maintIntervalDays: c.maintIntervalDays ?? undefined,
+        maintIntervalKm: c.maintIntervalKm ?? undefined,
+        maintNextDate: c.maintNextDate || "",
+        maintNextKm: c.maintNextKm ?? undefined,
+      });
+      setRhfValue("maintNextKm", Number(c.maintNextKm ?? 0));
+    });
   };
 
   const shareVehicle = async (r: Vehicle) => {
@@ -601,6 +625,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         canManage ? (
           <Button
             type="primary"
+            className={actionBtn.primary}
             onClick={() => {
               setEditing(null);
               form.resetFields();
@@ -637,11 +662,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       }
     >
       <div className="ve-vehicles-page space-y-4">
-        <div className="ve-vehicles-header flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Space wrap size={[8, 8]} className="w-full">
+        <div className="ve-vehicles-header w-full flex items-center">
+          <Space size={[8, 8]} className="ve-vehicles-filters w-full">
           <Input.Search
+            className="ve-vehicles-filter ve-vehicles-filter-search"
             placeholder="搜索车牌/品牌/归属"
-            defaultValue={q}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
             onSearch={(v) => {
               const nextQ = v.trim();
               setQ(nextQ);
@@ -649,12 +676,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
               void load(nextQ);
             }}
             allowClear
-            style={{ width: 300 }}
           />
           <Select
+            className="ve-vehicles-filter"
             allowClear
             placeholder="状态"
-            style={{ width: 140 }}
             value={filterStatus || undefined}
             onChange={(v) => setFilterStatus(v ?? "")}
             options={[
@@ -665,25 +691,25 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             ]}
           />
           <Select
+            className="ve-vehicles-filter"
             allowClear
             placeholder="车辆类型"
-            style={{ width: 140 }}
             value={filterVehicleType || undefined}
             onChange={(v) => setFilterVehicleType(v ?? "")}
             options={vehicleTypeFilterOptions}
           />
           <Select
+            className="ve-vehicles-filter"
             allowClear
             placeholder="使用部门"
-            style={{ width: 140 }}
             value={filterOwnerDept || undefined}
             onChange={(v) => setFilterOwnerDept(v ?? "")}
             options={ownerDeptFilterOptions}
           />
           <Select
+            className="ve-vehicles-filter"
             allowClear
             placeholder="到期分级"
-            style={{ width: 140 }}
             value={filterNearDue || undefined}
             onChange={(v) => setFilterNearDue(v ?? "")}
             options={[
@@ -694,13 +720,28 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             ]}
           />
           <Select
+            className="ve-vehicles-filter"
             allowClear
             placeholder="台账缺项"
-            style={{ width: 140 }}
             value={filterIncomplete || undefined}
             onChange={(v) => setFilterIncomplete(v ?? "")}
             options={[{ label: "仅看不完整", value: "yes" }]}
           />
+          <Button
+            className={actionBtn.neutral}
+            onClick={() => {
+              setQ("");
+              setFilterStatus("");
+              setFilterVehicleType("");
+              setFilterOwnerDept("");
+              setFilterNearDue("");
+              setFilterIncomplete("");
+              updateQueryInUrl("");
+              void load("");
+            }}
+          >
+            重置筛选
+          </Button>
         </Space>
       </div>
 
@@ -785,29 +826,22 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             width: 48,
             className: "py-2 px-3",
             render: (_, r) => (
-              canManage ? (
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: [
-                      { key: "edit", label: "编辑" },
-                      { key: "delete", label: "删除", danger: true },
-                    ],
-                    onClick: ({ key }) => {
-                      if (key === "edit") openEdit(r, "basic");
-                      if (key === "delete") {
-                        if (window.confirm("确认删除该车辆？将车辆状态设置为“报废”")) {
-                          void setStatus(r.id, "scrapped");
-                        }
-                      }
-                    },
-                  }}
-                >
-                  <Button type="text" icon={<MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />} />
-                </Dropdown>
-              ) : (
-                "-"
-              )
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  items: [
+                    { key: "view", label: "查看" },
+                    ...(canManage ? [{ type: "divider" } as const, { key: "edit", label: "编辑" }, { key: "delete", label: "删除", danger: true }] : []),
+                  ],
+                  onClick: ({ key }) => {
+                    if (key === "view") void openView(r, "base");
+                    if (key === "edit") openEdit(r, "basic");
+                    if (key === "delete") setPendingScrap(r);
+                  },
+                }}
+              >
+                <Button type="text" icon={<MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />} />
+              </Dropdown>
             ),
           },
         ]}
@@ -827,6 +861,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           viewLoading ? (
             <Skeleton active paragraph={{ rows: 8 }} />
           ) : (
+            (() => {
+              const viewVehicleMeta = parseRemarkMeta(viewVehicle.remark);
+              return (
             <Tabs
               activeKey={viewTab}
               onChange={(k) => setViewTab(k)}
@@ -835,148 +872,270 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                   key: "base",
                   label: "基础信息",
                   children: (
-                    <Descriptions column={2} size="small" bordered>
-                      <Descriptions.Item label="号牌号码">{viewVehicle.plateNo}</Descriptions.Item>
-                      <Descriptions.Item label="车辆类型">{viewVehicle.vehicleType}</Descriptions.Item>
-                      <Descriptions.Item label="品牌型号">{viewVehicle.brandModel}</Descriptions.Item>
-                      <Descriptions.Item label="车辆识别代号">{viewVehicle.vin}</Descriptions.Item>
-                      <Descriptions.Item label="发动机号">{viewVehicle.engineNo}</Descriptions.Item>
-                      <Descriptions.Item label="注册日期">{viewVehicle.regDate || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="当前里程">{viewVehicle.mileage}</Descriptions.Item>
-                      <Descriptions.Item label="车辆状态">
-                        <StatusPill tone={vehicleStatusTone(viewVehicle.status)} label={statusMeta[viewVehicle.status].label} />
-                      </Descriptions.Item>
-                      <Descriptions.Item label="使用部门">{viewVehicle.ownerDept}</Descriptions.Item>
-                      <Descriptions.Item label="责任人">{viewVehicle.ownerPerson}</Descriptions.Item>
-                      <Descriptions.Item label="备注" span={2}>
-                        {parseRemarkMeta(viewVehicle.remark).remarkBody || "-"}
-                      </Descriptions.Item>
+                    <div className="space-y-3">
                       {canManage ? (
-                        <Descriptions.Item label="操作" span={2}>
+                        <div className="flex justify-end">
                           <Button
                             type="primary"
                             size="small"
+                            className={actionBtn.primary}
                             onClick={() => {
                               setViewOpen(false);
                               openEdit(viewVehicle, "basic");
                             }}
                           >
-                            编辑基础信息
+                            <Pencil className="h-3.5 w-3.5" />
+                            编辑
                           </Button>
-                        </Descriptions.Item>
+                        </div>
                       ) : null}
-                    </Descriptions>
+
+                      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                        {[
+                          { label: "号牌号码", value: viewVehicle.plateNo },
+                          { label: "车辆类型", value: viewVehicle.vehicleType },
+                          { label: "品牌型号", value: viewVehicle.brandModel || "-" },
+                          { label: "车辆识别代号", value: viewVehicle.vin || "-" },
+                          { label: "发动机号", value: viewVehicle.engineNo || "-" },
+                          { label: "注册日期", value: viewVehicle.regDate || "-" },
+                          { label: "当前里程", value: String(viewVehicle.mileage ?? "-") },
+                          {
+                            label: "车辆状态",
+                            value: <StatusPill tone={vehicleStatusTone(viewVehicle.status)} label={statusMeta[viewVehicle.status].label} />,
+                          },
+                          { label: "使用部门", value: viewVehicle.ownerDept || "-" },
+                          { label: "责任人", value: viewVehicle.ownerPerson || "-" },
+                        ].map((f) => (
+                          <div key={f.label} className="rounded-md border border-slate-200 bg-white p-2.5">
+                            <div className="text-xs font-medium tracking-wide text-slate-500">{f.label}</div>
+                            <div className="mt-1 min-w-0 break-words text-sm font-medium text-slate-900">{f.value as any}</div>
+                          </div>
+                        ))}
+                        <div className="rounded-md border border-slate-200 bg-white p-2.5 md:col-span-2">
+                          <div className="text-xs font-medium tracking-wide text-slate-500">备注</div>
+                          <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                            {viewVehicleMeta.remarkBody || "-"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ),
                 },
                 {
                   key: "cycle",
                   label: "周期信息",
                   children: (
-                    <Descriptions column={2} size="small" bordered>
-                      <Descriptions.Item label="保险类型">{viewCycle?.insuranceType || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="保险公司">{viewCycle?.insuranceVendor || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="投保日期">{viewCycle?.insuranceStart || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="到期日期">{viewCycle?.insuranceExpiry || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="上次审车日期">{viewCycle?.annualLastDate || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="年审到期日">{viewCycle?.annualExpiry || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="上次保养日期">{viewCycle?.maintLastDate || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="保养间隔天数">{viewCycle?.maintIntervalDays ?? "-"}</Descriptions.Item>
-                      <Descriptions.Item label="保养间隔里程">{viewCycle?.maintIntervalKm ?? "-"}</Descriptions.Item>
-                      <Descriptions.Item label="下次保养日期">{viewCycle?.maintNextDate || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="下次保养里程">{viewCycle?.maintNextKm ?? "-"}</Descriptions.Item>
+                    <div className="space-y-3">
                       {canManage ? (
-                        <Descriptions.Item label="操作" span={2}>
-                          <Space>
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setViewOpen(false);
-                                openEdit(viewVehicle, "insurance");
-                              }}
-                            >
-                              编辑保险
-                            </Button>
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setViewOpen(false);
-                                openEdit(viewVehicle, "annual");
-                              }}
-                            >
-                              编辑年审
-                            </Button>
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setViewOpen(false);
-                                openEdit(viewVehicle, "maint");
-                              }}
-                            >
-                              编辑保养
-                            </Button>
-                          </Space>
-                        </Descriptions.Item>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            size="small"
+                            className={actionBtn.secondary}
+                            onClick={() => {
+                              setViewOpen(false);
+                              openEdit(viewVehicle, "insurance");
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            编辑保险
+                          </Button>
+                          <Button
+                            size="small"
+                            className={actionBtn.secondary}
+                            onClick={() => {
+                              setViewOpen(false);
+                              openEdit(viewVehicle, "annual");
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            编辑年审
+                          </Button>
+                          <Button
+                            size="small"
+                            className={actionBtn.secondary}
+                            onClick={() => {
+                              setViewOpen(false);
+                              openEdit(viewVehicle, "maint");
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            编辑保养
+                          </Button>
+                        </div>
                       ) : null}
-                    </Descriptions>
+
+                      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                        {[
+                          { label: "保险类型", value: viewCycle?.insuranceType || "-" },
+                          { label: "保险公司", value: viewCycle?.insuranceVendor || "-" },
+                          { label: "投保日期", value: viewCycle?.insuranceStart || "-" },
+                          { label: "到期日期", value: viewCycle?.insuranceExpiry || "-" },
+                          { label: "上次审车日期", value: viewCycle?.annualLastDate || "-" },
+                          { label: "年审到期日", value: viewCycle?.annualExpiry || "-" },
+                          { label: "上次保养日期", value: viewCycle?.maintLastDate || "-" },
+                          { label: "保养间隔天数", value: String(viewCycle?.maintIntervalDays ?? "-") },
+                          { label: "保养间隔里程", value: String(viewCycle?.maintIntervalKm ?? "-") },
+                          { label: "下次保养日期", value: viewCycle?.maintNextDate || "-" },
+                          { label: "下次保养里程", value: String(viewCycle?.maintNextKm ?? "-") },
+                        ].map((f) => (
+                          <div key={f.label} className="rounded-md border border-slate-200 bg-white p-2.5">
+                            <div className="text-xs font-medium tracking-wide text-slate-500">{f.label}</div>
+                            <div className="mt-1 text-sm font-medium text-slate-900">{f.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ),
                 },
                 {
                   key: "files",
                   label: "附件",
                   children: (
-                    <Space direction="vertical" size={8}>
-                      {viewCycle?.insuranceAttachmentKey ? (
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            void viewAttachment(viewCycle.insuranceAttachmentKey!);
-                          }}
-                        >
-                          查看保单附件
-                        </a>
-                      ) : (
-                        <span>保单附件：-</span>
-                      )}
-                      {parseRemarkMeta(viewVehicle.remark).drivingLicenseAttachmentKey ? (
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            void viewAttachment(parseRemarkMeta(viewVehicle.remark).drivingLicenseAttachmentKey);
-                          }}
-                        >
-                          查看行驶证附件
-                        </a>
-                      ) : (
-                        <span>行驶证附件：-</span>
-                      )}
-                    </Space>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                        <div className="rounded-md border border-slate-200 bg-white p-2.5">
+                          <div className="text-xs font-medium tracking-wide text-slate-500">保单附件</div>
+                          <div className="mt-1 text-sm text-slate-800">
+                            {viewCycle?.insuranceAttachmentKey ? (
+                              <span className="font-medium text-slate-900">已上传</span>
+                            ) : (
+                              <span className="text-slate-500">未上传</span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              size="small"
+                              className={actionBtn.ghost}
+                              disabled={!viewCycle?.insuranceAttachmentKey}
+                              onClick={() => viewCycle?.insuranceAttachmentKey && void viewAttachment(viewCycle.insuranceAttachmentKey)}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              查看
+                            </Button>
+                            {canManage ? (
+                              <Button
+                                size="small"
+                                className={actionBtn.secondary}
+                                onClick={() => {
+                                  setViewOpen(false);
+                                  openEdit(viewVehicle, "insurance");
+                                }}
+                              >
+                                <Upload className="h-3.5 w-3.5" />
+                                去上传
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="rounded-md border border-slate-200 bg-white p-2.5">
+                          <div className="text-xs font-medium tracking-wide text-slate-500">行驶证附件</div>
+                          <div className="mt-1 text-sm text-slate-800">
+                            {viewVehicleMeta.drivingLicenseAttachmentKey ? (
+                              <span className="font-medium text-slate-900">已上传</span>
+                            ) : (
+                              <span className="text-slate-500">未上传</span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              size="small"
+                              className={actionBtn.ghost}
+                              disabled={!viewVehicleMeta.drivingLicenseAttachmentKey}
+                              onClick={() => {
+                                const k = viewVehicleMeta.drivingLicenseAttachmentKey;
+                                if (k) void viewAttachment(k);
+                              }}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              查看
+                            </Button>
+                            {canManage ? (
+                              <Button
+                                size="small"
+                                className={actionBtn.secondary}
+                                onClick={() => {
+                                  setViewOpen(false);
+                                  openEdit(viewVehicle, "basic");
+                                }}
+                              >
+                                <Upload className="h-3.5 w-3.5" />
+                                去上传
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600">
+                        提示：附件为受保护资源，点击“查看”会通过后端鉴权后打开。
+                      </div>
+                    </div>
                   ),
                 },
               ]}
             />
+              );
+            })()
           )
         ) : null}
       </Modal>
 
-      {open ? (
-        <div className="rounded-sm border border-slate-200 bg-white">
-          <div className="sticky top-12 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-            <div className="text-sm font-medium text-slate-900">{editing ? "编辑车辆" : "新增车辆"}</div>
-            <Space size={8}>
-              <Button onClick={() => setOpen(false)}>取消</Button>
-              <Button type="primary" onClick={() => void submit()}>
-                保存
-              </Button>
-            </Space>
-          </div>
-          <div className="max-h-[70vh] overflow-y-auto p-4">
-        <Form form={form} layout="vertical">
-          <Tabs
-            activeKey={editTab}
-            onChange={(k) => setEditTab(k)}
-            items={[
+      <Modal
+        title="确认删除"
+        open={!!pendingScrap}
+        centered
+        width={520}
+        onCancel={() => setPendingScrap(null)}
+        footer={
+          <Space size={8}>
+            <Button className={actionBtn.neutral} onClick={() => setPendingScrap(null)}>
+              取消
+            </Button>
+            <Button
+              type="primary"
+              className={actionBtn.primary}
+              onClick={() => {
+                if (!pendingScrap) return;
+                void setStatus(pendingScrap.id, "scrapped");
+                setPendingScrap(null);
+              }}
+            >
+              确认删除
+            </Button>
+          </Space>
+        }
+      >
+        <div className="text-sm text-slate-700">
+          确认删除该车辆吗？此操作会将车辆状态设置为“报废”。
+          {pendingScrap ? <div className="mt-2 text-xs text-slate-500">车辆：{pendingScrap.plateNo}</div> : null}
+        </div>
+      </Modal>
+
+      <Modal
+        title={editing ? "编辑车辆" : "新增车辆"}
+        open={open}
+        centered
+        onCancel={() => setOpen(false)}
+        footer={
+          <Space size={8}>
+            <Button className={actionBtn.neutral} onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button type="primary" className={actionBtn.primary} onClick={() => void submit()}>
+              保存
+            </Button>
+          </Space>
+        }
+        width={920}
+        className="ve-vehicles-modal"
+      >
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          <Form form={form} layout="vertical">
+            <Tabs
+              activeKey={editTab}
+              onChange={(k) => setEditTab(k)}
+              items={[
               {
                 key: "basic",
                 label: "基础信息",
@@ -987,7 +1146,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                         <Controller
                           name="plateNo"
                           control={control}
-                          render={({ field }) => <Input {...field} placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀" />}
+                          render={({ field }) => (
+                            <Input
+                              {...field}
+                              placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀"
+                              onChange={(e) => field.onChange(e.target.value.replace(/[a-z]/g, (c) => c.toUpperCase()))}
+                            />
+                          )}
                         />
                       </Form.Item>
                     </Col>
@@ -1215,11 +1380,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Form.Item label="行驶证附件Key">
+                      <Form.Item label="备注">
                         <Controller
-                          name="drivingLicenseAttachmentKey"
+                          name="remark"
                           control={control}
-                          render={({ field }) => <Input {...field} placeholder="上传后自动填充，或可手动填写" />}
+                          render={({ field }) => <Input.TextArea rows={4} placeholder="其他补充说明（不含结构化元数据行）" value={field.value ?? ""} onChange={field.onChange} />}
                         />
                       </Form.Item>
                     </Col>
@@ -1232,15 +1397,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             form.setFieldValue("drivingLicenseAttachmentKey", key);
                           }}
                           description="拖拽或点击上传行驶证扫描件（图片/PDF）"
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col span={24}>
-                      <Form.Item label="备注">
-                        <Controller
-                          name="remark"
-                          control={control}
-                          render={({ field }) => <Input.TextArea rows={4} placeholder="其他补充说明（不含结构化元数据行）" value={field.value ?? ""} onChange={field.onChange} />}
                         />
                       </Form.Item>
                     </Col>
@@ -1270,11 +1426,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                     <Col span={12}>
                       <Form.Item label="到期日期" name="insuranceExpiry" rules={[{ required: true }]}>
                         <Input placeholder="YYYY-MM-DD" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={24}>
-                      <Form.Item label="保单附件Key" name="insuranceAttachmentKey" rules={[{ required: true }]}>
-                        <Input placeholder="上传后自动填充" />
                       </Form.Item>
                     </Col>
                     <Col span={24}>
@@ -1340,11 +1491,10 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                 ),
               },
             ]}
-          />
-        </Form>
-          </div>
+            />
+          </Form>
         </div>
-      ) : null}
+      </Modal>
     </div>
     </PageContainer>
   );

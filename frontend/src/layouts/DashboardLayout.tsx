@@ -38,23 +38,26 @@ export function DashboardLayout(props: {
 
   const dockItems = props.mobileDockItems ?? [];
 
-  const shellClass = "mx-auto w-full max-w-[1440px] px-4";
+  const shellClass = "mx-auto w-full max-w-[1440px] px-0";
+  const panelClass = "rounded-lg border border-slate-200 bg-white shadow-sm";
 
   return (
     <Layout className="min-h-screen bg-page text-[#1F2937]">
       <div className="w-full">
         <Layout.Header className="sticky top-0 z-30 !m-0 !h-12 !w-full !max-w-none !bg-transparent !p-0 !leading-none">
-          <div className="flex h-12 w-full items-center gap-2 overflow-hidden border-b border-slate-200 bg-white md:gap-3">
-            {isMobile ? (
-              <Button type="text" icon={<Menu className="h-4 w-4" strokeWidth={1.5} />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" className="!shrink-0" />
-            ) : null}
-            <div className="flex min-w-0 shrink items-center gap-3">{props.headerLeft}</div>
-            {props.headerCenter ? (
-              <div className="mx-4 flex min-w-0 flex-1">{props.headerCenter}</div>
-            ) : (
-              <div className="flex-1" />
-            )}
-            <div className="ml-auto flex shrink-0 items-center">{props.headerRight}</div>
+          <div className={`${shellClass} border-b border-slate-200 bg-white`}>
+            <div className="flex h-12 w-full items-center gap-2 overflow-hidden md:gap-3">
+              {isMobile ? (
+                <Button type="text" icon={<Menu className="h-4 w-4" strokeWidth={1.5} />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" className="!shrink-0" />
+              ) : null}
+              <div className="flex min-w-0 items-center gap-3 md:w-[260px] md:shrink-0">{props.headerLeft}</div>
+              {props.headerCenter ? (
+                <div className="mx-2 flex min-w-0 flex-1 justify-center md:mx-4">{props.headerCenter}</div>
+              ) : (
+                <div className="flex-1" />
+              )}
+              <div className="ml-auto flex items-center justify-end md:w-[260px] md:shrink-0">{props.headerRight}</div>
+            </div>
           </div>
         </Layout.Header>
 
@@ -63,21 +66,21 @@ export function DashboardLayout(props: {
             <Layout className="!min-h-[calc(100vh-3rem)] !w-full !bg-transparent">
               <Layout.Content className="!bg-transparent pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
                 <div className="min-h-[calc(100vh-7rem)] w-full py-4">
-                  <div ref={contentRef} className="border border-slate-200 bg-white">
+                  <div ref={contentRef} className={panelClass}>
                     {props.children}
                   </div>
                 </div>
               </Layout.Content>
             </Layout>
           ) : (
-            <div className="flex min-h-[calc(100vh-3rem)] w-full items-start gap-0 py-4">
-              <aside className="w-52 shrink-0">
+            <div className="flex min-h-[calc(100vh-3rem)] w-full items-start gap-3 py-4">
+              <aside className="w-56 shrink-0">
                 <div className="sticky top-[3.75rem]">
-                  <div className="border-r border-slate-200 bg-slate-50 p-2.5">{props.sider}</div>
+                  <div className={`${panelClass} p-3`}>{props.sider}</div>
                 </div>
               </aside>
               <div className="min-w-0 flex-1">
-                <div ref={contentRef} className="border border-slate-200 bg-white p-4">
+                <div ref={contentRef} className={`${panelClass} p-4`}>
                   {props.children}
                 </div>
               </div>

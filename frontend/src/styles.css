@@ -27,16 +27,22 @@
 }
 
 :root {
-  --ve-primary: #1677ff;
-  --ve-page-bg: #f8fafc;
+  --ve-primary: #4790f5;
+  --ve-page-bg: #cddbf3;
   --ve-radius-main: 4px;
   --ve-table-zebra: #fafafa;
   --ve-table-row-line: #f0f0f0;
+  --ve-btn-primary-bg: #2563eb;
+  --ve-btn-primary-bg-hover: #1d4ed8;
+  --ve-btn-secondary-bg: #eff6ff;
+  --ve-btn-secondary-border: #bfdbfe;
+  --ve-btn-ghost-text: #475569;
+  --ve-topbar-search-width: clamp(240px, 40vw, 640px);
 }
 
 body {
   margin: 0;
-  background: #ffffff;
+  background: #f2f7ff;
   color: #1f2937;
   font-size: 14px;
   line-height: 1.5715;
@@ -201,7 +207,12 @@ body {
 }
 
 .ve-topbar-search {
-  width: min(720px, 100%);
+  width: 100%;
+}
+
+.ve-topbar-search-wrap {
+  width: var(--ve-topbar-search-width);
+  max-width: 100%;
 }
 
 .ve-topbar-search.ant-input-affix-wrapper {
@@ -275,12 +286,6 @@ body {
 
 .ve-topbar-search-btn-content .anticon {
   font-size: 15px;
-}
-
-@media (max-width: 1280px) {
-  .ve-topbar-search {
-    width: min(620px, 100%);
-  }
 }
 
 .ve-topbar-right {
@@ -762,17 +767,39 @@ body {
 .ve-vehicles-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 100%;
   gap: 16px;
-  padding: 16px 0;
-  border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
   padding: 20px;
   border-radius: 6px;
+  border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   transition: all 0.3s ease;
+}
+
+.ve-vehicles-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 2.4fr) repeat(5, minmax(92px, 1fr)) minmax(96px, auto);
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+}
+
+.ve-vehicles-filters > * {
+  min-width: 0;
+}
+
+.ve-vehicles-filter {
+  width: 100%;
+  min-width: 0;
+}
+
+.ve-vehicles-filter-search {
+  min-width: 220px;
 }
 
 .ve-vehicles-header:hover {
@@ -781,12 +808,12 @@ body {
 
 .ve-vehicles-header .ant-space {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
 }
 
 .ve-vehicles-header .ant-input-search {
-  width: 300px;
+  width: 100%;
   transition: all 0.3s ease;
 }
 
@@ -795,7 +822,7 @@ body {
 }
 
 .ve-vehicles-header .ant-select {
-  width: 140px;
+  width: 100%;
   transition: all 0.3s ease;
 }
 
@@ -1233,9 +1260,9 @@ body {
 }
 
 .ve-dashboard {
-  --ve-card-border: #e8edf5;
-  --ve-card-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --ve-primary-color: #3b82f6;
+  --ve-card-border: #e2e8f0;
+  --ve-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ve-primary-color: #2563eb;
   --ve-success-color: #16a34a;
   --ve-warning-color: #d97706;
   --ve-danger-color: #dc2626;
@@ -1243,24 +1270,23 @@ body {
 }
 
 .ve-dashboard .ve-card-title {
-  font-weight: 700;
+  font-weight: 600;
   color: #0f172a;
-  letter-spacing: 0.2px;
-  font-size: 16px;
+  letter-spacing: -0.01em;
+  font-size: 15px;
 }
 
 .ve-dashboard .ve-dash-card {
   border: 1px solid var(--ve-card-border);
-  border-radius: 6px;
+  border-radius: 0.5rem;
   box-shadow: var(--ve-card-shadow);
-  transition: all 0.3s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   background: white;
 }
 
 .ve-dashboard .ve-dash-card:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  transform: translateY(-2px);
-  border-color: #e2e8f0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
 }
 
 .ve-dashboard .ve-dash-card .ant-card-head {
@@ -1279,19 +1305,18 @@ body {
 
 /* KPI 卡片样式 */
 .ve-dashboard .ve-kpi-card {
-  border-radius: 6px;
-  border: 1px solid #e9eef7;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ve-card-border);
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
   height: 100%;
   overflow: hidden;
   background: white;
 }
 
 .ve-dashboard .ve-kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  border-color: #cbd5e1;
 }
 
 .ve-dashboard .ve-kpi-card .ant-statistic-title {
@@ -1303,55 +1328,52 @@ body {
 
 /* 统计卡片样式 */
 .ve-dashboard .ve-stat-card {
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ve-card-border);
   background: #ffffff;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   height: 100%;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--ve-card-shadow);
 }
 
 .ve-dashboard .ve-stat-card:hover {
-  border-color: #e2e8f0;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
 }
 
 /* 预警统计卡片 */
 .ve-dashboard .ve-alert-stat-card {
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ve-card-border);
   height: 100%;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   background: white;
 }
 
 .ve-dashboard .ve-alert-stat-card:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  transform: translateY(-2px);
-  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  border-color: #cbd5e1;
 }
 
 /* 预警列表样式 */
 .ve-dashboard .ve-alert-list {
-  border-radius: 6px;
+  border-radius: 0.5rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--ve-card-border);
+  box-shadow: var(--ve-card-shadow);
   background: white;
 }
 
 .ve-dashboard .ve-alert-item {
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease;
 }
 
 .ve-dashboard .ve-alert-item:hover {
   background-color: #f8fafc;
-  transform: translateX(4px);
 }
 
 .ve-dashboard .ve-alert-tag {
@@ -1407,27 +1429,25 @@ body {
 .ve-dashboard .ve-alert-action:hover {
   text-decoration: underline;
   background: #eff6ff;
-  transform: translateY(-1px);
 }
 
 /* 待处理预警样式 */
 .ve-dashboard .ve-pending-list {
-  border-radius: 6px;
+  border-radius: 0.5rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--ve-card-border);
+  box-shadow: var(--ve-card-shadow);
   background: white;
 }
 
 .ve-dashboard .ve-pending-item {
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease;
 }
 
 .ve-dashboard .ve-pending-item:hover {
   background-color: #f8fafc;
-  transform: translateX(4px);
 }
 
 .ve-dashboard .ve-alert-owner {
@@ -1459,18 +1479,17 @@ body {
 
 /* 趋势卡片样式 */
 .ve-dashboard .ve-trend-stat-card {
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ve-card-border);
   height: 100%;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   background: white;
 }
 
 .ve-dashboard .ve-trend-stat-card:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  transform: translateY(-2px);
-  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  border-color: #cbd5e1;
 }
 
 .ve-dashboard .ve-trend-stat-cost {
@@ -1510,16 +1529,16 @@ body {
 
 /* 表格样式 */
 .ve-dashboard .ve-dash-table .ant-table {
-  border: 1px solid #edf1f6;
-  border-radius: 6px;
+  border: 1px solid var(--ve-card-border);
+  border-radius: 0.5rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .ve-dashboard .ve-dash-table .ant-table:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  border-color: #cbd5e1;
 }
 
 .ve-dashboard .ve-dash-table .ant-table-thead > tr > th {
@@ -1580,26 +1599,28 @@ body {
 
 /* 搜索样式 */
 .ve-dashboard .ve-search-input {
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  border-radius: 0.5rem;
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease;
 }
 
 .ve-dashboard .ve-search-input:hover {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
 }
 
 .ve-dashboard .ve-search-section-title {
-  color: #334155;
-  font-size: 14px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   margin-bottom: 8px;
 }
 
 .ve-dashboard .ve-search-results {
-  border-radius: 6px;
+  border-radius: 0.5rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  border: 1px solid #e2e8f0;
+  box-shadow: var(--ve-card-shadow);
+  border: 1px solid var(--ve-card-border);
   background: white;
 }
 
@@ -1633,24 +1654,24 @@ body {
 
 /* 空状态样式 */
 .ve-dashboard .ve-empty-alert {
-  border-radius: 6px;
+  border-radius: 0.5rem;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  transition: all 0.3s ease;
+  border: 1px solid var(--ve-card-border);
+  box-shadow: var(--ve-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .ve-dashboard .ve-empty-alert:hover {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
   border-color: #cbd5e1;
 }
 
 /* 刷新按钮样式 */
 .ve-dashboard .ve-refresh-btn {
-  border-radius: 6px;
+  border-radius: 0.5rem;
   font-size: 12px;
   padding: 4px 12px;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .ve-dashboard .ve-refresh-btn:hover {
@@ -1952,61 +1973,6 @@ body {
 .ve-textarea:focus {
   border-color: #3b82f6 !important;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
-}
-
-.ve-link-btn {
-  color: #3b82f6 !important;
-  border-radius: 6px !important;
-  transition: all 0.3s ease !important;
-  font-weight: 500 !important;
-}
-
-.ve-link-btn:hover {
-  color: #2563eb !important;
-  text-decoration: underline !important;
-  transform: translateY(-1px) !important;
-}
-
-.ve-primary-btn {
-  background: #3b82f6 !important;
-  border-color: #3b82f6 !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  transition: all 0.3s ease !important;
-}
-
-.ve-primary-btn:hover {
-  background: #2563eb !important;
-  border-color: #2563eb !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15) !important;
-}
-
-.ve-btn {
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  transition: all 0.3s ease !important;
-}
-
-.ve-btn:hover {
-  border-color: #3b82f6 !important;
-  color: #3b82f6 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15) !important;
-}
-
-.ve-small-btn {
-  border-radius: 6px !important;
-  font-size: 12px !important;
-  padding: 4px 12px !important;
-  transition: all 0.3s ease !important;
-}
-
-.ve-small-btn:hover {
-  border-color: #3b82f6 !important;
-  color: #3b82f6 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15) !important;
 }
 
 .ve-permission-container {

@@ -1,10 +1,10 @@
-import { Button, Popconfirm, Space, Tooltip } from "@/components/ui/legacy";
+import { Button, Dropdown } from "@/components/ui/legacy";
 import type { FormInstance } from "@/components/ui/legacy";
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { calcPartStats, parseRemarkMeta } from "../lib/maintenanceMeta";
 import type { MaintenanceRecord } from "../types";
-import { Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 
 type FormModel = {
   vehicleId?: string;
@@ -26,35 +26,52 @@ type FormModel = {
   partDetails?: Array<{ partName?: string; spec?: string; unit?: string; qty?: number; unitPrice?: number }>;
   equipmentType?: string;
   equipmentCategory?: string;
-  equipmentLocation?: string;
   attachmentKey?: string | null;
 };
 
 type UseMaintenanceColumnsArgs = {
+  view: "all" | "vehicle" | "equipment";
   canEdit: boolean;
   canDelete: boolean;
   form: FormInstance<FormModel>;
   itemDescOptions: Array<{ value: string; label: string }>;
   parsedRemarkMap: Map<string, ReturnType<typeof parseRemarkMeta>>;
+  onViewOpen: (record: MaintenanceRecord) => void;
   onEditOpen: (record: MaintenanceRecord) => void;
-  onDelete: (id: string) => void;
+  onDeleteRequest: (record: MaintenanceRecord) => void;
   onViewAttachment: (attachmentKey: string) => void;
 };
 
 export function useMaintenanceColumns({
+  view,
   canEdit,
   canDelete,
   form,
   itemDescOptions,
   parsedRemarkMap,
+  onViewOpen,
   onEditOpen,
-  onDelete,
+  onDeleteRequest,
   onViewAttachment,
 }: UseMaintenanceColumnsArgs) {
   return useMemo(
     () => [
-      { title: "车牌号", dataIndex: "plateNo" },
-      { title: "车辆", dataIndex: "brandModel" },
+      ...(view === "equipment"
+        ? [
+            { title: "设备名称", dataIndex: "equipmentName" },
+            {
+              title: "设备类型",
+              render: (_: unknown, record: MaintenanceRecord) => parsedRemarkMap.get(record.id)?.equipmentType || "-",
+            },
+            {
+              title: "设备分类",
+              render: (_: unknown, record: MaintenanceRecord) => parsedRemarkMap.get(record.id)?.equipmentCategory || "-",
+            },
+          ]
+        : [
+            { title: "车牌号", dataIndex: "plateNo" },
+            { title: "车辆", dataIndex: "brandModel" },
+          ]),
       { title: "维保日期", dataIndex: "maintenanceDate" },
       { title: "项目", dataIndex: "itemDesc" },
       { title: "费用", dataIndex: "cost" },
@@ -96,56 +113,56 @@ export function useMaintenanceColumns({
       {
         title: "操作",
         render: (_: unknown, record: MaintenanceRecord) => (
-          <Space size={6}>
-            {canEdit ? (
-              <Tooltip title="编辑">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<Pencil className="h-4 w-4" />}
-                  className="ve-edit-btn"
-                  onClick={() => {
-                    const parsed = parsedRemarkMap.get(record.id) ?? parseRemarkMeta(record.remark);
-                    const isPresetItemDesc = itemDescOptions.some((option) => option.value === record.itemDesc);
-                    form.setFieldsValue({
-                      vehicleId: record.vehicleId ?? undefined,
-                      targetType: record.targetType,
-                      equipmentName: record.equipmentName || "",
-                      maintenanceType: record.maintenanceType,
-                      maintenanceDate: record.maintenanceDate ? dayjs(record.maintenanceDate) : undefined,
-                      itemDesc: isPresetItemDesc ? record.itemDesc : "其他",
-                      itemDescOther: isPresetItemDesc ? "" : record.itemDesc,
-                      cost: record.cost,
-                      vendor: record.vendor || "",
-                      parts: record.parts || "",
-                      mileage: record.mileage ?? undefined,
-                      remark: parsed.remark,
-                      laborCost: parsed.laborCost,
-                      materialCost: parsed.materialCost,
-                      miscCost: parsed.miscCost,
-                      resultStatus: parsed.resultStatus,
-                      partDetails: parsed.partDetails,
-                      equipmentType: parsed.equipmentType,
-                      equipmentCategory: parsed.equipmentCategory,
-                      equipmentLocation: parsed.equipmentLocation,
-                      attachmentKey: record.attachmentKey || "",
-                    });
-                    onEditOpen(record);
-                  }}
-                />
-              </Tooltip>
-            ) : null}
-            {canDelete ? (
-              <Popconfirm title="确认删除该记录？" onConfirm={() => onDelete(record.id)}>
-                <Tooltip title="删除">
-                  <Button type="text" size="small" danger icon={<Trash2 className="h-4 w-4" />} className="ve-delete-btn" />
-                </Tooltip>
-              </Popconfirm>
-            ) : null}
-          </Space>
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                { key: "view", label: "查看" },
+                ...(canEdit ? [{ key: "edit", label: "编辑" }] : []),
+                ...(canDelete ? [{ type: "divider" } as const, { key: "delete", label: "删除", danger: true }] : []),
+              ],
+              onClick: ({ key }) => {
+                if (key === "view") {
+                  onViewOpen(record);
+                }
+                if (key === "edit") {
+                  const parsed = parsedRemarkMap.get(record.id) ?? parseRemarkMeta(record.remark);
+                  const isPresetItemDesc = itemDescOptions.some((option) => option.value === record.itemDesc);
+                  form.setFieldsValue({
+                    vehicleId: record.vehicleId ?? undefined,
+                    targetType: record.targetType,
+                    equipmentName: record.equipmentName || "",
+                    maintenanceType: record.maintenanceType,
+                    maintenanceDate: record.maintenanceDate ? dayjs(record.maintenanceDate) : undefined,
+                    itemDesc: isPresetItemDesc ? record.itemDesc : "其他",
+                    itemDescOther: isPresetItemDesc ? "" : record.itemDesc,
+                    cost: record.cost,
+                    vendor: record.vendor || "",
+                    parts: record.parts || "",
+                    mileage: record.mileage ?? undefined,
+                    remark: parsed.remark,
+                    laborCost: parsed.laborCost,
+                    materialCost: parsed.materialCost,
+                    miscCost: parsed.miscCost,
+                    resultStatus: parsed.resultStatus,
+                    partDetails: parsed.partDetails,
+                    equipmentType: parsed.equipmentType,
+                    equipmentCategory: parsed.equipmentCategory,
+                    attachmentKey: record.attachmentKey || "",
+                  });
+                  onEditOpen(record);
+                }
+                if (key === "delete") {
+                  onDeleteRequest(record);
+                }
+              },
+            }}
+          >
+            <Button type="text" icon={<MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />} />
+          </Dropdown>
         ),
       },
     ],
-    [canDelete, canEdit, form, itemDescOptions, onDelete, onEditOpen, onViewAttachment, parsedRemarkMap],
+    [canDelete, canEdit, form, itemDescOptions, onDeleteRequest, onEditOpen, onViewAttachment, onViewOpen, parsedRemarkMap, view],
   );
 }

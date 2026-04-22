@@ -2,6 +2,7 @@ import { App, Button, Form, Input, Modal, Popconfirm, Select, Skeleton, Space, T
 import { useEffect, useState } from "react";
 import { PageContainer } from "../components/PageContainer";
 import { useUsersAdmin } from "../hooks/useUsersAdmin";
+import { actionBtn } from "../lib/ui/buttonTokens";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { Key, Trash2 } from "lucide-react";
 
@@ -75,7 +76,7 @@ export function UsersPage() {
         { title: "用户管理" },
       ]}
       extra={
-        <Button type="primary" className="ve-primary-btn" onClick={() => setOpen(true)}>
+        <Button type="primary" className={actionBtn.primary} onClick={() => setOpen(true)}>
           新增用户
         </Button>
       }
@@ -116,13 +117,13 @@ export function UsersPage() {
                 render: (_, r) =>
                   r.disabled ? (
                     <Popconfirm title="确认启用该用户？" onConfirm={() => onSetDisabled(r.id, false)}>
-                      <Button size="small" className="ve-enable-btn">
+                      <Button size="small" className={actionBtn.smallSuccess}>
                         启用
                       </Button>
                     </Popconfirm>
                   ) : (
                     <Popconfirm title="确认禁用该用户？禁用后将无法登录。" onConfirm={() => onSetDisabled(r.id, true)}>
-                      <Button size="small" danger className="ve-disable-btn">
+                      <Button size="small" className={actionBtn.smallDanger}>
                         禁用
                       </Button>
                     </Popconfirm>
@@ -133,11 +134,11 @@ export function UsersPage() {
                 render: (_, r) => (
                   <Space size={6}>
                     <Tooltip title="重置密码">
-                      <Button type="text" size="small" icon={<Key className="h-4 w-4" />} className="ve-reset-btn" onClick={() => openResetPassword(r.id)} />
+                      <Button type="text" size="small" icon={<Key className="h-4 w-4" />} className={actionBtn.textNeutral} onClick={() => openResetPassword(r.id)} />
                     </Tooltip>
                     <Popconfirm title="确认删除该用户？" onConfirm={() => remove(r.id)}>
                       <Tooltip title="删除">
-                        <Button danger type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className="ve-delete-btn" />
+                        <Button type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className={actionBtn.textDanger} />
                       </Tooltip>
                     </Popconfirm>
                   </Space>
@@ -146,7 +147,23 @@ export function UsersPage() {
             ]}
           />
         )}
-        <Modal title="新增用户" open={open} centered className="ve-users-modal" onCancel={() => setOpen(false)} onOk={submit}>
+        <Modal
+          title="新增用户"
+          open={open}
+          centered
+          className="ve-users-modal"
+          onCancel={() => setOpen(false)}
+          footer={
+            <Space size={8}>
+              <Button className={actionBtn.neutral} onClick={() => setOpen(false)}>
+                取消
+              </Button>
+              <Button type="primary" className={actionBtn.primary} onClick={() => void submit()}>
+                保存
+              </Button>
+            </Space>
+          }
+        >
           <Form form={form} layout="vertical">
             <Form.Item label="用户名" name="username" rules={[{ required: true }]}>
               <Input className="ve-input" placeholder="登录用户名，唯一" />
@@ -188,7 +205,16 @@ export function UsersPage() {
           open={pwdModalOpen}
           centered
           onCancel={() => setPwdModalOpen(false)}
-          onOk={() => void submitResetPassword()}
+          footer={
+            <Space size={8}>
+              <Button className={actionBtn.neutral} onClick={() => setPwdModalOpen(false)}>
+                取消
+              </Button>
+              <Button type="primary" className={actionBtn.primary} onClick={() => void submitResetPassword()}>
+                保存
+              </Button>
+            </Space>
+          }
           destroyOnClose
         >
           <Form form={pwdForm} layout="vertical">

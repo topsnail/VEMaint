@@ -1,9 +1,10 @@
 param(
-  [string]$ProjectPath = "C:\Users\Administrator\Desktop\VEMaint",
+  [string]$ProjectPath = "C:\web\VEMaint",
   [int]$Port = 8788,
   [int]$FrontendPort = 5173,
   [switch]$Clean,
   [switch]$SkipInit,
+  [switch]$SkipR2,
   # Keep console window open by default (double-click friendly)
   [string]$KeepOpen = "true"
 )
@@ -21,11 +22,19 @@ function As-Bool {
 }
 
 $KeepOpenFlag = As-Bool -Value $KeepOpen -Default $true
+$script:WranglerProcess = $null
+
+function Stop-WranglerIfRunning {
+  if ($script:WranglerProcess -and -not $script:WranglerProcess.HasExited) {
+    Stop-Process -Id $script:WranglerProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+}
 
 function Exit-WithPause {
   param(
     [int]$Code = 0
   )
+  Stop-WranglerIfRunning
   Write-Host ""
   if ($KeepOpenFlag) {
     Write-Host ("Script finished (ExitCode={0}). Window will stay open; close it manually." -f $Code) -ForegroundColor Yellow
@@ -121,7 +130,7 @@ if ($Clean) {
 }
 
 Write-Host ""
-Write-Host "[4/4] Starting local env (D1 init/migrate/seed + Pages dev + Vite HMR)" -ForegroundColor Yellow
+Write-Host "[4/4] Starting local env (D1 init/migrate/seed + KV seed + R2 seed + Pages dev + Vite HMR)" -ForegroundColor Yellow
 Write-Host "=============================================" -ForegroundColor Gray
 Write-Host "               Starting, please wait...       " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Gray
@@ -140,8 +149,18 @@ if (-not $SkipInit) {
 
   npm run db:seed:local
   if ($LASTEXITCODE -ne 0) { Exit-WithPause $LASTEXITCODE }
+
+  npm run kv:seed:local
+  if ($LASTEXITCODE -ne 0) { Exit-WithPause $LASTEXITCODE }
+
+  if (-not $SkipR2) {
+    npm run r2:seed:local
+    if ($LASTEXITCODE -ne 0) { Exit-WithPause $LASTEXITCODE }
+  } else {
+    Write-Host "Skipping R2 seed (-SkipR2)" -ForegroundColor Yellow
+  }
 } else {
-  Write-Host "Skipping D1 init/migrate/seed (-SkipInit)" -ForegroundColor Yellow
+  Write-Host "Skipping D1 init/migrate/seed, KV seed and R2 seed (-SkipInit)" -ForegroundColor Yellow
 }
 
 if (-not $env:AUTH_SECRET -or [string]::IsNullOrWhiteSpace($env:AUTH_SECRET)) { $env:AUTH_SECRET = "local-dev-auth-secret-please-change" }
@@ -163,6 +182,8 @@ $wranglerProcess = Start-Process `
   -RedirectStandardError (Join-Path $projectPath ".wrangler-dev.err.log") `
   -WorkingDirectory $projectPath `
   -PassThru
+
+$script:WranglerProcess = $wranglerProcess
 
 if (-not $wranglerProcess) {
   Write-Host "Failed to start local API (wrangler pages dev)" -ForegroundColor Red
@@ -189,9 +210,7 @@ try {
   if ($LASTEXITCODE -ne 0) { Exit-WithPause $LASTEXITCODE }
 }
 finally {
-  if ($wranglerProcess -and -not $wranglerProcess.HasExited) {
-    Stop-Process -Id $wranglerProcess.Id -Force -ErrorAction SilentlyContinue
-  }
+  Stop-WranglerIfRunning
 }
 
 Write-Host ""

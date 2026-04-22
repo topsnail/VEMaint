@@ -112,8 +112,8 @@ npm run pages:dev
 
 | 变量名 | 必填 | 说明 | 本地配置位置 | Cloudflare Pages 配置位置 |
 | --- | --- | --- | --- | --- |
-| `AUTH_SECRET` | 是 | JWT 签名密钥，必须为高强度随机字符串 | `.dev.vars` / `wrangler.toml` 的 `[vars]` | Pages -> Settings -> Environment variables |
-| `BOOTSTRAP_ADMIN_USER` | 建议 | 初始化管理员用户名（系统无管理员时生效） | `.dev.vars` / `wrangler.toml` 的 `[vars]` | Pages -> Settings -> Environment variables |
+| `AUTH_SECRET` | 是 | JWT 签名密钥，必须为高强度随机字符串 | `.dev.vars`（参考 `.dev.vars.example`） | Pages -> Settings -> Environment variables |
+| `BOOTSTRAP_ADMIN_USER` | 建议 | 初始化管理员用户名（系统无管理员时生效） | `.dev.vars`（参考 `.dev.vars.example`） | Pages -> Settings -> Environment variables |
 | `BOOTSTRAP_ADMIN_PASS` | 建议 | 初始化管理员密码（系统无管理员时生效） | `.dev.vars`（不建议入库） | Pages -> Settings -> Environment variables |
 | `DB` | 是 | D1 数据库绑定名（非普通字符串变量） | `wrangler.toml` 的 `[[d1_databases]]` | Pages -> Settings -> Bindings -> D1 |
 | `KV` | 是 | KV 命名空间绑定名（配置与 token 黑名单） | `wrangler.toml` 的 `[[kv_namespaces]]` | Pages -> Settings -> Bindings -> KV |

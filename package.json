@@ -13,7 +13,10 @@
     "db:migrate:local": "wrangler d1 execute vemaint --local --file=./drizzle/0001_maintenance_target_type_other.sql",
     "db:migrate:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/0001_maintenance_target_type_other.sql",
     "db:seed:local": "wrangler d1 execute vemaint --local --file=./drizzle/seed.sql",
-    "db:seed:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/seed.sql"
+    "db:seed:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/seed.sql",
+    "kv:seed:local": "wrangler kv key put --local --binding=KV sys:config:v1 --path=./drizzle/dev-system-config.json",
+    "r2:seed:local": "node ./scripts/seed-r2-local.mjs",
+    "dev:reset-data:local": "npm run db:init:local && npm run db:migrate:local && npm run db:seed:local && npm run kv:seed:local && npm run r2:seed:local"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

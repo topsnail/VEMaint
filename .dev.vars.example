@@ -1,3 +1,15 @@
+#
+# Local development only (Wrangler Pages dev reads .dev.vars).
+# Do NOT commit your real secrets. Copy this file to .dev.vars and edit.
+#
+
+# Required: server-side auth/JWT signing secret (use a long random string)
+AUTH_SECRET="change-me-to-a-strong-random-secret"
+
+# Optional: bootstrap admin user (first run only)
+BOOTSTRAP_ADMIN_USER="admin"
+BOOTSTRAP_ADMIN_PASS="change-me"
+
 ## Wrangler 本地开发环境变量示例
 ## 复制为 .dev.vars 后使用（该文件已在 .gitignore 中忽略）
 

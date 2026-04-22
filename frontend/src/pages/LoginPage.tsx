@@ -10,12 +10,23 @@ import { cn } from "@/lib/utils";
 
 import styles from "./LoginPage.module.css";
 import { apiFetch } from "../lib/http";
-import { clearToken, setToken, setUser, setCsrfToken } from "../lib/auth";
+import { clearPersistedAuthSession, clearToken, persistAuthSession, setCsrfToken, setToken, setUser } from "../lib/auth";
 import { AnimatedCharacters } from "../components/AnimatedCharacters";
 import logoPng from "../../favicon.png";
 import { loginSchema, type LoginInput } from "../lib/schemas";
 
+const LAST_USERNAME_KEY = "vemaint:last_username";
+const REMEMBER_ME_KEY = "vemaint:remember_me";
+
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
+  const initialUsername = (() => {
+    try {
+      return String(window.localStorage.getItem(LAST_USERNAME_KEY) ?? "");
+    } catch {
+      return "";
+    }
+  })();
+
   const {
     register,
     handleSubmit,
@@ -23,13 +34,20 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+    defaultValues: { username: initialUsername, password: "" },
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isUsernameFocused, setIsUsernameFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      return window.localStorage.getItem(REMEMBER_ME_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const usernameValue = watch("username") ?? "";
   const passwordValue = watch("password") ?? "";
@@ -39,6 +57,12 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
     setLoginError("");
 
     try {
+      try {
+        window.localStorage.setItem(LAST_USERNAME_KEY, String(values.username ?? "").trim());
+      } catch {
+        // ignore
+      }
+
       const res = await apiFetch<{ token: string; csrfToken: string }>("/login", {
         method: "POST",
         body: JSON.stringify(values),
@@ -65,6 +89,16 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
       }
 
       setUser(me.data);
+      try {
+        window.localStorage.setItem(REMEMBER_ME_KEY, rememberMe ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      if (rememberMe) {
+        persistAuthSession();
+      } else {
+        clearPersistedAuthSession();
+      }
       toast.success("登录成功");
       onLoggedIn();
     } catch {
@@ -104,6 +138,12 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
 
       {/* 右侧：登录表单 */}
       <div className={styles.rightPanel}>
+        <div className={styles.mobileLogo}>
+          <div className={styles.mobileLogoIcon}>
+            <img src={logoPng} alt="VEMaint" className={styles.mobileLogoIconImg} />
+          </div>
+          <span>VEMaint</span>
+        </div>
         <div className={styles.formCard}>
           <div className={styles.formWrapper}>
             <div className={styles.formHeader}>
@@ -120,6 +160,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
                 <User className={cn("pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2", styles.prefixIcon)} />
                 <Input
                   {...register("username")}
+                  autoFocus
                   className="h-11 pl-10"
                   placeholder="输入您的账号"
                   onFocus={() => setIsUsernameFocused(true)}
@@ -153,9 +194,19 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
               </div>
               {errors.password?.message ? <div className={styles.errorBox}>{errors.password.message}</div> : null}
 
+              <label className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded-[6px] border-slate-300 text-blue-600"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                记住登录
+              </label>
+
               {loginError ? <div className={styles.errorBox}>{loginError}</div> : null}
 
-              <div style={{ marginBottom: 0 }}>
+              <div className="mt-3">
                 <Button type="submit" disabled={loading} fullWidth variant="primary" size="lg" className={styles.submitBtn}>
                   {loading ? "登录中..." : "登录"}
                 </Button>
