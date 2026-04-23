@@ -1,10 +1,11 @@
 import { App, AutoComplete, Button, Col, DatePicker, Descriptions, Dropdown, Form, Input, Modal, Row, Select, Skeleton, Space, Table, Tabs, Tooltip } from "@/components/ui/legacy";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm as useRhfForm } from "react-hook-form";
 import type { Vehicle, VehicleCycle } from "../types";
 import { R2AttachmentUploader } from "../components/R2AttachmentUploader";
+import { AttachmentStatus } from "../components/AttachmentStatus";
 import { useVehiclesTableData } from "../hooks/useVehiclesTableData";
 import {
   fetchVehicleCycle,
@@ -12,13 +13,13 @@ import {
   requestPutVehicleStatus,
   requestUpsertVehicle,
 } from "../hooks/vehiclesApi";
-import { openProtectedFile } from "../lib/http";
 import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { vehicleSubmitSchema } from "../lib/schemas";
 import { Eye, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { actionBtn } from "../lib/ui/buttonTokens";
+import { AttachmentViewer } from "../components/AttachmentViewer";
 
 type VehicleForm = {
   plateNo: string;
@@ -42,11 +43,13 @@ type VehicleForm = {
   mileage: number;
   status: "normal" | "repairing" | "scrapped" | "stopped";
   drivingLicenseAttachmentKey?: string;
+  drivingLicenseAttachmentKeys?: string[];
   insuranceType?: string;
   insuranceVendor?: string;
   insuranceStart?: string;
   insuranceExpiry?: string;
   insuranceAttachmentKey?: string;
+  insuranceAttachmentKeys?: string[];
   annualLastDate?: string;
   annualExpiry?: string;
   maintLastDate?: string;
@@ -66,7 +69,7 @@ const DEFAULT_PLATE_NO_PREFIX = "豫A·";
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const { message } = App.useApp();
   const initialParams = new URLSearchParams(window.location.search);
-  const { rows, cyclesByVehicleId, dropdowns, ownerDirectory, loading: listLoading, load, loadDropdowns } = useVehiclesTableData();
+  const { rows, setRows, cyclesByVehicleId, setCyclesByVehicleId, dropdowns, ownerDirectory, loading: listLoading, load, loadDropdowns } = useVehiclesTableData();
   const [q, setQ] = useState(() => initialParams.get("q") ?? "");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
@@ -74,15 +77,65 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [viewLoading, setViewLoading] = useState(false);
   const [viewVehicle, setViewVehicle] = useState<Vehicle | null>(null);
   const [viewCycle, setViewCycle] = useState<VehicleCycle | null>(null);
+  const [viewInsuranceKeys, setViewInsuranceKeys] = useState<string[]>([]);
+  const [viewDrivingLicenseKeys, setViewDrivingLicenseKeys] = useState<string[]>([]);
   const [viewTab, setViewTab] = useState("base");
   const [editTab, setEditTab] = useState("basic");
   const [pendingScrap, setPendingScrap] = useState<Vehicle | null>(null);
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [viewerPaths, setViewerPaths] = useState<string[]>([]);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
+  const [viewerSource, setViewerSource] = useState<"insurance" | "driving" | "other">("other");
+  const viewerPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const viewVehicleRef = useRef<Vehicle | null>(null);
+  const [editScrollTarget, setEditScrollTarget] = useState<"insuranceUpload" | "drivingLicenseUpload" | null>(null);
+  const editScrollWrapRef = useRef<HTMLDivElement | null>(null);
+  const insuranceUploadRef = useRef<HTMLDivElement | null>(null);
+  const drivingLicenseUploadRef = useRef<HTMLDivElement | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>(() => initialParams.get("status") ?? "");
   const [filterVehicleType, setFilterVehicleType] = useState<string>("");
   const [filterOwnerDept, setFilterOwnerDept] = useState<string>("");
   const [filterNearDue, setFilterNearDue] = useState<string>(() => initialParams.get("due") ?? "");
   const [filterIncomplete, setFilterIncomplete] = useState<string>("");
   const [form] = Form.useForm<VehicleForm>();
+  const normalizeAttachmentKeys = (keys: Array<string | null | undefined>) =>
+    keys
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean)
+      .filter((k, idx, arr) => arr.indexOf(k) === idx)
+      .slice(0, 50);
+  const deriveAttachmentKeys = (vehicle: Vehicle, cycle: VehicleCycle | null | undefined) => {
+    const meta = parseRemarkMeta(vehicle.remark);
+    const driving = normalizeAttachmentKeys([
+      ...meta.drivingLicenseAttachmentKeys,
+      meta.drivingLicenseAttachmentKey,
+    ]);
+    const insurance = normalizeAttachmentKeys([
+      ...meta.insuranceAttachmentKeys,
+      cycle?.insuranceAttachmentKey,
+    ]);
+    return { driving, insurance };
+  };
+  const reconcileViewAttachmentState = async (vehicleId: string) => {
+    const latest = await load(q);
+    const latestVehicle = latest.vehicles.find((x) => x.id === vehicleId);
+    if (!latestVehicle) return;
+    let latestCycle = latest.cyclesByVehicleId[vehicleId] ?? null;
+    const cycleRes = await fetchVehicleCycle(vehicleId);
+    if (cycleRes.ok) {
+      latestCycle = cycleRes.data.cycle;
+    }
+    const next = deriveAttachmentKeys(latestVehicle, latestCycle);
+    setViewVehicle(latestVehicle);
+    setViewCycle(latestCycle);
+    setViewInsuranceKeys(next.insurance);
+    setViewDrivingLicenseKeys(next.driving);
+    setRows((prev) => prev.map((x) => (x.id === vehicleId ? latestVehicle : x)));
+    setCyclesByVehicleId((prev) => ({ ...prev, [vehicleId]: latestCycle }));
+  };
+  useEffect(() => {
+    viewVehicleRef.current = viewVehicle;
+  }, [viewVehicle]);
   const {
     control,
     getValues: getRhfValues,
@@ -130,7 +183,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       issueDate: pick("发证日期:"),
       ownerAddress: pick("住址:"),
       drivingLicenseAttachmentKey: pick("行驶证附件Key:"),
+      drivingLicenseAttachmentKeys: pick("行驶证附件Keys:")
+        .split("|")
+        .map((x) => x.trim()),
+      insuranceAttachmentKeys: pick("保单附件Keys:").split("|").map((x) => x.trim()),
     };
+    meta.drivingLicenseAttachmentKeys = normalizeAttachmentKeys(meta.drivingLicenseAttachmentKeys);
+    meta.insuranceAttachmentKeys = normalizeAttachmentKeys(meta.insuranceAttachmentKeys);
     const body = lines
       .filter(
         (l) =>
@@ -138,10 +197,27 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           !l.startsWith("所有人:") &&
           !l.startsWith("发证日期:") &&
           !l.startsWith("住址:") &&
-          !l.startsWith("行驶证附件Key:"),
+          !l.startsWith("行驶证附件Key:") &&
+          !l.startsWith("行驶证附件Keys:") &&
+          !l.startsWith("保单附件Keys:"),
       )
       .join("\n");
     return { ...meta, remarkBody: body };
+  };
+
+  const composeVehicleRemark = (meta: ReturnType<typeof parseRemarkMeta>) => {
+    return [
+      meta.remarkBody,
+      meta.archiveNo ? `档案编号: ${meta.archiveNo}` : "",
+      meta.ownerName ? `所有人: ${meta.ownerName}` : "",
+      meta.issueDate ? `发证日期: ${meta.issueDate}` : "",
+      meta.ownerAddress ? `住址: ${meta.ownerAddress}` : "",
+      meta.drivingLicenseAttachmentKey ? `行驶证附件Key: ${meta.drivingLicenseAttachmentKey}` : "",
+      meta.drivingLicenseAttachmentKeys.length > 0 ? `行驶证附件Keys: ${meta.drivingLicenseAttachmentKeys.join("|")}` : "",
+      meta.insuranceAttachmentKeys.length > 0 ? `保单附件Keys: ${meta.insuranceAttachmentKeys.join("|")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
   };
 
   const renderTextInput = (key: string, placeholder?: string) => {
@@ -383,6 +459,16 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       };
       const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
       const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
+      const insuranceAttachmentKey = String(form.getFieldValue("insuranceAttachmentKey") ?? v.insuranceAttachmentKey ?? "").trim();
+      const drivingLicenseAttachmentKey = String(rhfValues.drivingLicenseAttachmentKey ?? v.drivingLicenseAttachmentKey ?? "").trim();
+      const insuranceAttachmentKeys = ((form.getFieldValue("insuranceAttachmentKeys") as string[] | undefined) ?? [])
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+        .filter((k, idx, arr) => arr.indexOf(k) === idx);
+      const drivingLicenseAttachmentKeys = ((form.getFieldValue("drivingLicenseAttachmentKeys") as string[] | undefined) ?? [])
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+        .filter((k, idx, arr) => arr.indexOf(k) === idx);
       const mergedUsageNature = [rhfValues.energyType, rhfValues.usageNature].filter(Boolean).join(" / ");
       const mergedLoadSpec = [rhfValues.loadPeople, rhfValues.loadWeight, rhfValues.dimensions].filter(Boolean).join(" / ");
       const mergedRemark = [
@@ -391,7 +477,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         rhfValues.ownerName ? `所有人: ${rhfValues.ownerName}` : "",
         issueDate ? `发证日期: ${issueDate}` : "",
         rhfValues.ownerAddress ? `住址: ${rhfValues.ownerAddress}` : "",
-        rhfValues.drivingLicenseAttachmentKey ? `行驶证附件Key: ${rhfValues.drivingLicenseAttachmentKey}` : "",
+        drivingLicenseAttachmentKey ? `行驶证附件Key: ${drivingLicenseAttachmentKey}` : "",
+        (drivingLicenseAttachmentKeys.length > 0 ? `行驶证附件Keys: ${drivingLicenseAttachmentKeys.join("|")}` : ""),
+        (insuranceAttachmentKeys.length > 0 ? `保单附件Keys: ${insuranceAttachmentKeys.join("|")}` : ""),
       ]
         .filter(Boolean)
         .join("\n");
@@ -413,7 +501,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           insuranceVendor: v.insuranceVendor || null,
           insuranceStart: v.insuranceStart || null,
           insuranceExpiry: v.insuranceExpiry || null,
-          insuranceAttachmentKey: v.insuranceAttachmentKey || null,
+          insuranceAttachmentKey: insuranceAttachmentKey || null,
           annualLastDate: v.annualLastDate || null,
           annualExpiry: v.annualExpiry || null,
           maintLastDate: v.maintLastDate || null,
@@ -468,7 +556,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     await load(q);
   };
 
-  const openEdit = (r: Vehicle, tab: "basic" | "insurance" | "annual" | "maint" = "basic") => {
+  const openEdit = (
+    r: Vehicle,
+    tab: "basic" | "insurance" | "annual" | "maint" = "basic",
+    scrollTo: "insuranceUpload" | "drivingLicenseUpload" | null = null,
+  ) => {
     const splitCombined = (text: string | null | undefined) => {
       const parts = (text ?? "")
         .split("/")
@@ -484,6 +576,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
 
     setEditing(r);
     setEditTab(tab);
+    setEditScrollTarget(scrollTo);
     setOpen(true);
     form.setFieldsValue({
       plateNo: r.plateNo,
@@ -507,12 +600,24 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       mileage: r.mileage,
       status: r.status,
       drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
+      drivingLicenseAttachmentKeys:
+        meta.drivingLicenseAttachmentKeys.length > 0
+          ? meta.drivingLicenseAttachmentKeys
+          : meta.drivingLicenseAttachmentKey
+            ? [meta.drivingLicenseAttachmentKey]
+            : [],
       remark: meta.remarkBody || "",
       insuranceType: cachedCycle?.insuranceType || "",
       insuranceVendor: cachedCycle?.insuranceVendor || "",
       insuranceStart: cachedCycle?.insuranceStart || "",
       insuranceExpiry: cachedCycle?.insuranceExpiry || "",
       insuranceAttachmentKey: cachedCycle?.insuranceAttachmentKey || "",
+      insuranceAttachmentKeys:
+        meta.insuranceAttachmentKeys.length > 0
+          ? meta.insuranceAttachmentKeys
+          : cachedCycle?.insuranceAttachmentKey
+            ? [cachedCycle.insuranceAttachmentKey]
+            : [],
       annualLastDate: cachedCycle?.annualLastDate || "",
       annualExpiry: cachedCycle?.annualExpiry || "",
       maintLastDate: cachedCycle?.maintLastDate || "",
@@ -544,6 +649,12 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       maintNextKm: Number(cachedCycle?.maintNextKm ?? (r as any).maintNextKm ?? 0),
       status: r.status,
       drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
+      drivingLicenseAttachmentKeys:
+        meta.drivingLicenseAttachmentKeys.length > 0
+          ? meta.drivingLicenseAttachmentKeys
+          : meta.drivingLicenseAttachmentKey
+            ? [meta.drivingLicenseAttachmentKey]
+            : [],
       remark: meta.remarkBody || "",
     });
 
@@ -568,6 +679,21 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       setRhfValue("maintNextKm", Number(c.maintNextKm ?? 0));
     });
   };
+
+  useEffect(() => {
+    if (!open || !editScrollTarget) return;
+    const run = () => {
+      const wrap = editScrollWrapRef.current;
+      const target =
+        editScrollTarget === "insuranceUpload" ? insuranceUploadRef.current : drivingLicenseUploadRef.current;
+      if (!wrap || !target) return;
+      // Ensure the tab panel is rendered before scrolling.
+      target.scrollIntoView({ block: "start", behavior: "smooth" });
+      setEditScrollTarget(null);
+    };
+    const t = window.setTimeout(run, 60);
+    return () => window.clearTimeout(t);
+  }, [open, editScrollTarget, editTab]);
 
   const shareVehicle = async (r: Vehicle) => {
     const link = `${window.location.origin}/vehicles?q=${encodeURIComponent(r.plateNo)}`;
@@ -596,22 +722,136 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   }, [filterStatus, filterNearDue]);
 
   const openView = async (r: Vehicle, tab: "base" | "cycle" | "files" = "base") => {
-    setViewVehicle(r);
+    const latestRow = rows.find((x) => x.id === r.id) ?? r;
+    const cachedCycle = cyclesByVehicleId[latestRow.id];
+    const raw = deriveAttachmentKeys(latestRow, cachedCycle);
+    const rawDrivingLicenseKeysFromMeta = raw.driving;
+    const rawInsuranceKeysFromMeta = raw.insurance;
+
+    setViewVehicle(latestRow);
     setViewCycle(null);
+    // Show locally known keys immediately to avoid transient "未上传" flicker.
+    setViewInsuranceKeys(rawInsuranceKeysFromMeta);
+    setViewDrivingLicenseKeys(rawDrivingLicenseKeysFromMeta);
     setViewTab(tab);
     setViewOpen(true);
     setViewLoading(true);
     try {
-      const cycleRes = await fetchVehicleCycle(r.id);
-      if (cycleRes.ok) setViewCycle(cycleRes.data.cycle);
+      const cycleRes = await fetchVehicleCycle(latestRow.id);
+      if (!cycleRes.ok) return;
+
+      setViewCycle(cycleRes.data.cycle);
+      const merged = deriveAttachmentKeys(latestRow, cycleRes.data.cycle);
+      const rawInsuranceKeys = merged.insurance;
+      const rawDrivingLicenseKeys = merged.driving;
+
+      // Keep counts consistent with saved record data in edit form.
+      setViewInsuranceKeys(rawInsuranceKeys);
+      setViewDrivingLicenseKeys(rawDrivingLicenseKeys);
     } finally {
       setViewLoading(false);
     }
   };
 
-  const viewAttachment = async (attachmentKey: string) => {
-    const res = await openProtectedFile(`/files/${encodeURIComponent(attachmentKey)}`);
-    if (!res.ok) message.error(res.error.message);
+  const viewAttachment = (attachmentKeys: string[] | string, source: "insurance" | "driving" | "other" = "other") => {
+    const keys = Array.isArray(attachmentKeys) ? attachmentKeys : [attachmentKeys];
+    const paths = keys.filter(Boolean).map((k) => `/files/${encodeURIComponent(k)}`);
+    setViewerPaths(paths);
+    setViewerInitialIndex(0);
+    setViewerSource(source);
+    setViewerPath(paths[0] || null);
+  };
+
+  const persistViewerAttachmentChanges = async (
+    source: "insurance" | "driving" | "other",
+    nextKeys: string[],
+  ): Promise<boolean> => {
+    const currentVehicle = viewVehicleRef.current;
+    if (!currentVehicle || source === "other") return true;
+    const normalizedNextKeys = normalizeAttachmentKeys(nextKeys);
+
+    if (source === "insurance") {
+      let cycleSnapshot = viewCycle;
+      if (!cycleSnapshot) {
+        const fresh = await fetchVehicleCycle(currentVehicle.id);
+        if (!fresh.ok) {
+          message.error(fresh.error.message || "附件更新失败");
+          return false;
+        }
+        cycleSnapshot = fresh.data.cycle;
+      }
+      if (!cycleSnapshot) {
+        message.error("附件更新失败");
+        return false;
+      }
+      const cycleRes = await requestPutVehicleCycles(currentVehicle.id, {
+        insuranceType: cycleSnapshot.insuranceType || null,
+        insuranceVendor: cycleSnapshot.insuranceVendor || null,
+        insuranceStart: cycleSnapshot.insuranceStart || null,
+        insuranceExpiry: cycleSnapshot.insuranceExpiry || null,
+        insuranceAttachmentKey: normalizedNextKeys[0] || null,
+        annualLastDate: cycleSnapshot.annualLastDate || null,
+        annualExpiry: cycleSnapshot.annualExpiry || null,
+        maintLastDate: cycleSnapshot.maintLastDate || null,
+        maintIntervalDays: cycleSnapshot.maintIntervalDays ?? null,
+        maintIntervalKm: cycleSnapshot.maintIntervalKm ?? null,
+        maintNextDate: cycleSnapshot.maintNextDate || null,
+        maintNextKm: cycleSnapshot.maintNextKm ?? null,
+      });
+      if (!cycleRes.ok) {
+        message.error(cycleRes.error.message || "附件更新失败");
+        return false;
+      }
+    }
+
+    const parsed = parseRemarkMeta(currentVehicle.remark);
+    const nextMeta = {
+      ...parsed,
+      drivingLicenseAttachmentKeys:
+        source === "driving" ? normalizedNextKeys : parsed.drivingLicenseAttachmentKeys,
+      drivingLicenseAttachmentKey:
+        source === "driving" ? (normalizedNextKeys[0] || "") : parsed.drivingLicenseAttachmentKey,
+      insuranceAttachmentKeys:
+        source === "insurance" ? normalizedNextKeys : parsed.insuranceAttachmentKeys,
+    };
+    const nextRemark = composeVehicleRemark(nextMeta) || null;
+    const res = await requestUpsertVehicle(currentVehicle.id, {
+      plateNo: currentVehicle.plateNo,
+      vehicleType: currentVehicle.vehicleType,
+      brandModel: currentVehicle.brandModel,
+      vin: currentVehicle.vin,
+      engineNo: currentVehicle.engineNo,
+      regDate: currentVehicle.regDate,
+      loadSpec: currentVehicle.loadSpec,
+      usageNature: currentVehicle.usageNature,
+      ownerDept: currentVehicle.ownerDept,
+      ownerPerson: currentVehicle.ownerPerson,
+      mileage: currentVehicle.mileage,
+      purchaseDate: currentVehicle.purchaseDate,
+      purchaseCost: currentVehicle.purchaseCost,
+      serviceLifeYears: currentVehicle.serviceLifeYears,
+      scrapDate: currentVehicle.scrapDate,
+      disposalMethod: currentVehicle.disposalMethod,
+      status: currentVehicle.status,
+      remark: nextRemark,
+    });
+    if (!res.ok) {
+      message.error(res.error.message || "附件更新失败");
+      return false;
+    }
+    setViewVehicle((prev) => (prev ? { ...prev, remark: nextRemark } : prev));
+    setRows((prev) => prev.map((x) => (x.id === currentVehicle.id ? { ...x, remark: nextRemark } : x)));
+    if (source === "insurance") {
+      setCyclesByVehicleId((prev) => ({
+        ...prev,
+        [currentVehicle.id]: prev[currentVehicle.id]
+          ? { ...prev[currentVehicle.id]!, insuranceAttachmentKey: normalizedNextKeys[0] || null }
+          : prev[currentVehicle.id],
+      }));
+    }
+    // Read back from server immediately so count/status stays exact without manual refresh.
+    await reconcileViewAttachmentState(currentVehicle.id);
+    return true;
   };
 
   return (
@@ -863,6 +1103,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           ) : (
             (() => {
               const viewVehicleMeta = parseRemarkMeta(viewVehicle.remark);
+              const insuranceKeys = viewInsuranceKeys;
+              const drivingLicenseKeys = viewDrivingLicenseKeys;
               return (
             <Tabs
               activeKey={viewTab}
@@ -996,18 +1238,14 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                         <div className="rounded-md border border-slate-200 bg-white p-2.5">
                           <div className="text-xs font-medium tracking-wide text-slate-500">保单附件</div>
                           <div className="mt-1 text-sm text-slate-800">
-                            {viewCycle?.insuranceAttachmentKey ? (
-                              <span className="font-medium text-slate-900">已上传</span>
-                            ) : (
-                              <span className="text-slate-500">未上传</span>
-                            )}
+                            <AttachmentStatus uploaded={insuranceKeys.length > 0} count={insuranceKeys.length} />
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <Button
                               size="small"
                               className={actionBtn.ghost}
-                              disabled={!viewCycle?.insuranceAttachmentKey}
-                              onClick={() => viewCycle?.insuranceAttachmentKey && void viewAttachment(viewCycle.insuranceAttachmentKey)}
+                              disabled={insuranceKeys.length === 0}
+                              onClick={() => insuranceKeys.length > 0 && void viewAttachment(insuranceKeys, "insurance")}
                             >
                               <Eye className="h-3.5 w-3.5" />
                               查看
@@ -1018,7 +1256,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                                 className={actionBtn.secondary}
                                 onClick={() => {
                                   setViewOpen(false);
-                                  openEdit(viewVehicle, "insurance");
+                                  openEdit(viewVehicle, "insurance", "insuranceUpload");
                                 }}
                               >
                                 <Upload className="h-3.5 w-3.5" />
@@ -1031,20 +1269,15 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                         <div className="rounded-md border border-slate-200 bg-white p-2.5">
                           <div className="text-xs font-medium tracking-wide text-slate-500">行驶证附件</div>
                           <div className="mt-1 text-sm text-slate-800">
-                            {viewVehicleMeta.drivingLicenseAttachmentKey ? (
-                              <span className="font-medium text-slate-900">已上传</span>
-                            ) : (
-                              <span className="text-slate-500">未上传</span>
-                            )}
+                            <AttachmentStatus uploaded={drivingLicenseKeys.length > 0} count={drivingLicenseKeys.length} />
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <Button
                               size="small"
                               className={actionBtn.ghost}
-                              disabled={!viewVehicleMeta.drivingLicenseAttachmentKey}
+                              disabled={drivingLicenseKeys.length === 0}
                               onClick={() => {
-                                const k = viewVehicleMeta.drivingLicenseAttachmentKey;
-                                if (k) void viewAttachment(k);
+                                if (drivingLicenseKeys.length > 0) viewAttachment(drivingLicenseKeys, "driving");
                               }}
                             >
                               <Eye className="h-3.5 w-3.5" />
@@ -1056,7 +1289,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                                 className={actionBtn.secondary}
                                 onClick={() => {
                                   setViewOpen(false);
-                                  openEdit(viewVehicle, "basic");
+                                  openEdit(viewVehicle, "basic", "drivingLicenseUpload");
                                 }}
                               >
                                 <Upload className="h-3.5 w-3.5" />
@@ -1112,6 +1345,60 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         </div>
       </Modal>
 
+      <AttachmentViewer
+        open={!!viewerPath}
+        path={viewerPath}
+        paths={viewerPaths}
+        initialIndex={viewerInitialIndex}
+        onPathsChange={(nextPaths) => {
+          const toKey = (p: string) => {
+            const raw = p.replace(/^\/files\//, "");
+            try {
+              return decodeURIComponent(raw);
+            } catch {
+              return raw;
+            }
+          };
+          const nextKeys = normalizeAttachmentKeys(nextPaths.map(toKey));
+          const prevInsuranceKeys = viewInsuranceKeys;
+          const prevDrivingKeys = viewDrivingLicenseKeys;
+          const prevInsuranceAttachmentKey = viewCycle?.insuranceAttachmentKey ?? null;
+
+          if (viewerSource === "insurance") {
+            setViewInsuranceKeys(nextKeys);
+            setViewCycle((prev) => (prev ? { ...prev, insuranceAttachmentKey: nextKeys[0] || null } : prev));
+          }
+          if (viewerSource === "driving") {
+            setViewDrivingLicenseKeys(nextKeys);
+          }
+
+          const run = async () => {
+            const ok = await persistViewerAttachmentChanges(viewerSource, nextKeys);
+            if (ok) return;
+            // rollback optimistic updates when persistence fails
+            setViewInsuranceKeys(prevInsuranceKeys);
+            setViewDrivingLicenseKeys(prevDrivingKeys);
+            setViewCycle((prev) => (prev ? { ...prev, insuranceAttachmentKey: prevInsuranceAttachmentKey } : prev));
+          };
+          viewerPersistQueueRef.current = viewerPersistQueueRef.current.then(run).catch(() => undefined);
+        }}
+        title="附件预览"
+        onClose={() => {
+          const closingVehicleId = viewVehicleRef.current?.id;
+          setViewerPath(null);
+          setViewerPaths([]);
+          setViewerInitialIndex(0);
+          setViewerSource("other");
+          if (closingVehicleId) {
+            viewerPersistQueueRef.current = viewerPersistQueueRef.current
+              .then(async () => {
+                await reconcileViewAttachmentState(closingVehicleId);
+              })
+              .catch(() => undefined);
+          }
+        }}
+      />
+
       <Modal
         title={editing ? "编辑车辆" : "新增车辆"}
         open={open}
@@ -1130,7 +1417,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         width={920}
         className="ve-vehicles-modal"
       >
-        <div className="max-h-[70vh] overflow-y-auto p-4">
+        <div ref={editScrollWrapRef} className="max-h-[70vh] overflow-y-auto p-4">
           <Form form={form} layout="vertical">
             <Tabs
               activeKey={editTab}
@@ -1389,16 +1676,23 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Form.Item label="上传行驶证">
-                        <R2AttachmentUploader
-                          value={getRhfValues().drivingLicenseAttachmentKey}
-                          onUploaded={(key) => {
-                            setRhfValue("drivingLicenseAttachmentKey", key);
-                            form.setFieldValue("drivingLicenseAttachmentKey", key);
-                          }}
-                          description="拖拽或点击上传行驶证扫描件（图片/PDF）"
-                        />
-                      </Form.Item>
+                      <div ref={drivingLicenseUploadRef}>
+                        <Form.Item label="上传行驶证">
+                          <R2AttachmentUploader
+                            value={getRhfValues().drivingLicenseAttachmentKey}
+                            keys={(form.getFieldValue("drivingLicenseAttachmentKeys") as string[] | undefined) ?? []}
+                            onUploaded={(key) => {
+                              setRhfValue("drivingLicenseAttachmentKey", key);
+                              form.setFieldValue("drivingLicenseAttachmentKey", key);
+                              const prev = (form.getFieldValue("drivingLicenseAttachmentKeys") as string[] | undefined) ?? [];
+                              const next = [...prev, key].map((x) => String(x ?? "").trim()).filter(Boolean);
+                              const uniq = next.filter((k, idx) => next.indexOf(k) === idx);
+                              form.setFieldValue("drivingLicenseAttachmentKeys", uniq.slice(0, 50));
+                            }}
+                            description="拖拽或点击上传行驶证扫描件（图片/PDF）"
+                          />
+                        </Form.Item>
+                      </div>
                     </Col>
                   </Row>
                 ),
@@ -1429,17 +1723,26 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={24}>
-                      <Form.Item label="上传保单">
-                        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.insuranceAttachmentKey !== cur.insuranceAttachmentKey}>
-                          {() => (
-                            <R2AttachmentUploader
-                              value={form.getFieldValue("insuranceAttachmentKey")}
-                              onUploaded={(key) => form.setFieldValue("insuranceAttachmentKey", key)}
-                              description="拖拽或点击上传保单附件"
-                            />
-                          )}
+                      <div ref={insuranceUploadRef}>
+                        <Form.Item label="上传保单">
+                          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.insuranceAttachmentKey !== cur.insuranceAttachmentKey}>
+                            {() => (
+                              <R2AttachmentUploader
+                                value={form.getFieldValue("insuranceAttachmentKey")}
+                                keys={(form.getFieldValue("insuranceAttachmentKeys") as string[] | undefined) ?? []}
+                                onUploaded={(key) => {
+                                  form.setFieldValue("insuranceAttachmentKey", key);
+                                  const prev = (form.getFieldValue("insuranceAttachmentKeys") as string[] | undefined) ?? [];
+                                  const next = [...prev, key].map((x) => String(x ?? "").trim()).filter(Boolean);
+                                  const uniq = next.filter((k, idx) => next.indexOf(k) === idx);
+                                  form.setFieldValue("insuranceAttachmentKeys", uniq.slice(0, 50));
+                                }}
+                                description="拖拽或点击上传保单附件"
+                              />
+                            )}
+                          </Form.Item>
                         </Form.Item>
-                      </Form.Item>
+                      </div>
                     </Col>
                   </Row>
                 ),

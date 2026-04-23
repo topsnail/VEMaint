@@ -4,10 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { getUser } from "../lib/auth";
 import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
-import { downloadProtectedFile, openProtectedFile } from "../lib/http";
+import { downloadProtectedFile } from "../lib/http";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
 import { MinusCircle, Plus, Users } from "lucide-react";
+import { AttachmentViewer } from "../components/AttachmentViewer";
 
 type ConfigForm = {
   siteName: string;
@@ -75,6 +76,7 @@ export function ConfigPage() {
   const { fetchConfig, saveConfig } = useConfigSettings();
   const [currentDropdowns, setCurrentDropdowns] = useState<Record<string, string[]>>({});
   const [rolePermissions, setRolePermissions] = useState<RolePermissions>(() => normalizeRolePermissions(null));
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
   const me = getUser();
   const nav = useNavigate();
   const canManageUsers = me ? hasPerm(me.role, "user.manage", rolePermissions) : false;
@@ -175,8 +177,7 @@ export function ConfigPage() {
   };
 
   const handleOpenLogs = async () => {
-    const res = await openProtectedFile("/logs");
-    if (!res.ok) message.error(res.error.message);
+    setViewerPath("/logs");
   };
 
   return (
@@ -451,6 +452,7 @@ export function ConfigPage() {
           </Button>
         </div>
       </Form>
+      <AttachmentViewer open={!!viewerPath} path={viewerPath} title="操作日志" onClose={() => setViewerPath(null)} />
     </div>
     </PageContainer>
   );

@@ -17,6 +17,8 @@ export type ParsedMaintenanceMeta = {
   equipmentCategory?: string;
   resultStatus?: MaintenanceResultStatus;
   partDetails: PartDetail[];
+  /** Multi-attachment keys stored in remark meta (backward compatible) */
+  attachmentKeys: string[];
 };
 
 const COST_META_PREFIX = "__COST_META__:";
@@ -52,6 +54,7 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
       equipmentCategory: undefined,
       resultStatus: undefined,
       partDetails: [],
+      attachmentKeys: [],
     };
   }
 
@@ -73,6 +76,7 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
     equipmentCategory: undefined,
     resultStatus: undefined,
     partDetails: [],
+    attachmentKeys: [],
   };
 
   const costMetaJson = costMetaLine?.slice(COST_META_PREFIX.length).trim();
@@ -107,6 +111,7 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
       const maint = JSON.parse(maintMetaJson) as {
         resultStatus?: unknown;
         partDetails?: unknown;
+        attachmentKeys?: unknown;
       };
       if (maint.resultStatus === "resolved" || maint.resultStatus === "temporary" || maint.resultStatus === "pending") {
         parsed.resultStatus = maint.resultStatus;
@@ -125,6 +130,12 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
             };
           });
       }
+      if (Array.isArray(maint.attachmentKeys)) {
+        parsed.attachmentKeys = maint.attachmentKeys
+          .map((k) => String(k ?? "").trim())
+          .filter(Boolean)
+          .filter((k, idx, arr) => arr.indexOf(k) === idx);
+      }
     }
   } catch {
     // ignore malformed meta
@@ -142,10 +153,11 @@ type JoinRemarkMetaParams = {
   equipmentCategory?: string;
   resultStatus?: MaintenanceResultStatus;
   partDetails?: PartDetail[];
+  attachmentKeys?: string[];
 };
 
 export function joinRemarkMeta(params: JoinRemarkMetaParams): string | null {
-  const { remark, laborCost, materialCost, miscCost, equipmentType, equipmentCategory, resultStatus, partDetails } = params;
+  const { remark, laborCost, materialCost, miscCost, equipmentType, equipmentCategory, resultStatus, partDetails, attachmentKeys } = params;
   const cleanRemark = (remark ?? "").trim();
   const hasBreakdown = [laborCost, materialCost, miscCost].some((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
   const hasEquipMeta = [equipmentType, equipmentCategory].some((value) => !!String(value ?? "").trim());
@@ -160,6 +172,12 @@ export function joinRemarkMeta(params: JoinRemarkMetaParams): string | null {
       }))
       .filter((row) => row.partName || row.spec || row.unit || typeof row.qty === "number" || typeof row.unitPrice === "number") ?? [];
   const hasMaintMeta = !!resultStatus || cleanParts.length > 0;
+  const cleanAttachmentKeys =
+    attachmentKeys
+      ?.map((k) => String(k ?? "").trim())
+      .filter(Boolean)
+      .filter((k, idx, arr) => arr.indexOf(k) === idx) ?? [];
+  const hasMaintMetaOrAttachments = hasMaintMeta || cleanAttachmentKeys.length > 0;
 
   const lines: string[] = [];
   if (cleanRemark) lines.push(cleanRemark);
@@ -180,11 +198,12 @@ export function joinRemarkMeta(params: JoinRemarkMetaParams): string | null {
       })}`,
     );
   }
-  if (hasMaintMeta) {
+  if (hasMaintMetaOrAttachments) {
     lines.push(
       `${MAINT_META_PREFIX}${JSON.stringify({
         resultStatus: resultStatus || undefined,
         partDetails: cleanParts.length > 0 ? cleanParts : undefined,
+        attachmentKeys: cleanAttachmentKeys.length > 0 ? cleanAttachmentKeys : undefined,
       })}`,
     );
   }

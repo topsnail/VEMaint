@@ -18,3 +18,7 @@ export async function r2Get(bucket: R2Bucket, key: string) {
   return await bucket.get(key);
 }
 
+export async function r2Delete(bucket: R2Bucket, key: string) {
+  return await bucket.delete(key);
+}
+

@@ -1,10 +1,12 @@
 import { App, Button, Form, Input, Modal, Select, Skeleton, Space, Table, Tabs } from "@/components/ui/legacy";
 import type { Dayjs } from "dayjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MaintenanceBasicSection } from "../components/maintenance/MaintenanceBasicSection";
 import { MaintenanceCostSection } from "../components/maintenance/MaintenanceCostSection";
 import { PageContainer } from "../components/PageContainer";
 import { R2AttachmentUploader } from "../components/R2AttachmentUploader";
+import { AttachmentStatus } from "../components/AttachmentStatus";
+import { AttachmentViewer } from "../components/AttachmentViewer";
 import { useMaintenanceColumns } from "../hooks/useMaintenanceColumns";
 import { useMaintenanceListView, type MaintenanceViewMode } from "../hooks/useMaintenanceListView";
 import { useMaintenancePageData } from "../hooks/useMaintenancePageData";
@@ -43,6 +45,7 @@ type FormModel = {
     unitPrice?: number;
   }>;
   attachmentKey?: string | null;
+  attachmentKeys?: string[];
 };
 
 export function MaintenancePage({
@@ -56,13 +59,25 @@ export function MaintenancePage({
 }) {
   const { message } = App.useApp();
   const currentUserName = getUser()?.username ?? "当前用户";
-  const { rows, vehicles, dropdowns, loading: pageLoading, savePending, removePending, load, loadDropdowns, removeRecord, saveRecord } = useMaintenancePageData();
+  const { rows, setRows, vehicles, dropdowns, loading: pageLoading, savePending, removePending, load, loadDropdowns, removeRecord, saveRecord } = useMaintenancePageData();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<MaintenanceRecord | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [viewRecord, setViewRecord] = useState<MaintenanceRecord | null>(null);
   const [pendingDeleteRecord, setPendingDeleteRecord] = useState<MaintenanceRecord | null>(null);
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [viewerPaths, setViewerPaths] = useState<string[]>([]);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
+  const [viewAttachmentKeys, setViewAttachmentKeys] = useState<string[]>([]);
+  const viewRecordRef = useRef<MaintenanceRecord | null>(null);
+  const viewerPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [form] = Form.useForm<FormModel>();
+  const normalizeAttachmentKeys = (keys: Array<string | null | undefined>) =>
+    keys
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean)
+      .filter((k, idx, arr) => arr.indexOf(k) === idx)
+      .slice(0, 50);
 
   useEffect(() => {
     void load();
@@ -83,6 +98,9 @@ export function MaintenancePage({
     const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
     window.history.replaceState(null, "", url);
   }, [canEdit, form, view]);
+  useEffect(() => {
+    viewRecordRef.current = viewRecord;
+  }, [viewRecord]);
 
   const listView = useMaintenanceListView({ rows, view });
 
@@ -192,6 +210,7 @@ export function MaintenancePage({
           equipmentCategory: v.targetType === "equipment" ? v.equipmentCategory : undefined,
           resultStatus: v.resultStatus,
           partDetails: v.partDetails,
+          attachmentKeys: v.attachmentKeys,
         }),
         attachmentKey: v.attachmentKey || null,
       };
@@ -217,9 +236,66 @@ export function MaintenancePage({
     return true;
   };
 
-  const viewAttachment = async (attachmentKey: string) => {
-    const res = await openProtectedFile(`/files/${encodeURIComponent(attachmentKey)}`);
-    if (!res.ok) message.error(res.error.message);
+  const openAttachmentViewer = (attachmentKeys: string[] | string) => {
+    const keys = Array.isArray(attachmentKeys) ? attachmentKeys : [attachmentKeys];
+    const ps = keys.filter(Boolean).map((k) => `/files/${encodeURIComponent(k)}`);
+    setViewerPaths(ps);
+    setViewerInitialIndex(0);
+    setViewerPath(ps[0] || null);
+  };
+  const buildPayloadFromRecord = (record: MaintenanceRecord, nextAttachmentKeys: string[]) => {
+    const parsed = parseRemarkMeta(record.remark);
+    const payload = {
+      targetType: record.targetType,
+      vehicleId: record.targetType === "vehicle" ? record.vehicleId : null,
+      equipmentName: record.targetType === "vehicle" ? null : (record.equipmentName || null),
+      maintenanceType: record.maintenanceType,
+      maintenanceDate: record.maintenanceDate,
+      itemDesc: record.itemDesc,
+      cost: Number(record.cost ?? 0),
+      vendor: record.vendor || null,
+      parts: record.parts || null,
+      mileage: record.targetType === "vehicle" ? (record.mileage ?? null) : null,
+      remark: joinRemarkMeta({
+        remark: parsed.remark,
+        laborCost: parsed.laborCost,
+        materialCost: parsed.materialCost,
+        miscCost: parsed.miscCost,
+        equipmentType: parsed.equipmentType,
+        equipmentCategory: parsed.equipmentCategory,
+        resultStatus: parsed.resultStatus,
+        partDetails: parsed.partDetails,
+        attachmentKeys: nextAttachmentKeys,
+      }),
+      attachmentKey: nextAttachmentKeys[0] || null,
+    };
+    return payload;
+  };
+  const reconcileViewAttachmentState = async (recordId: string) => {
+    const latest = await load();
+    const latestRecord = latest.rows.find((x) => x.id === recordId);
+    if (!latestRecord) return;
+    const parsed = parseRemarkMeta(latestRecord.remark);
+    const nextKeys = normalizeAttachmentKeys([
+      ...parsed.attachmentKeys,
+      latestRecord.attachmentKey,
+    ]);
+    setViewRecord(latestRecord);
+    setViewAttachmentKeys(nextKeys);
+    setRows((prev) => prev.map((x) => (x.id === recordId ? latestRecord : x)));
+  };
+  const persistViewAttachmentKeys = async (nextAttachmentKeys: string[]): Promise<boolean> => {
+    const current = viewRecordRef.current;
+    if (!current) return false;
+    const normalized = normalizeAttachmentKeys(nextAttachmentKeys);
+    const payload = buildPayloadFromRecord(current, normalized);
+    const res = await saveRecord(current.id, payload);
+    if (!res.ok) {
+      message.error(res.error.message || "附件更新失败");
+      return false;
+    }
+    await reconcileViewAttachmentState(current.id);
+    return true;
   };
 
   const handleEditOpen = (record: MaintenanceRecord) => {
@@ -227,7 +303,14 @@ export function MaintenancePage({
     setOpen(true);
   };
   const handleViewOpen = (record: MaintenanceRecord) => {
-    setViewRecord(record);
+    const latestRow = rows.find((x) => x.id === record.id) ?? record;
+    const parsed = parseRemarkMeta(latestRow.remark);
+    const nextKeys = normalizeAttachmentKeys([
+      ...parsed.attachmentKeys,
+      latestRow.attachmentKey,
+    ]);
+    setViewAttachmentKeys(nextKeys);
+    setViewRecord(latestRow);
     setViewOpen(true);
   };
   const maintenanceTypeLabelMap = useMemo(
@@ -253,7 +336,7 @@ export function MaintenancePage({
       setPendingDeleteRecord(record);
     },
     onViewAttachment: (attachmentKey) => {
-      void viewAttachment(attachmentKey);
+      openAttachmentViewer(attachmentKey);
     },
   });
 
@@ -447,12 +530,50 @@ export function MaintenancePage({
                 label: "附件",
                 children: (
                   <>
+                    <Form.Item label="上传状态">
+                      <Form.Item
+                        noStyle
+                        shouldUpdate={(prev, cur) =>
+                          prev.attachmentKey !== cur.attachmentKey ||
+                          JSON.stringify(prev.attachmentKeys ?? []) !== JSON.stringify(cur.attachmentKeys ?? [])
+                        }
+                      >
+                        {() => (
+                          (() => {
+                            const n =
+                              normalizeAttachmentKeys([
+                                ...((form.getFieldValue("attachmentKeys") as string[] | undefined) ?? []),
+                                form.getFieldValue("attachmentKey"),
+                              ]).length;
+                            return (
+                          <AttachmentStatus
+                            uploaded={n > 0}
+                            count={n}
+                          />
+                            );
+                          })()
+                        )}
+                      </Form.Item>
+                    </Form.Item>
                     <Form.Item label="上传附件">
-                      <Form.Item noStyle shouldUpdate={(prev, cur) => prev.attachmentKey !== cur.attachmentKey}>
+                      <Form.Item
+                        noStyle
+                        shouldUpdate={(prev, cur) =>
+                          prev.attachmentKey !== cur.attachmentKey ||
+                          JSON.stringify(prev.attachmentKeys ?? []) !== JSON.stringify(cur.attachmentKeys ?? [])
+                        }
+                      >
                         {() => (
                           <R2AttachmentUploader
                             value={form.getFieldValue("attachmentKey")}
-                            onUploaded={(key) => form.setFieldValue("attachmentKey", key)}
+                            keys={(form.getFieldValue("attachmentKeys") as string[] | undefined) ?? []}
+                            onUploaded={(key) => {
+                              form.setFieldValue("attachmentKey", key);
+                              const prev = (form.getFieldValue("attachmentKeys") as string[] | undefined) ?? [];
+                              const next = [...prev, key].map((x) => String(x ?? "").trim()).filter(Boolean);
+                              const uniq = next.filter((k, idx) => next.indexOf(k) === idx);
+                              form.setFieldValue("attachmentKeys", uniq.slice(0, 50));
+                            }}
                           />
                         )}
                       </Form.Item>
@@ -533,10 +654,21 @@ export function MaintenancePage({
                       <div className="text-xs font-medium tracking-wide text-slate-500">备注</div>
                       <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{parsed.remark || "无备注"}</div>
                     </div>
+                    <div className="rounded-md border border-slate-200 bg-white p-2.5 md:col-span-2">
+                      <div className="text-xs font-medium tracking-wide text-slate-500">附件状态</div>
+                      <div className="mt-1">
+                        <AttachmentStatus uploaded={viewAttachmentKeys.length > 0} count={viewAttachmentKeys.length} />
+                      </div>
+                    </div>
                   </div>
-                  {viewRecord.attachmentKey ? (
+                  {viewAttachmentKeys.length > 0 ? (
                     <div className="flex justify-end">
-                      <Button className={actionBtn.secondary} onClick={() => void viewAttachment(viewRecord.attachmentKey!)}>
+                      <Button
+                        className={actionBtn.secondary}
+                        onClick={() => {
+                          openAttachmentViewer(viewAttachmentKeys);
+                        }}
+                      >
                         查看附件
                       </Button>
                     </div>
@@ -547,6 +679,48 @@ export function MaintenancePage({
           </div>
         ) : null}
       </Modal>
+
+      <AttachmentViewer
+        open={!!viewerPath}
+        path={viewerPath}
+        paths={viewerPaths}
+        initialIndex={viewerInitialIndex}
+        onPathsChange={(nextPaths) => {
+          const toKey = (p: string) => {
+            const raw = p.replace(/^\/files\//, "");
+            try {
+              return decodeURIComponent(raw);
+            } catch {
+              return raw;
+            }
+          };
+          const nextKeys = normalizeAttachmentKeys(nextPaths.map(toKey));
+          const prevKeys = viewAttachmentKeys;
+          setViewAttachmentKeys(nextKeys);
+          setViewRecord((prev) => (prev ? { ...prev, attachmentKey: nextKeys[0] || null } : prev));
+          const run = async () => {
+            const ok = await persistViewAttachmentKeys(nextKeys);
+            if (ok) return;
+            setViewAttachmentKeys(prevKeys);
+            setViewRecord((prev) => (prev ? { ...prev, attachmentKey: prevKeys[0] || null } : prev));
+          };
+          viewerPersistQueueRef.current = viewerPersistQueueRef.current.then(run).catch(() => undefined);
+        }}
+        title="附件预览"
+        onClose={() => {
+          const closingId = viewRecordRef.current?.id;
+          setViewerPath(null);
+          setViewerPaths([]);
+          setViewerInitialIndex(0);
+          if (closingId) {
+            viewerPersistQueueRef.current = viewerPersistQueueRef.current
+              .then(async () => {
+                await reconcileViewAttachmentState(closingId);
+              })
+              .catch(() => undefined);
+          }
+        }}
+      />
 
       <Modal
         title="确认删除"

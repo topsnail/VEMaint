@@ -118,22 +118,102 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<Api
   return handleRequest<T>(path, init);
 }
 
-export async function uploadFile(file: File): Promise<ApiResult<{ key: string; url: string }>> {
+export async function uploadFile(
+  file: File,
+  opts?: { preview?: File | Blob | null },
+): Promise<ApiResult<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>> {
   const token = getToken();
   if (!token) return { ok: false, error: { code: "UNAUTHORIZED", message: "未登录" } };
   
   const form = new FormData();
   form.append("file", file);
+  if (opts?.preview) {
+    const preview = opts.preview;
+    if (preview instanceof File) form.append("preview", preview);
+    else form.append("preview", preview, "preview.webp");
+  }
   
   const csrfToken = getCsrfToken();
   if (csrfToken) {
     form.append("csrfToken", csrfToken);
   }
   
-  return handleRequest<{ key: string; url: string }>("/upload", {
+  return handleRequest<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>("/upload", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
+  });
+}
+
+export async function uploadFileWithProgress(
+  file: File,
+  opts: { preview?: File | Blob | null } | undefined,
+  onProgress: (percent: number, loaded: number, total: number | null) => void,
+): Promise<ApiResult<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>> {
+  const token = getToken();
+  if (!token) return { ok: false, error: { code: "UNAUTHORIZED", message: "未登录" } };
+
+  const form = new FormData();
+  form.append("file", file);
+  if (opts?.preview) {
+    const preview = opts.preview;
+    if (preview instanceof File) form.append("preview", preview);
+    else form.append("preview", preview, "preview.webp");
+  }
+
+  const csrfToken = getCsrfToken();
+  if (csrfToken) {
+    form.append("csrfToken", csrfToken);
+  }
+
+  const url = requestPath("/upload");
+  return await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (csrfToken) xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+    xhr.responseType = "text";
+    xhr.upload.onprogress = (evt) => {
+      if (!evt) return;
+      if (evt.lengthComputable) {
+        const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / Math.max(1, evt.total)) * 100)));
+        onProgress(pct, evt.loaded, evt.total);
+      } else {
+        onProgress(0, evt.loaded, null);
+      }
+    };
+    xhr.onerror = () => resolve({ ok: false, error: { code: "NETWORK_ERROR", message: "网络异常，请检查服务是否可用" } });
+    xhr.onload = () => {
+      const status = xhr.status;
+      const text = typeof xhr.responseText === "string" ? xhr.responseText : "";
+      if (status === 401 && token && !token.startsWith("mock_token_")) {
+        clearToken();
+      }
+      if (status < 200 || status >= 300) {
+        let msg = "请求失败";
+        try {
+          const json = JSON.parse(text) as any;
+          if (json && typeof json === "object" && "error" in json) {
+            msg = String((json as ErrorEnvelope).error?.message ?? msg);
+          }
+        } catch {
+          if (text) msg = text;
+        }
+        resolve({ ok: false, error: { code: `HTTP_${status}`, message: msg } });
+        return;
+      }
+      try {
+        const json = JSON.parse(text) as unknown;
+        resolve(
+          isApiResult<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>(json)
+            ? (json as any)
+            : { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } },
+        );
+      } catch {
+        resolve({ ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } });
+      }
+    };
+    xhr.send(form);
   });
 }
 
@@ -141,13 +221,21 @@ export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Ap
   return handleRequest(path, init, true);
 }
 
+export async function deleteProtectedFile(path: string): Promise<ApiResult<{ ok: true }>> {
+  return handleRequest<{ ok: true }>(path, { method: "DELETE" });
+}
+
+export async function checkProtectedFiles(keys: string[]): Promise<ApiResult<{ checks: Array<{ key: string; exists: boolean }> }>> {
+  return handleRequest<{ checks: Array<{ key: string; exists: boolean }> }>("/files/check", {
+    method: "POST",
+    body: JSON.stringify({ keys }),
+  });
+}
+
 export async function openProtectedFile(path: string) {
-  const res = await apiFetchBlob(path);
-  if (!res.ok) return res;
-  const url = URL.createObjectURL(res.data.blob);
-  window.open(url, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  return res;
+  // Deprecated: avoid opening a new tab/window.
+  // Keep for backward compatibility by downloading instead.
+  return downloadProtectedFile(path, "download");
 }
 
 export async function downloadProtectedFile(path: string, fallbackFilename: string) {

@@ -55,8 +55,25 @@ export function useMaintenancePageData() {
   const dropdowns = useMemo(() => dropdownsQuery.data ?? {}, [dropdownsQuery.data]);
 
   const load = useCallback(async () => {
-    await baseQuery.refetch();
+    const next = await baseQuery.refetch();
+    return {
+      rows: next.data?.rows ?? [],
+      vehicles: next.data?.vehicles ?? [],
+    };
   }, [baseQuery]);
+  const setRows = useCallback((next: MaintenanceRecord[] | ((prev: MaintenanceRecord[]) => MaintenanceRecord[])) => {
+    queryClient.setQueryData<{ rows: MaintenanceRecord[]; vehicles: Vehicle[] } | undefined>(
+      ["maintenance-page-data"],
+      (prev) => {
+        const prevRows = prev?.rows ?? [];
+        const nextRows = typeof next === "function" ? next(prevRows) : next;
+        return {
+          rows: nextRows,
+          vehicles: prev?.vehicles ?? [],
+        };
+      },
+    );
+  }, [queryClient]);
 
   const loadDropdowns = useCallback(async () => {
     await dropdownsQuery.refetch();
@@ -77,6 +94,7 @@ export function useMaintenancePageData() {
     savePending: saveMutation.isPending,
     removePending: removeMutation.isPending,
     load,
+    setRows,
     loadDropdowns,
     removeRecord,
     saveRecord,

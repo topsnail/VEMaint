@@ -30,12 +30,32 @@ export function useVehiclesTableData() {
   const dropdowns = useMemo(() => settingsQuery.data?.dropdowns ?? {}, [settingsQuery.data?.dropdowns]);
   const ownerDirectory = useMemo<OwnerDirectoryEntry[]>(() => settingsQuery.data?.ownerDirectory ?? [], [settingsQuery.data?.ownerDirectory]);
 
-  const setRows = useCallback((_next: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => {
-    // react-query source of truth; keep API compatibility without local mutable state
-  }, []);
-  const setCyclesByVehicleId = useCallback((_next: Record<string, VehicleCycle | null>) => {
-    // react-query source of truth; keep API compatibility without local mutable state
-  }, []);
+  const setRows = useCallback((next: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => {
+    queryClient.setQueriesData<{ vehicles: Vehicle[]; cyclesByVehicleId: Record<string, VehicleCycle | null> } | undefined>(
+      { queryKey: ["vehicles-table"] },
+      (prev) => {
+        const prevVehicles = prev?.vehicles ?? [];
+        const nextVehicles = typeof next === "function" ? next(prevVehicles) : next;
+        return {
+          vehicles: nextVehicles,
+          cyclesByVehicleId: prev?.cyclesByVehicleId ?? {},
+        };
+      },
+    );
+  }, [queryClient]);
+  const setCyclesByVehicleId = useCallback((next: Record<string, VehicleCycle | null> | ((prev: Record<string, VehicleCycle | null>) => Record<string, VehicleCycle | null>)) => {
+    queryClient.setQueriesData<{ vehicles: Vehicle[]; cyclesByVehicleId: Record<string, VehicleCycle | null> } | undefined>(
+      { queryKey: ["vehicles-table"] },
+      (prev) => {
+        const prevCycles = prev?.cyclesByVehicleId ?? {};
+        const nextCycles = typeof next === "function" ? next(prevCycles) : next;
+        return {
+          vehicles: prev?.vehicles ?? [],
+          cyclesByVehicleId: nextCycles,
+        };
+      },
+    );
+  }, [queryClient]);
 
   const loadDropdowns = useCallback(async () => {
     await settingsQuery.refetch();
@@ -43,7 +63,7 @@ export function useVehiclesTableData() {
 
   const load = useCallback(async (nextSearch: string) => {
     setSearch(nextSearch);
-    await queryClient.fetchQuery({
+    return await queryClient.fetchQuery({
       queryKey: ["vehicles-table", nextSearch],
       queryFn: () => fetchVehiclesWithCyclesMap(nextSearch),
     });

@@ -658,16 +658,21 @@ const Breadcrumb: any = ({ items = [] }: any) => (
   </div>
 );
 
-const UploadDragger: any = ({ beforeUpload, disabled, children, className, accept }: any) => (
+const UploadDragger: any = ({ beforeUpload, disabled, children, className, accept, multiple }: any) => (
   <label className={cn("block cursor-pointer rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center", disabled ? "opacity-50" : "", className)}>
     <input
       type="file"
       className="hidden"
       accept={accept}
+      multiple={!!multiple}
       disabled={disabled}
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) void beforeUpload?.(file);
+      onChange={async (e) => {
+        const files = Array.from(e.target.files ?? []);
+        for (const file of files) {
+          // keep sequential uploads to simplify UI and avoid saturating bandwidth
+          // eslint-disable-next-line no-await-in-loop
+          await beforeUpload?.(file);
+        }
         e.currentTarget.value = "";
       }}
     />

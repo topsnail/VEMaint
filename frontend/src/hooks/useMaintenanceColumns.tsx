@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { calcPartStats, parseRemarkMeta } from "../lib/maintenanceMeta";
 import type { MaintenanceRecord } from "../types";
 import { MoreHorizontal } from "lucide-react";
+import { AttachmentStatus } from "../components/AttachmentStatus";
 
 type FormModel = {
   vehicleId?: string;
@@ -27,6 +28,7 @@ type FormModel = {
   equipmentType?: string;
   equipmentCategory?: string;
   attachmentKey?: string | null;
+  attachmentKeys?: string[];
 };
 
 type UseMaintenanceColumnsArgs = {
@@ -39,7 +41,7 @@ type UseMaintenanceColumnsArgs = {
   onViewOpen: (record: MaintenanceRecord) => void;
   onEditOpen: (record: MaintenanceRecord) => void;
   onDeleteRequest: (record: MaintenanceRecord) => void;
-  onViewAttachment: (attachmentKey: string) => void;
+  onViewAttachment: (attachmentKeys: string[] | string) => void;
 };
 
 export function useMaintenanceColumns({
@@ -54,6 +56,12 @@ export function useMaintenanceColumns({
   onDeleteRequest,
   onViewAttachment,
 }: UseMaintenanceColumnsArgs) {
+  const normalizeAttachmentKeys = (keys: Array<string | null | undefined>) =>
+    keys
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean)
+      .filter((k, idx, arr) => arr.indexOf(k) === idx)
+      .slice(0, 50);
   return useMemo(
     () => [
       ...(view === "equipment"
@@ -94,21 +102,31 @@ export function useMaintenanceColumns({
       { title: "维修单位", dataIndex: "vendor" },
       {
         title: "附件",
-        render: (_: unknown, record: MaintenanceRecord) =>
-          record.attachmentKey ? (
-            <a
-              href="#"
-              onClick={(event) => {
-                event.preventDefault();
-                onViewAttachment(record.attachmentKey!);
-              }}
-              className="ve-link"
-            >
-              查看
-            </a>
-          ) : (
-            "-"
-          ),
+        render: (_: unknown, record: MaintenanceRecord) => {
+          const parsed = parsedRemarkMap.get(record.id);
+          const keys = normalizeAttachmentKeys([
+            ...(parsed?.attachmentKeys ?? []),
+            record.attachmentKey,
+          ]);
+          const n = keys.length;
+          return (
+            <div className="flex items-center gap-2">
+              <AttachmentStatus uploaded={n > 0} count={n} className="text-xs" />
+              {n > 0 ? (
+              <a
+                href="#"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onViewAttachment(keys as string[]);
+                }}
+                className="ve-link"
+              >
+                查看
+              </a>
+            ) : null}
+          </div>
+          );
+        },
       },
       {
         title: "操作",
@@ -148,7 +166,14 @@ export function useMaintenanceColumns({
                     partDetails: parsed.partDetails,
                     equipmentType: parsed.equipmentType,
                     equipmentCategory: parsed.equipmentCategory,
-                    attachmentKey: record.attachmentKey || "",
+                    attachmentKeys: normalizeAttachmentKeys([
+                      ...parsed.attachmentKeys,
+                      record.attachmentKey,
+                    ]),
+                    attachmentKey: normalizeAttachmentKeys([
+                      ...parsed.attachmentKeys,
+                      record.attachmentKey,
+                    ])[0] || "",
                   });
                   onEditOpen(record);
                 }
