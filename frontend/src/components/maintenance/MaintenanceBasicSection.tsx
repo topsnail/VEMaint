@@ -1,4 +1,4 @@
-import { AutoComplete, Col, DatePicker, Form, InputNumber, Row, Select } from "@/components/ui/legacy";
+import { AutoComplete, Col, DatePicker, Form, InputNumber, Row, Select, Tooltip } from "@/components/ui/legacy";
 import type { FormInstance } from "@/components/ui/legacy";
 import { useEffect } from "react";
 
@@ -42,7 +42,19 @@ export function MaintenanceBasicSection({
         </Form.Item>
       ) : (
         <Col span={12}>
-          <Form.Item label="关联类型" name="targetType" initialValue="vehicle" rules={[{ required: true }]}>
+          <Form.Item
+            label={(
+              <span>
+                关联类型
+                <Tooltip title="车辆维保会关联里程与车牌，设备维保会启用设备属性字段">
+                  <span className="ml-1 cursor-help text-slate-400">?</span>
+                </Tooltip>
+              </span>
+            )}
+            name="targetType"
+            initialValue="vehicle"
+            rules={[{ required: true }]}
+          >
             <Select
               options={[
                 { value: "vehicle", label: "车辆" },
@@ -98,7 +110,19 @@ export function MaintenanceBasicSection({
         }
       </Form.Item>
       <Col span={12}>
-        <Form.Item label="维保类型" name="maintenanceType" initialValue="routine" rules={[{ required: true }]}>
+        <Form.Item
+          label={(
+            <span>
+              维保类型
+              <Tooltip title="用于后续报表统计，请尽量选择最贴近实际场景的类型">
+                <span className="ml-1 cursor-help text-slate-400">?</span>
+              </Tooltip>
+            </span>
+          )}
+          name="maintenanceType"
+          initialValue="routine"
+          rules={[{ required: true }]}
+        >
           <Select options={maintenanceTypeOptions} placeholder="请选择维保类型" />
         </Form.Item>
       </Col>
@@ -111,7 +135,18 @@ export function MaintenanceBasicSection({
         {({ getFieldValue }) =>
           getFieldValue("targetType") === "vehicle" ? (
             <Col span={12}>
-              <Form.Item label="本次里程（车辆必填）" name="mileage" rules={[{ required: true, message: "车辆维保请填写本次里程" }]}>
+              <Form.Item
+                label={(
+                  <span>
+                    本次里程（车辆必填）
+                    <Tooltip title="里程将用于后续保养计划计算，请填写当前真实读数">
+                      <span className="ml-1 cursor-help text-slate-400">?</span>
+                    </Tooltip>
+                  </span>
+                )}
+                name="mileage"
+                rules={[{ required: true, message: "车辆维保请填写本次里程" }]}
+              >
                 <InputNumber min={0} className="w-full" placeholder="请输入本次里程（km）" />
               </Form.Item>
             </Col>

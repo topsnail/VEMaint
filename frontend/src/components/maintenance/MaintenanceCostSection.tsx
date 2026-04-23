@@ -1,4 +1,4 @@
-import { Button, Col, Form, Input, InputNumber, Row, Select, Space } from "@/components/ui/legacy";
+import { Button, Col, Form, Input, InputNumber, Row, Select, Space, Tooltip } from "@/components/ui/legacy";
 import type { FormInstance } from "@/components/ui/legacy";
 import { actionBtn } from "../../lib/ui/buttonTokens";
 
@@ -63,7 +63,19 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item label="总计" name="cost" rules={[{ required: true, message: "请输入总费用" }]} className="!mb-1">
+                    <Form.Item
+                      label={(
+                        <span>
+                          总计
+                          <Tooltip title="建议与左侧合计保持一致；如有折扣或补贴可手动调整">
+                            <span className="ml-1 cursor-help text-slate-400">?</span>
+                          </Tooltip>
+                        </span>
+                      )}
+                      name="cost"
+                      rules={[{ required: true, message: "请输入总费用" }]}
+                      className="!mb-1"
+                    >
                       <InputNumber min={0} precision={2} className="w-full" placeholder="总费用" />
                     </Form.Item>
                   </Col>
@@ -159,6 +171,20 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
                     </Form.List>
                   </Col>
                 </Row>
+                <div className="mt-1">
+                  <Form.Item noStyle shouldUpdate>
+                    {() => {
+                      const cost = Number(form.getFieldValue("cost") ?? 0);
+                      const diff = Math.abs(cost - total);
+                      if (!Number.isFinite(cost) || diff < 0.01) return null;
+                      return (
+                        <div className="text-[11px] text-amber-600">
+                          当前“总计”与“合计”相差 ¥{diff.toFixed(2)}，请确认是否为折扣/附加费用。
+                        </div>
+                      );
+                    }}
+                  </Form.Item>
+                </div>
                 <div className="mt-3 flex justify-end">
                   <Button size="small" className={actionBtn.smallNeutral} onClick={() => form.setFieldValue("cost", Number.isFinite(total) ? total : 0)}>
                     用合计覆盖总计

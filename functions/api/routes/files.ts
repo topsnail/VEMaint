@@ -22,7 +22,8 @@ filesRoute.get("/api/files/*", async (c) => {
   if (obj.size !== undefined) headers.set("Content-Length", String(obj.size));
   // Preview images are generated at upload time and immutable per key; cache longer to save bandwidth.
   const isPreviewWebp = key.endsWith(".preview.webp");
-  headers.set("Cache-Control", isPreviewWebp ? "private, max-age=604800" : "private, max-age=60");
+  const isDirectWebp = key.endsWith(".webp") && !key.endsWith(".preview.webp");
+  headers.set("Cache-Control", isPreviewWebp || isDirectWebp ? "private, max-age=604800" : "private, max-age=60");
   return new Response(obj.body, { status: 200, headers });
 });
 

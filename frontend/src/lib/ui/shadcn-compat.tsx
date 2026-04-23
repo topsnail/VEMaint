@@ -44,6 +44,11 @@ import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/componen
 import { cn } from "@/lib/utils";
 
 type AnyObj = Record<string, any>;
+const normalizeLabelText = (label: unknown): string | null => {
+  if (typeof label === "string") return label.trim() || null;
+  if (typeof label === "number") return String(label);
+  return null;
+};
 
 const pathKey = (name: any): string => (Array.isArray(name) ? name.join(".") : String(name));
 const getByPath = (obj: AnyObj, name: any) => pathKey(name).split(".").reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
@@ -69,12 +74,12 @@ export type FormInstance<T extends AnyObj = AnyObj> = {
   validateFields: () => Promise<T>;
   __setValues?: React.Dispatch<React.SetStateAction<any>>;
   __initial?: any;
-  __items?: Map<string, { rules?: Array<{ required?: boolean; min?: number; message?: string }> }>;
+  __items?: Map<string, { rules?: Array<{ required?: boolean; min?: number; message?: string }>; labelText?: string | null }>;
 };
 
 const createFormInstance = <T extends AnyObj>(): FormInstance<T> => {
   const valueRef = { current: {} as T };
-  const items = new Map<string, { rules?: Array<{ required?: boolean; min?: number; message?: string }> }>();
+  const items = new Map<string, { rules?: Array<{ required?: boolean; min?: number; message?: string }>; labelText?: string | null }>();
   const form: FormInstance<T> = {
     getFieldValue: (name) => getByPath(valueRef.current as AnyObj, name),
     getFieldsValue: () => valueRef.current,
@@ -95,13 +100,16 @@ const createFormInstance = <T extends AnyObj>(): FormInstance<T> => {
       const errors: string[] = [];
       items.forEach((meta, name) => {
         const value: unknown = getByPath(valueRef.current as AnyObj, name);
+        const fieldName = meta.labelText || name;
         for (const rule of meta.rules ?? []) {
           if (rule.required && (value == null || value === "" || (Array.isArray(value) && value.length === 0))) {
-            errors.push(rule.message ?? `${name} 为必填项`);
+            const pickText = String(fieldName ?? "");
+            const shouldPick = /类型|分类|状态|日期|车辆|对象|部门|人员|方式|结果|项目|类别|选择|单位|性质/.test(pickText);
+            errors.push(rule.message ?? `${shouldPick ? "请选择" : "请填写"}${fieldName}`);
             break;
           }
           if (typeof rule.min === "number" && typeof value === "string" && value.length < rule.min) {
-            errors.push(rule.message ?? `${name} 长度不足`);
+            errors.push(rule.message ?? `${fieldName}长度不能少于${rule.min}个字符`);
             break;
           }
         }
@@ -159,7 +167,7 @@ const FormItem = ({ label, name, rules, children, noStyle, className, style, ini
   const ctx = useContext(FormContext);
   if (!ctx) return <>{typeof children === "function" ? children(createFormInstance<any>()) : children}</>;
   const { form } = ctx;
-  if (name != null) form.__items?.set(pathKey(name), { rules });
+  if (name != null) form.__items?.set(pathKey(name), { rules, labelText: normalizeLabelText(label) });
   useEffect(() => {
     if (name == null || initialValue == null) return;
     if (form.getFieldValue(name) != null) return;

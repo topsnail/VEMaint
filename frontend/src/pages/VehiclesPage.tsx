@@ -20,6 +20,7 @@ import { vehicleSubmitSchema } from "../lib/schemas";
 import { Eye, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { AttachmentViewer } from "../components/AttachmentViewer";
+import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
 
 type VehicleForm = {
   plateNo: string;
@@ -65,6 +66,7 @@ type VehicleForm = {
  * 其他地区车辆可整段删除后重输；中间点仅为录入习惯，可按需保留或删除。
  */
 const DEFAULT_PLATE_NO_PREFIX = "豫A·";
+const EDIT_TAB_ORDER = ["basic", "insurance", "annual", "maint"] as const;
 
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const { message } = App.useApp();
@@ -97,6 +99,11 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [filterOwnerDept, setFilterOwnerDept] = useState<string>("");
   const [filterNearDue, setFilterNearDue] = useState<string>(() => initialParams.get("due") ?? "");
   const [filterIncomplete, setFilterIncomplete] = useState<string>("");
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
+  const [vinHint, setVinHint] = useState("");
+  const [engineNoHint, setEngineNoHint] = useState("");
+  const [filesRefreshing, setFilesRefreshing] = useState(false);
   const [form] = Form.useForm<VehicleForm>();
   const normalizeAttachmentKeys = (keys: Array<string | null | undefined>) =>
     keys
@@ -136,6 +143,20 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   useEffect(() => {
     viewVehicleRef.current = viewVehicle;
   }, [viewVehicle]);
+  const closeEditModal = () => {
+    setOpen(false);
+    setDiscardConfirmOpen(false);
+    setEditDirty(false);
+    setEditTab("basic");
+    setEditScrollTarget(null);
+  };
+  const requestCloseEditModal = () => {
+    if (editDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeEditModal();
+  };
   const {
     control,
     getValues: getRhfValues,
@@ -419,6 +440,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       mileage: 0,
       status: "normal",
     });
+    setEditDirty(false);
     setOpen(true);
     params.delete("create");
     const next = params.toString();
@@ -426,7 +448,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     window.history.replaceState(null, "", url);
   }, [canManage, form]);
 
-  const submit = async () => {
+  const submit = async (opts?: { continueCreate?: boolean }) => {
     try {
       const v = await form.validateFields();
       const rhfValues = getRhfValues();
@@ -459,6 +481,27 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       };
       const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
       const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
+      const normalizedPlateNo = normalizePlateNo(rhfValues.plateNo);
+      if (normalizedPlateNo.length < 6) {
+        message.error("号牌号码格式不正确");
+        return;
+      }
+      const vin = String(rhfValues.vin ?? "").trim().toUpperCase();
+      if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+        message.error("车辆识别代号需为17位字母数字（不含 I/O/Q）");
+        return;
+      }
+      const engineNo = String(rhfValues.engineNo ?? "").trim().toUpperCase();
+      if (engineNo && engineNo.length < 4) {
+        message.error("发动机号至少 4 位");
+        return;
+      }
+      const currentMileage = Number(rhfValues.mileage ?? v.mileage ?? 0);
+      const nextMaintKm = Number(rhfValues.maintNextKm ?? v.maintNextKm ?? 0);
+      if (Number.isFinite(currentMileage) && Number.isFinite(nextMaintKm) && nextMaintKm > 0 && nextMaintKm < currentMileage) {
+        message.error("下次保养里程不能小于本次保养里程");
+        return;
+      }
       const insuranceAttachmentKey = String(form.getFieldValue("insuranceAttachmentKey") ?? v.insuranceAttachmentKey ?? "").trim();
       const drivingLicenseAttachmentKey = String(rhfValues.drivingLicenseAttachmentKey ?? v.drivingLicenseAttachmentKey ?? "").trim();
       const insuranceAttachmentKeys = ((form.getFieldValue("insuranceAttachmentKeys") as string[] | undefined) ?? [])
@@ -486,7 +529,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       const payload = {
         ...v,
         ...rhfValues,
-        plateNo: normalizePlateNo(rhfValues.plateNo),
+        plateNo: normalizedPlateNo,
         regDate: regDate || null,
         loadSpec: mergedLoadSpec || null,
         usageNature: mergedUsageNature || null,
@@ -515,9 +558,58 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           return;
         }
       }
-      setOpen(false);
-      form.resetFields();
-      resetRhf({
+      const resetForNext = () => {
+        form.resetFields();
+        resetRhf({
+          plateNo: DEFAULT_PLATE_NO_PREFIX,
+          vehicleType: "",
+          energyType: "",
+          usageNature: "",
+          brandModel: "",
+          vin: "",
+          engineNo: "",
+          regDate: "",
+          issueDate: "",
+          archiveNo: "",
+          loadPeople: "",
+          loadWeight: "",
+          dimensions: "",
+          ownerName: "",
+          ownerAddress: "",
+          ownerDept: "",
+          ownerPerson: "",
+          mileage: 0,
+          maintNextKm: 0,
+          status: "normal",
+          drivingLicenseAttachmentKey: "",
+          remark: "",
+        });
+      };
+      if (opts?.continueCreate) {
+        setEditing(null);
+        setEditTab("basic");
+        setEditDirty(false);
+        resetForNext();
+        message.success("已保存，可继续新增下一条");
+        await load(q);
+        return;
+      }
+      setEditDirty(false);
+      closeEditModal();
+      resetForNext();
+      setEditing(null);
+      await load(q);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "表单校验失败";
+      message.error(msg);
+    }
+  };
+
+  const resetCreateForm = () => {
+    setEditing(null);
+    setEditDirty(false);
+    form.resetFields();
+    resetRhf({
         plateNo: DEFAULT_PLATE_NO_PREFIX,
         vehicleType: "",
         energyType: "",
@@ -541,12 +633,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         drivingLicenseAttachmentKey: "",
         remark: "",
       });
-      setEditing(null);
-      await load(q);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "表单校验失败";
-      message.error(msg);
-    }
+    setEditTab("basic");
+    setOpen(true);
   };
 
   const setStatus = async (id: string, status: Vehicle["status"]) => {
@@ -577,6 +665,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setEditing(r);
     setEditTab(tab);
     setEditScrollTarget(scrollTo);
+    setEditDirty(false);
     setOpen(true);
     form.setFieldsValue({
       plateNo: r.plateNo,
@@ -752,6 +841,16 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       setViewLoading(false);
     }
   };
+  const refreshViewFilesState = async () => {
+    if (!viewVehicle) return;
+    setFilesRefreshing(true);
+    try {
+      await reconcileViewAttachmentState(viewVehicle.id);
+      message.success("附件状态已刷新");
+    } finally {
+      setFilesRefreshing(false);
+    }
+  };
 
   const viewAttachment = (attachmentKeys: string[] | string, source: "insurance" | "driving" | "other" = "other") => {
     const keys = Array.isArray(attachmentKeys) ? attachmentKeys : [attachmentKeys];
@@ -868,32 +967,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             className={actionBtn.primary}
             onClick={() => {
               setEditing(null);
-              form.resetFields();
-              resetRhf({
-                plateNo: DEFAULT_PLATE_NO_PREFIX,
-                vehicleType: "",
-                energyType: "",
-                usageNature: "",
-                brandModel: "",
-                vin: "",
-                engineNo: "",
-                regDate: "",
-                issueDate: "",
-                archiveNo: "",
-                loadPeople: "",
-                loadWeight: "",
-                dimensions: "",
-                ownerName: "",
-                ownerAddress: "",
-                ownerDept: "",
-                ownerPerson: "",
-                mileage: 0,
-                maintNextKm: 0,
-                status: "normal",
-                drivingLicenseAttachmentKey: "",
-                remark: "",
-              });
-              setOpen(true);
+              resetCreateForm();
             }}
           >
             新增车辆
@@ -1234,6 +1308,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                   label: "附件",
                   children: (
                     <div className="space-y-3">
+                      <div className="flex justify-end">
+                        <AttachmentRefreshButton disabled={filesRefreshing} onClick={() => void refreshViewFilesState()} />
+                      </div>
                       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                         <div className="rounded-md border border-slate-200 bg-white p-2.5">
                           <div className="text-xs font-medium tracking-wide text-slate-500">保单附件</div>
@@ -1403,12 +1480,39 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         title={editing ? "编辑车辆" : "新增车辆"}
         open={open}
         centered
-        onCancel={() => setOpen(false)}
+        onCancel={requestCloseEditModal}
         footer={
           <Space size={8}>
-            <Button className={actionBtn.neutral} onClick={() => setOpen(false)}>
+            <Button className={actionBtn.neutral} onClick={requestCloseEditModal}>
               取消
             </Button>
+            <Button
+              className={actionBtn.secondary}
+              onClick={() => {
+                const idx = EDIT_TAB_ORDER.indexOf(editTab as (typeof EDIT_TAB_ORDER)[number]);
+                if (idx <= 0) return;
+                setEditTab(EDIT_TAB_ORDER[idx - 1]);
+              }}
+              disabled={EDIT_TAB_ORDER.indexOf(editTab as (typeof EDIT_TAB_ORDER)[number]) <= 0}
+            >
+              上一步
+            </Button>
+            <Button
+              className={actionBtn.secondary}
+              onClick={() => {
+                const idx = EDIT_TAB_ORDER.indexOf(editTab as (typeof EDIT_TAB_ORDER)[number]);
+                if (idx >= EDIT_TAB_ORDER.length - 1) return;
+                setEditTab(EDIT_TAB_ORDER[idx + 1]);
+              }}
+              disabled={EDIT_TAB_ORDER.indexOf(editTab as (typeof EDIT_TAB_ORDER)[number]) >= EDIT_TAB_ORDER.length - 1}
+            >
+              下一步
+            </Button>
+            {!editing ? (
+              <Button className={actionBtn.secondary} onClick={() => void submit({ continueCreate: true })}>
+                保存并继续新增
+              </Button>
+            ) : null}
             <Button type="primary" className={actionBtn.primary} onClick={() => void submit()}>
               保存
             </Button>
@@ -1417,8 +1521,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         width={920}
         className="ve-vehicles-modal"
       >
-        <div ref={editScrollWrapRef} className="max-h-[70vh] overflow-y-auto p-4">
-          <Form form={form} layout="vertical">
+        <div ref={editScrollWrapRef} className="max-h-[70vh] overflow-y-auto p-3 sm:p-4">
+          <Form form={form} layout="vertical" onValuesChange={() => setEditDirty(true)}>
             <Tabs
               activeKey={editTab}
               onChange={(k) => setEditTab(k)}
@@ -1436,6 +1540,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                           render={({ field }) => (
                             <Input
                               {...field}
+                              autoFocus={open && editTab === "basic"}
                               placeholder="在后缀继续输入，如 D12345；非豫A请改掉前缀"
                               onChange={(e) => field.onChange(e.target.value.replace(/[a-z]/g, (c) => c.toUpperCase()))}
                             />
@@ -1462,7 +1567,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="使用性质" name="usageNature" rules={[{ required: true }]}>
+                      <Form.Item
+                        label={(
+                          <span>
+                            使用性质
+                            <Tooltip title="用于区分营运/非营运等业务场景，影响后续统计口径">
+                              <span className="ml-1 cursor-help text-slate-400">?</span>
+                            </Tooltip>
+                          </span>
+                        )}
+                        name="usageNature"
+                        rules={[{ required: true }]}
+                      >
                         <Controller
                           name="usageNature"
                           control={control}
@@ -1480,20 +1596,48 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="车辆识别代号">
+                      <Form.Item label="车辆识别代号" validateStatus={vinHint ? "warning" : undefined} help={vinHint || undefined}>
                         <Controller
                           name="vin"
                           control={control}
-                          render={({ field }) => <Input {...field} placeholder="17 位 VIN" />}
+                          render={({ field }) => (
+                            <Input
+                              {...field}
+                              placeholder="17 位 VIN"
+                              onChange={(e) => {
+                                const value = e.target.value.toUpperCase();
+                                field.onChange(value);
+                                if (!value) {
+                                  setVinHint("");
+                                  return;
+                                }
+                                setVinHint(/^[A-HJ-NPR-Z0-9]{0,17}$/.test(value) ? "" : "VIN 仅支持字母数字，且不含 I/O/Q");
+                              }}
+                            />
+                          )}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="发动机号">
+                      <Form.Item label="发动机号" validateStatus={engineNoHint ? "warning" : undefined} help={engineNoHint || undefined}>
                         <Controller
                           name="engineNo"
                           control={control}
-                          render={({ field }) => <Input {...field} placeholder="请输入发动机号" />}
+                          render={({ field }) => (
+                            <Input
+                              {...field}
+                              placeholder="请输入发动机号"
+                              onChange={(e) => {
+                                const value = e.target.value.toUpperCase();
+                                field.onChange(value);
+                                if (!value) {
+                                  setEngineNoHint("");
+                                  return;
+                                }
+                                setEngineNoHint(value.length >= 4 ? "" : "发动机号建议至少 4 位");
+                              }}
+                            />
+                          )}
                         />
                       </Form.Item>
                     </Col>
@@ -1606,7 +1750,16 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="下次保养里程">
+                      <Form.Item
+                        label={(
+                          <span>
+                            下次保养里程
+                            <Tooltip title="建议大于本次保养里程，避免保养计划倒挂">
+                              <span className="ml-1 cursor-help text-slate-400">?</span>
+                            </Tooltip>
+                          </span>
+                        )}
+                      >
                         <Controller
                           name="maintNextKm"
                           control={control}
@@ -1614,7 +1767,14 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             <Input
                               type="number"
                               value={field.value ?? ""}
-                              onChange={(e) => field.onChange(Number(e.target.value))}
+                              onChange={(e) => {
+                                const value = Number(e.target.value);
+                                field.onChange(value);
+                                const current = Number(form.getFieldValue("mileage") ?? 0);
+                                if (Number.isFinite(current) && Number.isFinite(value) && value > 0 && value < current) {
+                                  message.warning("下次保养里程小于本次里程，请确认");
+                                }
+                              }}
                               placeholder="计划保养里程（km）"
                             />
                           )}
@@ -1797,6 +1957,31 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             />
           </Form>
         </div>
+      </Modal>
+      <Modal
+        title="放弃未保存修改？"
+        open={discardConfirmOpen}
+        centered
+        onCancel={() => setDiscardConfirmOpen(false)}
+        footer={
+          <Space size={8}>
+            <Button className={actionBtn.neutral} onClick={() => setDiscardConfirmOpen(false)}>
+              继续编辑
+            </Button>
+            <Button
+              type="primary"
+              className={actionBtn.primary}
+              onClick={() => {
+                setDiscardConfirmOpen(false);
+                closeEditModal();
+              }}
+            >
+              放弃修改
+            </Button>
+          </Space>
+        }
+      >
+        <div className="text-sm text-slate-700">当前有未保存内容，确认关闭并放弃本次修改吗？</div>
       </Modal>
     </div>
     </PageContainer>

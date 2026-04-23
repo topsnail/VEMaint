@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Modal, Space } from "@/components/ui/legacy";
 import { apiFetchBlob, deleteProtectedFile } from "@/lib/http";
 import { cn } from "@/lib/utils";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type GalleryThumbProps = {
   open: boolean;
@@ -28,11 +29,15 @@ function GalleryThumb({ open, path, onDeleted, onPreview }: GalleryThumbProps) {
     (async () => {
       let res;
       if (isLikelyImagePath(path)) {
-        const previewPath = `${path}.preview.webp`;
-        res = await apiFetchBlob(previewPath);
-        if (!res.ok) {
-          setError("预览不可用，请下载原图");
-          return;
+        if (isDirectWebpPath(path)) {
+          res = await apiFetchBlob(path);
+        } else {
+          const previewPath = `${path}.preview.webp`;
+          res = await apiFetchBlob(previewPath);
+          if (!res.ok) {
+            setError("预览不可用，请下载原图");
+            return;
+          }
         }
       } else {
         res = await apiFetchBlob(path);
@@ -178,6 +183,11 @@ function isLikelyImagePath(path: string) {
   return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".avif", ".heic", ".heif"].some((ext) => lower.endsWith(ext));
 }
 
+function isDirectWebpPath(path: string) {
+  const lower = path.toLowerCase();
+  return lower.endsWith(".webp") && !lower.endsWith(".preview.webp");
+}
+
 export function AttachmentViewer({
   open,
   path,
@@ -251,11 +261,15 @@ export function AttachmentViewer({
       // For images, prefer a WebP preview stored in R2: `${key}.preview.webp`.
       let res;
       if (isLikelyImagePath(currentPath)) {
-        const previewPath = `${currentPath}.preview.webp`;
-        res = await apiFetchBlob(previewPath);
-        if (!res.ok) {
-          setError("预览不可用，请下载原图");
-          return;
+        if (isDirectWebpPath(currentPath)) {
+          res = await apiFetchBlob(currentPath);
+        } else {
+          const previewPath = `${currentPath}.preview.webp`;
+          res = await apiFetchBlob(previewPath);
+          if (!res.ok) {
+            setError("预览不可用，请下载原图");
+            return;
+          }
         }
       } else {
         res = await apiFetchBlob(currentPath);
@@ -314,8 +328,9 @@ export function AttachmentViewer({
     setZoomLoading(true);
     setZoomError("");
     (async () => {
-      const previewPath = `${zoomPath}.preview.webp`;
-      const res = await apiFetchBlob(previewPath);
+      const res = isDirectWebpPath(zoomPath)
+        ? await apiFetchBlob(zoomPath)
+        : await apiFetchBlob(`${zoomPath}.preview.webp`);
       if (!alive) return;
       if (!res.ok) {
         setZoomError("预览不可用，请下载原图");
@@ -368,6 +383,12 @@ export function AttachmentViewer({
     setZoomIndex(idx);
     setZoomOpen(true);
   };
+  const gotoPrevZoom = () => {
+    setZoomIndex((prev) => (prev <= 0 ? Math.max(0, imagePaths.length - 1) : prev - 1));
+  };
+  const gotoNextZoom = () => {
+    setZoomIndex((prev) => (prev >= imagePaths.length - 1 ? 0 : prev + 1));
+  };
 
   const download = async () => {
     if (!currentPath) return;
@@ -415,6 +436,7 @@ export function AttachmentViewer({
   return (
     <Modal
       open={open}
+      centered
       title={title}
       onCancel={onClose}
       width={980}
@@ -539,17 +561,33 @@ export function AttachmentViewer({
         footer={null}
       >
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>支持键盘左右方向键切换</span>
-            <span className="tabular-nums">
-              {imagePaths.length > 0 ? `${zoomIndex + 1}/${imagePaths.length}` : "-"}
-            </span>
-          </div>
           <div className="max-h-[80vh] overflow-auto rounded-[6px] border border-slate-200 bg-slate-50 p-2">
             {zoomLoading ? <div className="py-8 text-center text-sm text-slate-500">加载中...</div> : null}
             {!zoomLoading && zoomError ? <div className="py-8 text-center text-sm text-red-600">{zoomError}</div> : null}
             {!zoomLoading && !zoomError && zoomBlobUrl ? (
-              <img src={zoomBlobUrl} alt={zoomFilename || "attachment"} className="max-h-[76vh] w-auto max-w-full object-contain" />
+              <div className="relative flex items-center justify-center">
+                {imagePaths.length > 1 ? (
+                  <button
+                    type="button"
+                    className="absolute left-1.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-white"
+                    onClick={gotoPrevZoom}
+                    title="上一张"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                ) : null}
+                <img src={zoomBlobUrl} alt={zoomFilename || "attachment"} className="max-h-[76vh] w-auto max-w-full object-contain" />
+                {imagePaths.length > 1 ? (
+                  <button
+                    type="button"
+                    className="absolute right-1.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-white"
+                    onClick={gotoNextZoom}
+                    title="下一张"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>

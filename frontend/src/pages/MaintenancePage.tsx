@@ -7,6 +7,7 @@ import { PageContainer } from "../components/PageContainer";
 import { R2AttachmentUploader } from "../components/R2AttachmentUploader";
 import { AttachmentStatus } from "../components/AttachmentStatus";
 import { AttachmentViewer } from "../components/AttachmentViewer";
+import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
 import { useMaintenanceColumns } from "../hooks/useMaintenanceColumns";
 import { useMaintenanceListView, type MaintenanceViewMode } from "../hooks/useMaintenanceListView";
 import { useMaintenancePageData } from "../hooks/useMaintenancePageData";
@@ -47,6 +48,7 @@ type FormModel = {
   attachmentKey?: string | null;
   attachmentKeys?: string[];
 };
+const MAINT_EDIT_TAB_ORDER = ["basic", "cost", "attachment"] as const;
 
 export function MaintenancePage({
   canEdit,
@@ -69,6 +71,10 @@ export function MaintenancePage({
   const [viewerPaths, setViewerPaths] = useState<string[]>([]);
   const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
   const [viewAttachmentKeys, setViewAttachmentKeys] = useState<string[]>([]);
+  const [editTab, setEditTab] = useState<(typeof MAINT_EDIT_TAB_ORDER)[number]>("basic");
+  const [editDirty, setEditDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [attachmentRefreshing, setAttachmentRefreshing] = useState(false);
   const viewRecordRef = useRef<MaintenanceRecord | null>(null);
   const viewerPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [form] = Form.useForm<FormModel>();
@@ -78,6 +84,25 @@ export function MaintenancePage({
       .filter(Boolean)
       .filter((k, idx, arr) => arr.indexOf(k) === idx)
       .slice(0, 50);
+  const refreshEditAttachmentState = async () => {
+    if (!editing) return;
+    setAttachmentRefreshing(true);
+    try {
+      const latest = await load();
+      const latestRecord = latest.rows.find((x) => x.id === editing.id);
+      if (!latestRecord) return;
+      const parsed = parseRemarkMeta(latestRecord.remark);
+      const nextKeys = normalizeAttachmentKeys([
+        ...parsed.attachmentKeys,
+        latestRecord.attachmentKey,
+      ]);
+      form.setFieldValue("attachmentKeys", nextKeys);
+      form.setFieldValue("attachmentKey", nextKeys[0] || "");
+      message.success("附件状态已刷新");
+    } finally {
+      setAttachmentRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -151,7 +176,21 @@ export function MaintenancePage({
     value: v,
   }));
 
-  const submit = async () => {
+  const closeEditModal = () => {
+    setOpen(false);
+    setEditDirty(false);
+    setDiscardConfirmOpen(false);
+    setEditTab("basic");
+  };
+  const requestCloseEditModal = () => {
+    if (editDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeEditModal();
+  };
+
+  const submit = async (opts?: { continueCreate?: boolean }) => {
     try {
       const v = await form.validateFields();
       const normalizeDate = (value: unknown) => {
@@ -216,10 +255,20 @@ export function MaintenancePage({
       };
       const res = await saveRecord(editing?.id ?? null, payload);
       if (!res.ok) return message.error(res.error.message);
+      if (opts?.continueCreate && !editing) {
+        message.success("已保存，可继续新增下一条");
+        form.resetFields();
+        form.setFieldValue("targetType", defaultCreateTargetType);
+        setEditDirty(false);
+        setEditTab("basic");
+        await load();
+        return;
+      }
       message.success("保存成功");
-      setOpen(false);
+      closeEditModal();
       setEditing(null);
       form.resetFields();
+      await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "维保表单校验失败";
       message.error(msg);
@@ -300,6 +349,8 @@ export function MaintenancePage({
 
   const handleEditOpen = (record: MaintenanceRecord) => {
     setEditing(record);
+    setEditDirty(false);
+    setEditTab("basic");
     setOpen(true);
   };
   const handleViewOpen = (record: MaintenanceRecord) => {
@@ -367,6 +418,8 @@ export function MaintenancePage({
               setEditing(null);
               form.resetFields();
               form.setFieldValue("targetType", defaultCreateTargetType);
+              setEditDirty(false);
+              setEditTab("basic");
               setOpen(true);
             }}
           >
@@ -479,12 +532,39 @@ export function MaintenancePage({
         centered
         width={920}
         className="ve-maintenance-modal"
-        onCancel={() => setOpen(false)}
+        onCancel={requestCloseEditModal}
         footer={
           <Space size={8}>
-            <Button className={actionBtn.neutral} onClick={() => setOpen(false)}>
+            <Button className={actionBtn.neutral} onClick={requestCloseEditModal}>
               取消
             </Button>
+            <Button
+              className={actionBtn.secondary}
+              onClick={() => {
+                const idx = MAINT_EDIT_TAB_ORDER.indexOf(editTab);
+                if (idx <= 0) return;
+                setEditTab(MAINT_EDIT_TAB_ORDER[idx - 1]);
+              }}
+              disabled={MAINT_EDIT_TAB_ORDER.indexOf(editTab) <= 0}
+            >
+              上一步
+            </Button>
+            <Button
+              className={actionBtn.secondary}
+              onClick={() => {
+                const idx = MAINT_EDIT_TAB_ORDER.indexOf(editTab);
+                if (idx >= MAINT_EDIT_TAB_ORDER.length - 1) return;
+                setEditTab(MAINT_EDIT_TAB_ORDER[idx + 1]);
+              }}
+              disabled={MAINT_EDIT_TAB_ORDER.indexOf(editTab) >= MAINT_EDIT_TAB_ORDER.length - 1}
+            >
+              下一步
+            </Button>
+            {!editing ? (
+              <Button className={actionBtn.secondary} disabled={savePending} onClick={() => void submit({ continueCreate: true })}>
+                保存并继续新增
+              </Button>
+            ) : null}
             <Button type="primary" className={actionBtn.primary} disabled={savePending} onClick={() => void submit()}>
               保存
             </Button>
@@ -495,8 +575,10 @@ export function MaintenancePage({
           footer: { position: "sticky", bottom: 0, marginTop: 0, background: "#fff", zIndex: 2, paddingTop: 12 },
         }}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={() => setEditDirty(true)}>
           <Tabs
+            activeKey={editTab}
+            onChange={(k) => setEditTab(k as (typeof MAINT_EDIT_TAB_ORDER)[number])}
             items={[
               {
                 key: "basic",
@@ -530,6 +612,11 @@ export function MaintenancePage({
                 label: "附件",
                 children: (
                   <>
+                    {editing ? (
+                      <div className="mb-2 flex justify-end">
+                        <AttachmentRefreshButton disabled={attachmentRefreshing} onClick={() => void refreshEditAttachmentState()} />
+                      </div>
+                    ) : null}
                     <Form.Item label="上传状态">
                       <Form.Item
                         noStyle
@@ -584,6 +671,31 @@ export function MaintenancePage({
             ]}
           />
         </Form>
+      </Modal>
+      <Modal
+        title="放弃未保存修改？"
+        open={discardConfirmOpen}
+        centered
+        onCancel={() => setDiscardConfirmOpen(false)}
+        footer={
+          <Space size={8}>
+            <Button className={actionBtn.neutral} onClick={() => setDiscardConfirmOpen(false)}>
+              继续编辑
+            </Button>
+            <Button
+              type="primary"
+              className={actionBtn.primary}
+              onClick={() => {
+                setDiscardConfirmOpen(false);
+                closeEditModal();
+              }}
+            >
+              放弃修改
+            </Button>
+          </Space>
+        }
+      >
+        <div className="text-sm text-slate-700">当前有未保存内容，确认关闭并放弃本次修改吗？</div>
       </Modal>
 
       <Modal title="维保详情" open={viewOpen} centered width={860} onCancel={() => setViewOpen(false)} footer={null} className="ve-maintenance-modal">
