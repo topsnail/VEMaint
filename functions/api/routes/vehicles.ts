@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { validateBody } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
@@ -8,18 +8,12 @@ import { getCycleByVehicleId, upsertCycle } from "../repositories/cycles";
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
 import { vehicleCycleUpsertBodySchema, vehicleStatusBodySchema, vehicleUpsertBodySchema } from "../lib/validation";
-import { readOpReason, requireOpReason } from "../lib/op-reason";
+import { requireOpReason } from "../lib/op-reason";
+import { buildLogMeta } from "../lib/log-meta";
 
 export const vehiclesRoute = new Hono<AppEnv>();
 vehiclesRoute.use("/api/vehicles/*", requireAuth);
 vehiclesRoute.use("/api/vehicles", requireAuth);
-
-function getLogMeta(c: Context<AppEnv>) {
-  const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
-  const userAgent = c.req.header("user-agent") ?? null;
-  const reason = readOpReason(c);
-  return { ip, userAgent, reason };
-}
 
 /**
  * 车牌规范化：统一大写并去掉常见分隔符/空白，便于去重与检索。
@@ -87,7 +81,7 @@ vehiclesRoute.post("/api/vehicles", permitPerm("vehicle.manage"), async (c) => {
       status,
       remark,
     });
-    await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.create", id, { plateNo }, getLogMeta(c));
+    await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.create", id, { plateNo }, buildLogMeta(c));
     return jsonOk(c, { id }, 201);
   } catch {
     return jsonError(c, "CONFLICT", "车牌号已存在", 409);
@@ -137,7 +131,7 @@ vehiclesRoute.put("/api/vehicles/:id", permitPerm("vehicle.manage"), async (c) =
     status,
     remark,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.update", id, null, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.update", id, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -150,7 +144,7 @@ vehiclesRoute.put("/api/vehicles/:id/status", permitPerm("vehicle.manage"), asyn
   if (!reasonCheck.ok) return reasonCheck.response;
   const status = parsed.data.status;
   await setVehicleStatus(c.env.DB, id, status);
-  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.status", id, { status }, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.status", id, { status }, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -181,7 +175,7 @@ vehiclesRoute.put("/api/vehicles/:id/cycles", permitPerm("maintenance.edit"), as
     maintNextDate: parsed.data.maintNextDate ?? null,
     maintNextKm: parsed.data.maintNextKm ?? null,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.cycle.update", id, null, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "vehicle.cycle.update", id, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 

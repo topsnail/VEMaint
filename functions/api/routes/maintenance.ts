@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { validateBody } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
@@ -13,18 +13,12 @@ import {
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
 import { maintenanceUpsertBodySchema } from "../lib/validation";
-import { readOpReason, requireOpReason } from "../lib/op-reason";
+import { requireOpReason } from "../lib/op-reason";
+import { buildLogMeta } from "../lib/log-meta";
 
 export const maintenanceRoute = new Hono<AppEnv>();
 maintenanceRoute.use("/api/maintenance/*", requireAuth);
 maintenanceRoute.use("/api/maintenance", requireAuth);
-
-function getLogMeta(c: Context<AppEnv>) {
-  const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
-  const userAgent = c.req.header("user-agent") ?? null;
-  const reason = readOpReason(c);
-  return { ip, userAgent, reason };
-}
 
 maintenanceRoute.get("/api/maintenance", async (c) => {
   const rows = await listMaintenance(c.env.DB, {
@@ -74,7 +68,7 @@ maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async 
     remark,
     attachmentKey,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.create", id, { targetType, vehicleId, equipmentName }, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.create", id, { targetType, vehicleId, equipmentName }, buildLogMeta(c));
   return jsonOk(c, { id }, 201);
 });
 
@@ -110,7 +104,7 @@ maintenanceRoute.put("/api/maintenance/:id", permitPerm("maintenance.edit"), asy
     remark,
     attachmentKey,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.update", id, null, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.update", id, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -120,7 +114,7 @@ maintenanceRoute.delete("/api/maintenance/:id", permitPerm("maintenance.delete")
   const reasonCheck = requireOpReason(c);
   if (!reasonCheck.ok) return reasonCheck.response;
   await deleteMaintenance(c.env.DB, id);
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.delete", id, null, getLogMeta(c));
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.delete", id, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 

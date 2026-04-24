@@ -1,3 +1,5 @@
+import { safeJsonParse } from "./safeJson";
+
 export type MaintenanceResultStatus = "resolved" | "temporary" | "pending";
 
 export type PartDetail = {
@@ -80,65 +82,46 @@ export function parseRemarkMeta(raw: string | null | undefined): ParsedMaintenan
   };
 
   const costMetaJson = costMetaLine?.slice(COST_META_PREFIX.length).trim();
-  try {
-    if (costMetaJson) {
-      const cost = JSON.parse(costMetaJson) as { laborCost?: unknown; materialCost?: unknown; miscCost?: unknown };
-      parsed.laborCost = toSafeNumber(cost.laborCost);
-      parsed.materialCost = toSafeNumber(cost.materialCost);
-      parsed.miscCost = toSafeNumber(cost.miscCost);
-    }
-  } catch {
-    // ignore malformed meta
+  if (costMetaJson) {
+    const cost = safeJsonParse<{ laborCost?: unknown; materialCost?: unknown; miscCost?: unknown }>(costMetaJson, { fallback: {} });
+    parsed.laborCost = toSafeNumber(cost.laborCost);
+    parsed.materialCost = toSafeNumber(cost.materialCost);
+    parsed.miscCost = toSafeNumber(cost.miscCost);
   }
 
   const equipMetaJson = equipMetaLine?.slice(EQUIP_META_PREFIX.length).trim();
-  try {
-    if (equipMetaJson) {
-      const equip = JSON.parse(equipMetaJson) as {
-        equipmentType?: unknown;
-        equipmentCategory?: unknown;
-      };
-      parsed.equipmentType = toSafeString(equip.equipmentType);
-      parsed.equipmentCategory = toSafeString(equip.equipmentCategory);
-    }
-  } catch {
-    // ignore malformed meta
+  if (equipMetaJson) {
+    const equip = safeJsonParse<{ equipmentType?: unknown; equipmentCategory?: unknown }>(equipMetaJson, { fallback: {} });
+    parsed.equipmentType = toSafeString(equip.equipmentType);
+    parsed.equipmentCategory = toSafeString(equip.equipmentCategory);
   }
 
   const maintMetaJson = maintMetaLine?.slice(MAINT_META_PREFIX.length).trim();
-  try {
-    if (maintMetaJson) {
-      const maint = JSON.parse(maintMetaJson) as {
-        resultStatus?: unknown;
-        partDetails?: unknown;
-        attachmentKeys?: unknown;
-      };
-      if (maint.resultStatus === "resolved" || maint.resultStatus === "temporary" || maint.resultStatus === "pending") {
-        parsed.resultStatus = maint.resultStatus;
-      }
-      if (Array.isArray(maint.partDetails)) {
-        parsed.partDetails = maint.partDetails
-          .filter((row) => row && typeof row === "object")
-          .map((row) => {
-            const detail = row as { partName?: unknown; spec?: unknown; unit?: unknown; qty?: unknown; unitPrice?: unknown };
-            return {
-              partName: String(detail.partName ?? "").trim(),
-              spec: String(detail.spec ?? "").trim(),
-              unit: String(detail.unit ?? "").trim(),
-              qty: toSafeNumber(detail.qty),
-              unitPrice: toSafeNumber(detail.unitPrice),
-            };
-          });
-      }
-      if (Array.isArray(maint.attachmentKeys)) {
-        parsed.attachmentKeys = maint.attachmentKeys
-          .map((k) => String(k ?? "").trim())
-          .filter(Boolean)
-          .filter((k, idx, arr) => arr.indexOf(k) === idx);
-      }
+  if (maintMetaJson) {
+    const maint = safeJsonParse<{ resultStatus?: unknown; partDetails?: unknown; attachmentKeys?: unknown }>(maintMetaJson, { fallback: {} });
+    if (maint.resultStatus === "resolved" || maint.resultStatus === "temporary" || maint.resultStatus === "pending") {
+      parsed.resultStatus = maint.resultStatus;
     }
-  } catch {
-    // ignore malformed meta
+    if (Array.isArray(maint.partDetails)) {
+      parsed.partDetails = maint.partDetails
+        .filter((row) => row && typeof row === "object")
+        .map((row) => {
+          const detail = row as { partName?: unknown; spec?: unknown; unit?: unknown; qty?: unknown; unitPrice?: unknown };
+          return {
+            partName: String(detail.partName ?? "").trim(),
+            spec: String(detail.spec ?? "").trim(),
+            unit: String(detail.unit ?? "").trim(),
+            qty: toSafeNumber(detail.qty),
+            unitPrice: toSafeNumber(detail.unitPrice),
+          };
+        });
+    }
+    if (Array.isArray(maint.attachmentKeys)) {
+      parsed.attachmentKeys = maint.attachmentKeys
+        .map((k) => String(k ?? "").trim())
+        .filter(Boolean)
+        .filter((k, idx, arr) => arr.indexOf(k) === idx);
+    }
   }
 
   return parsed;

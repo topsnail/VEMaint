@@ -10,8 +10,18 @@ filesRoute.use("/api/files/*", requireAuth);
 filesRoute.use("/api/upload", requireAuth, permitPerm("maintenance.edit"));
 filesRoute.use("/api/files/check", requireAuth);
 
+function safeDecodePathKey(rawPath: string): string | null {
+  const raw = rawPath.replace(/^\/api\/files\//, "");
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return null;
+  }
+}
+
 filesRoute.get("/api/files/*", async (c) => {
-  const key = decodeURIComponent(c.req.path.replace(/^\/api\/files\//, "")).trim();
+  const key = safeDecodePathKey(c.req.path);
+  if (key == null) return jsonError(c, "BAD_REQUEST", "无效 key 编码", 400);
   if (!key) return jsonError(c, "BAD_REQUEST", "无效 key", 400);
   const obj = await r2Get(c.env.R2, key);
   if (!obj) return jsonError(c, "NOT_FOUND", "文件不存在", 404);
@@ -65,7 +75,8 @@ filesRoute.post("/api/upload", async (c) => {
 });
 
 filesRoute.delete("/api/files/*", permitPerm("maintenance.edit"), async (c) => {
-  const key = decodeURIComponent(c.req.path.replace(/^\/api\/files\//, "")).trim();
+  const key = safeDecodePathKey(c.req.path);
+  if (key == null) return jsonError(c, "BAD_REQUEST", "无效 key 编码", 400);
   if (!key) return jsonError(c, "BAD_REQUEST", "无效 key", 400);
   await r2Delete(c.env.R2, key);
   // For source images, also cleanup generated preview object.

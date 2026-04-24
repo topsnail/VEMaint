@@ -1,5 +1,6 @@
 import { getToken, getCsrfToken, clearToken } from "./auth";
 import { API_CONFIG } from "./config";
+import { safeJsonParse } from "./safeJson";
 
 export type ApiOk<T> = { ok: true; data: T };
 export type ApiErr = { ok: false; error: { code: string; message: string } };
@@ -195,27 +196,21 @@ export async function uploadFileWithProgress(
       }
       if (status < 200 || status >= 300) {
         let msg = "请求失败";
-        try {
-          const json = JSON.parse(text) as any;
-          if (json && typeof json === "object" && "error" in json) {
-            msg = String((json as ErrorEnvelope).error?.message ?? msg);
-          }
-        } catch {
-          if (text) msg = text;
+        const json = safeJsonParse<unknown>(text, { fallback: null });
+        if (json && typeof json === "object" && "error" in json) {
+          msg = String((json as ErrorEnvelope).error?.message ?? msg);
+        } else if (text) {
+          msg = text;
         }
         resolve({ ok: false, error: { code: `HTTP_${status}`, message: msg } });
         return;
       }
-      try {
-        const json = JSON.parse(text) as unknown;
-        resolve(
-          isApiResult<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>(json)
-            ? (json as any)
-            : { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } },
-        );
-      } catch {
-        resolve({ ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } });
-      }
+      const json = safeJsonParse<unknown>(text, { fallback: null });
+      resolve(
+        isApiResult<{ key: string; url: string; previewKey?: string | null; previewUrl?: string | null }>(json)
+          ? (json as any)
+          : { ok: false, error: { code: "BAD_RESPONSE", message: "响应格式错误" } },
+      );
     };
     xhr.send(form);
   });

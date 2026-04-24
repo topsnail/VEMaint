@@ -21,6 +21,7 @@ import { actionBtn } from "../lib/ui/buttonTokens";
 import { AttachmentViewer } from "../components/AttachmentViewer";
 import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
 import { requestOperationReason } from "../lib/operationReason";
+import { normalizeDropdownOptions } from "../lib/options";
 import {
   buildInsurancePayload,
   calcAnnualExpiry,
@@ -316,24 +317,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   };
 
   const renderTextInput = (key: string, placeholder?: string) => {
-    const normalizeDropdownOptions = (source: string[] | undefined) => {
-      const seen = new Set<string>();
-      const result: string[] = [];
-      for (const raw of source ?? []) {
-        const parts = String(raw ?? "")
-          .replace(/，/g, ",")
-          .split(/,|\/|、|\r?\n|\s+/)
-          .map((x) => x.trim())
-          .filter(Boolean);
-        for (const item of parts) {
-          if (seen.has(item)) continue;
-          seen.add(item);
-          result.push(item);
-        }
-      }
-      return result;
-    };
-    const options = normalizeDropdownOptions(dropdowns[key]);
+    const options = normalizeDropdownOptions(dropdowns[key], []);
     if (options.length === 0) return <Input placeholder={placeholder} />;
     return <Select allowClear showSearch options={options.map((v) => ({ label: v, value: v }))} placeholder={placeholder} />;
   };
@@ -344,23 +328,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     { label: "停用", value: "stopped" },
     { label: "报废", value: "scrapped" },
   ] as const;
-  const normalizeDropdownOptions = (source: string[] | undefined, fallback: string[]) => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const raw of source ?? fallback) {
-      const parts = String(raw ?? "")
-        .replace(/，/g, ",")
-        .split(/,|\/|、|\r?\n|\s+/)
-        .map((x) => x.trim())
-        .filter(Boolean);
-      for (const item of parts) {
-        if (seen.has(item)) continue;
-        seen.add(item);
-        result.push(item);
-      }
-    }
-    return result.length > 0 ? result : fallback;
-  };
   const vehicleTypeOptions = normalizeDropdownOptions(dropdowns.vehicleType, ["轿车", "SUV", "客车", "货车", "面包车", "工程车", "特种车", "其他"]).map(
     (v) => ({ label: v, value: v }),
   );

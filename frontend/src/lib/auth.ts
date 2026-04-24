@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from "./config";
+import { safeJsonParse } from "./safeJson";
 
 const KEY = STORAGE_KEYS.TOKEN;
 const USER_KEY = STORAGE_KEYS.USER;
@@ -84,14 +85,10 @@ export function setUser(user: UserInfo) {
 export function getUser(): UserInfo | null {
   const raw = readStorageValue(sessionStorage, USER_KEY) ?? hydrateSessionFromLocal(USER_KEY);
   if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<UserInfo>;
-    if (!parsed.userId || !parsed.username) return null;
-    if (parsed.role !== "admin" && parsed.role !== "maintainer" && parsed.role !== "reader") return null;
-    return parsed as UserInfo;
-  } catch {
-    return null;
-  }
+  const parsed = safeJsonParse<Partial<UserInfo>>(raw, { fallback: {} });
+  if (!parsed.userId || !parsed.username) return null;
+  if (parsed.role !== "admin" && parsed.role !== "maintainer" && parsed.role !== "reader") return null;
+  return parsed as UserInfo;
 }
 
 /**

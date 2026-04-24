@@ -9,6 +9,7 @@ import { AlertItem as AlertItemComponent } from "../components/AlertItem";
 import { PendingAlertItem } from "../components/PendingAlertItem";
 import type { DashboardAlertItem } from "../hooks/useDashboardOverview";
 import { useDashboardOverview } from "../hooks/useDashboardOverview";
+import { safeJsonParse } from "../lib/safeJson";
 
 const dashCardClass =
   "rounded-[6px] border border-slate-200 bg-white shadow-sm shadow-slate-900/5";
@@ -32,7 +33,7 @@ function readDashSearchHistory(): string[] {
     if (typeof window === "undefined") return [];
     const raw = window.localStorage.getItem(DASH_SEARCH_HISTORY_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = safeJsonParse<unknown>(raw, { fallback: null });
     if (!Array.isArray(parsed)) return [];
     return parsed.map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, DASH_SEARCH_HISTORY_MAX);
   } catch {
@@ -56,7 +57,7 @@ function readDashboardUiState(): DashboardUiState | null {
     if (typeof window === "undefined") return null;
     const raw = window.localStorage.getItem(DASHBOARD_UI_STATE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DashboardUiState>;
+    const parsed = safeJsonParse<Partial<DashboardUiState>>(raw, { fallback: {} });
     const alertLevelFilter: AlertLevelFilter =
       parsed.alertLevelFilter === "expired" ||
       parsed.alertLevelFilter === "within7" ||

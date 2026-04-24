@@ -5,6 +5,7 @@ import { getUser } from "../lib/auth";
 import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
 import { apiFetch, downloadProtectedFile } from "../lib/http";
+import { safeJsonParse } from "../lib/safeJson";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
 import { MinusCircle, Plus, Users } from "lucide-react";
@@ -415,62 +416,63 @@ export function ConfigPage() {
   const renderDetail = (raw: string | null) => {
     if (!raw) return <span className="text-slate-400">-</span>;
     const txt = String(raw);
-    try {
-      const obj = JSON.parse(txt) as Record<string, unknown>;
-      const beforeObj = tryParseObject((obj as Record<string, unknown>).before ?? (obj as Record<string, unknown>).old);
-      const afterObj = tryParseObject((obj as Record<string, unknown>).after ?? (obj as Record<string, unknown>).new);
-      if (beforeObj && afterObj) {
-        const allKeys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
-        const keys = allKeys
-          .filter((k) => {
-            if (!logChangedOnly) return true;
-            return JSON.stringify(beforeObj[k] ?? null) !== JSON.stringify(afterObj[k] ?? null);
-          })
-          .slice(0, 12);
-        if (keys.length === 0) {
-          return <span className="text-xs text-slate-500">无字段变更</span>;
-        }
-        return (
-          <div className="space-y-1">
-            {keys.map((k) => {
-              const before = beforeObj[k];
-              const after = afterObj[k];
-              const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
-              return (
-                <div
-                  key={k}
-                  className={`rounded-[6px] px-1.5 py-1 text-xs ${
-                    changed ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-slate-200 bg-slate-50 text-slate-600"
-                  }`}
-                >
-                  <div className="mb-0.5 text-[11px] font-medium text-slate-500">{localizeFieldName(k)}</div>
-                  <div className="break-all">
-                    <span className="text-slate-500">旧：</span>
-                    <span className="font-medium">{localizeValue(k, before)}</span>
-                    <span className="mx-1 text-slate-400">→</span>
-                    <span className="text-slate-500">新：</span>
-                    <span className="font-medium">{localizeValue(k, after)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      const keys = Object.keys(obj).slice(0, 6);
-      return (
-        <div className="space-y-0.5">
-          {keys.map((k) => (
-            <div key={k} className="text-xs text-slate-600">
-              <span className="text-slate-400">{localizeFieldName(k)}：</span>
-              <span className="break-all">{localizeValue(k, obj[k])}</span>
-            </div>
-          ))}
-        </div>
-      );
-    } catch {
+    const obj = safeJsonParse<Record<string, unknown> | null>(txt, { fallback: null });
+    if (!obj) {
       return <span className="text-xs text-slate-600 break-all">{maskSensitive(txt)}</span>;
     }
+
+    const beforeObj = tryParseObject((obj as Record<string, unknown>).before ?? (obj as Record<string, unknown>).old);
+    const afterObj = tryParseObject((obj as Record<string, unknown>).after ?? (obj as Record<string, unknown>).new);
+    if (beforeObj && afterObj) {
+      const allKeys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
+      const keys = allKeys
+        .filter((k) => {
+          if (!logChangedOnly) return true;
+          return JSON.stringify(beforeObj[k] ?? null) !== JSON.stringify(afterObj[k] ?? null);
+        })
+        .slice(0, 12);
+      if (keys.length === 0) {
+        return <span className="text-xs text-slate-500">无字段变更</span>;
+      }
+      return (
+        <div className="space-y-1">
+          {keys.map((k) => {
+            const before = beforeObj[k];
+            const after = afterObj[k];
+            const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
+            return (
+              <div
+                key={k}
+                className={`rounded-[6px] px-1.5 py-1 text-xs ${
+                  changed ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-slate-200 bg-slate-50 text-slate-600"
+                }`}
+              >
+                <div className="mb-0.5 text-[11px] font-medium text-slate-500">{localizeFieldName(k)}</div>
+                <div className="break-all">
+                  <span className="text-slate-500">旧：</span>
+                  <span className="font-medium">{localizeValue(k, before)}</span>
+                  <span className="mx-1 text-slate-400">→</span>
+                  <span className="text-slate-500">新：</span>
+                  <span className="font-medium">{localizeValue(k, after)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    const keys = Object.keys(obj).slice(0, 6);
+    return (
+      <div className="space-y-0.5">
+        {keys.map((k) => (
+          <div key={k} className="text-xs text-slate-600">
+            <span className="text-slate-400">{localizeFieldName(k)}：</span>
+            <span className="break-all">{localizeValue(k, obj[k])}</span>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const jumpByLog = (row: OperationLogRow) => {

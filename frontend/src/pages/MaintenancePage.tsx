@@ -20,6 +20,7 @@ import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import type { MaintenanceRecord } from "../types";
 import { requestOperationReason } from "../lib/operationReason";
+import { normalizeDropdownOptions } from "../lib/options";
 
 type FormModel = {
   targetType: "vehicle" | "equipment" | "other";
@@ -160,23 +161,6 @@ export function MaintenancePage({
     { value: "temporary", label: "临时处理" },
     { value: "pending", label: "待复查" },
   ];
-  const normalizeDropdownOptions = (source: string[] | undefined, fallback: string[]) => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const raw of source ?? fallback) {
-      const parts = String(raw ?? "")
-        .replace(/，/g, ",")
-        .split(/,|\/|、|\r?\n|\s+/)
-        .map((x) => x.trim())
-        .filter(Boolean);
-      for (const item of parts) {
-        if (seen.has(item)) continue;
-        seen.add(item);
-        result.push(item);
-      }
-    }
-    return result.length > 0 ? result : fallback;
-  };
   const equipmentNameOptions = normalizeDropdownOptions(dropdowns.equipmentName, ["空压机", "发电机", "液压泵", "叉车", "其他设备"]).map((v) => ({
     label: v,
     value: v,

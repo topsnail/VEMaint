@@ -10,7 +10,8 @@ import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 import { loginBodySchema, profilePasswordBodySchema } from "../lib/validation";
-import { readOpReason, requireOpReason } from "../lib/op-reason";
+import { requireOpReason } from "../lib/op-reason";
+import { buildLogMeta } from "../lib/log-meta";
 
 export const authRoute = new Hono<AppEnv>();
 
@@ -51,11 +52,7 @@ async function loginHandler(c: Context<AppEnv>) {
     "auth.login",
     user.id,
     null,
-    {
-      ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
-      userAgent: c.req.header("user-agent") ?? null,
-      reason: null,
-    },
+    { ...buildLogMeta(c), reason: null },
   );
   return jsonOk(c, { token, csrfToken });
 }
@@ -73,11 +70,7 @@ authRoute.get("/api/auth/me", requireAuth, meHandler);
 
 authRoute.post("/api/logout", requireAuth, async (c) => {
   await revokeToken(c.env, c.get("auth"));
-  await writeOperationLog(c.env.DB, c.get("auth"), "auth.logout", c.get("auth").userId, null, {
-    ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
-    userAgent: c.req.header("user-agent") ?? null,
-    reason: readOpReason(c),
-  });
+  await writeOperationLog(c.env.DB, c.get("auth"), "auth.logout", c.get("auth").userId, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -104,11 +97,7 @@ authRoute.put("/api/profile/password", requireAuth, async (c) => {
   if (!ok) return jsonError(c, "BAD_REQUEST", "旧密码错误", 400);
   const hash = await hashPassword(newPassword);
   await updateUserPassword(c.env.DB, user.id, hash);
-  await writeOperationLog(c.env.DB, me, "profile.password", me.userId, null, {
-    ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
-    userAgent: c.req.header("user-agent") ?? null,
-    reason: readOpReason(c),
-  });
+  await writeOperationLog(c.env.DB, me, "profile.password", me.userId, null, buildLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 

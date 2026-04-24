@@ -1,4 +1,5 @@
 import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions, type RolePermissions } from "../lib/permissions";
+import { safeJsonParse } from "../lib/safe-json";
 
 const KEY = "sys:config:v1";
 
@@ -84,25 +85,20 @@ function normalizeDropdowns(input: unknown): Record<string, string[]> {
 export async function getSystemConfig(kv: KVNamespace): Promise<SystemConfig> {
   const raw = await kv.get(KEY, "text");
   if (!raw) return DEFAULT_CONFIG;
-  try {
-    const parsed = JSON.parse(raw) as Partial<SystemConfig>;
-    return {
-      siteName: typeof parsed.siteName === "string" && parsed.siteName.trim() ? parsed.siteName.trim() : "VEMaint",
-      warnDays:
-        typeof parsed.warnDays === "number" && Number.isFinite(parsed.warnDays)
-          ? Math.max(1, Math.min(30, Math.round(parsed.warnDays)))
-          : 7,
-      versionNote:
-        typeof parsed.versionNote === "string" && parsed.versionNote.trim() ? parsed.versionNote.trim() : "v1.0.0",
-      dropdowns: normalizeDropdowns((parsed as { dropdowns?: unknown }).dropdowns),
-      ownerDirectory: normalizeOwnerDirectory((parsed as { ownerDirectory?: unknown }).ownerDirectory),
-      permissions: {
-        roles: normalizeRolePermissions((parsed as { permissions?: unknown }).permissions),
-      },
-    };
-  } catch {
-    return DEFAULT_CONFIG;
-  }
+  const parsed = safeJsonParse<Partial<SystemConfig>>(raw, { fallback: {} });
+  return {
+    siteName: typeof parsed.siteName === "string" && parsed.siteName.trim() ? parsed.siteName.trim() : "VEMaint",
+    warnDays:
+      typeof parsed.warnDays === "number" && Number.isFinite(parsed.warnDays)
+        ? Math.max(1, Math.min(30, Math.round(parsed.warnDays)))
+        : 7,
+    versionNote: typeof parsed.versionNote === "string" && parsed.versionNote.trim() ? parsed.versionNote.trim() : "v1.0.0",
+    dropdowns: normalizeDropdowns((parsed as { dropdowns?: unknown }).dropdowns),
+    ownerDirectory: normalizeOwnerDirectory((parsed as { ownerDirectory?: unknown }).ownerDirectory),
+    permissions: {
+      roles: normalizeRolePermissions((parsed as { permissions?: unknown }).permissions),
+    },
+  };
 }
 
 export async function setSystemConfig(kv: KVNamespace, cfg: SystemConfig) {
