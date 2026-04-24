@@ -34,6 +34,17 @@ const COMMON_HEADER_LABELS: Record<string, string> = {
   remark: "备注",
   created_at: "创建时间",
   updated_at: "更新时间",
+  reg_date: "注册日期",
+  vin: "车架号",
+  engine_no: "发动机号",
+  load_spec: "核载信息",
+  purchase_date: "购置日期",
+  purchase_cost: "购置金额",
+  service_life_years: "使用年限",
+  scrap_date: "报废日期",
+  disposal_method: "处置方式",
+  owner_user: "录入人",
+  attachment_key: "附件",
 };
 
 function normalizeHeaders(rows: Array<Record<string, unknown>>, preferredOrder: string[]) {
@@ -49,7 +60,11 @@ function normalizeHeaders(rows: Array<Record<string, unknown>>, preferredOrder: 
 }
 
 function labelFor(header: string, labels?: Record<string, string>) {
-  return labels?.[header] ?? COMMON_HEADER_LABELS[header] ?? header;
+  if (labels?.[header]) return labels[header];
+  if (COMMON_HEADER_LABELS[header]) return COMMON_HEADER_LABELS[header];
+  return header
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (x) => x.toUpperCase());
 }
 
 function localizeValue(header: string, value: unknown): string | number | boolean {
@@ -137,9 +152,18 @@ exportRoute.get("/api/export/vehicles", permitPerm("export.vehicles"), async (c)
       "vehicle_type",
       "energy_type",
       "usage_nature",
+      "vin",
+      "engine_no",
       "owner_dept",
       "owner_person",
       "mileage",
+      "reg_date",
+      "purchase_date",
+      "purchase_cost",
+      "service_life_years",
+      "scrap_date",
+      "disposal_method",
+      "remark",
       "updated_at",
       "created_at",
     ],
@@ -150,9 +174,18 @@ exportRoute.get("/api/export/vehicles", permitPerm("export.vehicles"), async (c)
       vehicle_type: "车辆类型",
       energy_type: "能源类型",
       usage_nature: "使用性质",
+      vin: "车架号",
+      engine_no: "发动机号",
       owner_dept: "使用部门",
       owner_person: "使用人",
       mileage: "当前里程",
+      reg_date: "注册日期",
+      purchase_date: "购置日期",
+      purchase_cost: "购置金额",
+      service_life_years: "使用年限",
+      scrap_date: "报废日期",
+      disposal_method: "处置方式",
+      remark: "备注",
       updated_at: "更新时间",
       created_at: "创建时间",
     },
@@ -162,7 +195,12 @@ exportRoute.get("/api/export/vehicles", permitPerm("export.vehicles"), async (c)
 exportRoute.get("/api/export/maintenance", permitPerm("export.maintenance"), async (c) => {
   const rows = await d1All<Record<string, unknown>>(
     c.env.DB,
-    "select * from maintenance_records order by maintenance_date desc, updated_at desc",
+    `select
+      m.*,
+      ifnull(v.plate_no, '') as plate_no
+    from maintenance_records m
+    left join vehicles v on v.id = m.vehicle_id
+    order by m.maintenance_date desc, m.updated_at desc`,
   );
   return xlsxResponse(
     `维保记录-${new Date().toISOString().slice(0, 10)}.xlsx`,

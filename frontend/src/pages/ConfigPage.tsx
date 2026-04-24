@@ -2,7 +2,6 @@ import { App, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Modal,
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUser } from "../lib/auth";
-import { requestOperationReason } from "../lib/operationReason";
 import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
 import { apiFetch, downloadProtectedFile } from "../lib/http";
@@ -45,6 +44,21 @@ type DisplayLogRow = OperationLogRow & {
   repeatCount?: number;
   summary?: string;
 };
+
+function normalizeOwnerText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+}
+
+function normalizeOwnerDirectoryRows(rows: Array<{ name?: string; address?: string }> | undefined) {
+  return (rows ?? [])
+    .map((r) => ({
+      name: normalizeOwnerText(r?.name),
+      address: normalizeOwnerText(r?.address),
+    }))
+    .filter((r) => r.name && r.address);
+}
 
 const LOG_ACTION_LABELS: Record<string, string> = {
   "auth.login": "登录",
@@ -166,8 +180,11 @@ export function ConfigPage() {
     const cfg = await fetchConfig();
     if (!cfg) return;
     const dropdowns = cfg.dropdowns ?? {};
+    const normalizedOwnerDirectory = normalizeOwnerDirectoryRows(cfg.ownerDirectory);
     setCurrentDropdowns(dropdowns);
     setRolePermissions(normalizeRolePermissions(cfg.permissions));
+    // Replace list field first to avoid stale array indexes.
+    form.setFieldValue("ownerDirectory", normalizedOwnerDirectory);
     form.setFieldsValue({
       siteName: cfg.siteName,
       warnDays: cfg.warnDays,
@@ -180,7 +197,6 @@ export function ConfigPage() {
       equipmentNameOptions: toCommaSeparatedText(dropdowns.equipmentName ?? DEFAULT_EQUIPMENT_NAME_OPTIONS),
       equipmentTypeOptions: toCommaSeparatedText(dropdowns.equipmentType ?? DEFAULT_EQUIPMENT_TYPE_OPTIONS),
       equipmentCategoryOptions: toCommaSeparatedText(dropdowns.equipmentCategory ?? DEFAULT_EQUIPMENT_CATEGORY_OPTIONS),
-      ownerDirectory: cfg.ownerDirectory?.length ? cfg.ownerDirectory : [],
     });
   };
 
@@ -196,9 +212,7 @@ export function ConfigPage() {
     ensuredAdmin.add("config.manage");
     ensuredAdmin.add("user.manage");
     normalizedPermissions.admin = Array.from(ensuredAdmin);
-    const ownerDirectory = (values.ownerDirectory ?? [])
-      .map((r) => ({ name: String(r?.name ?? "").trim(), address: String(r?.address ?? "").trim() }))
-      .filter((r) => r.name && r.address);
+    const ownerDirectory = normalizeOwnerDirectoryRows(values.ownerDirectory);
     const payload = {
       siteName: values.siteName,
       warnDays: values.warnDays,
@@ -219,11 +233,11 @@ export function ConfigPage() {
         roles: normalizedPermissions,
       },
     };
-    const reason = await requestOperationReason("请输入保存系统配置的理由");
-    if (!reason) return;
-    const res = await saveConfig(payload, reason);
+    const res = await saveConfig(payload);
     if (!res.ok) return message.error(res.error.message);
     setRolePermissions(normalizedPermissions);
+    // Normalize visible rows immediately after save.
+    form.setFieldValue("ownerDirectory", ownerDirectory);
     message.success("保存成功");
   };
 
@@ -622,16 +636,36 @@ export function ConfigPage() {
                             <Space key={key} className="w-full max-w-full" align="start" wrap>
                               <Form.Item
                                 {...restField}
-                                name={[name, "name"]}
-                                rules={[{ required: true, message: "填写所有人" }]}
+                                name={["ownerDirectory", name, "name"]}
+                                rules={[
+                                  {
+                                    validator: async (_, value) => {
+                                      const nameValue = String(value ?? "").trim();
+                                      const addressValue = String(form.getFieldValue(["ownerDirectory", name, "address"]) ?? "").trim();
+                                      if (!nameValue && !addressValue) return Promise.resolve();
+                                      if (nameValue) return Promise.resolve();
+                                      return Promise.reject(new Error("填写所有人"));
+                                    },
+                                  },
+                                ]}
                                 className="!mb-0 min-w-[140px] flex-1"
                               >
                                 <Input placeholder="所有人（个人/单位）" className="ve-input" />
                               </Form.Item>
                               <Form.Item
                                 {...restField}
-                                name={[name, "address"]}
-                                rules={[{ required: true, message: "填写住址" }]}
+                                name={["ownerDirectory", name, "address"]}
+                                rules={[
+                                  {
+                                    validator: async (_, value) => {
+                                      const addressValue = String(value ?? "").trim();
+                                      const nameValue = String(form.getFieldValue(["ownerDirectory", name, "name"]) ?? "").trim();
+                                      if (!nameValue && !addressValue) return Promise.resolve();
+                                      if (addressValue) return Promise.resolve();
+                                      return Promise.reject(new Error("填写住址"));
+                                    },
+                                  },
+                                ]}
                                 className="!mb-0 min-w-[200px] flex-[2]"
                               >
                                 <Input placeholder="对应住址（将用于台账自动回填）" className="ve-input" />
@@ -639,7 +673,7 @@ export function ConfigPage() {
                               <Button type="text" icon={<MinusCircle className="h-4 w-4" />} className={actionBtn.textDanger} onClick={() => remove(name)} aria-label="删除此行" />
                             </Space>
                           ))}
-                          <Button type="dashed" onClick={() => add()} block icon={<Plus className="h-4 w-4" />} className="max-w-md">
+                          <Button type="dashed" onClick={() => add({ name: "", address: "" })} block icon={<Plus className="h-4 w-4" />} className="max-w-md">
                             新增所有人与住址映射
                           </Button>
                         </div>

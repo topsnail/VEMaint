@@ -44,24 +44,45 @@ import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/componen
 import { cn } from "@/lib/utils";
 
 type AnyObj = Record<string, any>;
+const extractText = (node: unknown): string => {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (React.isValidElement(node)) return extractText((node as any).props?.children);
+  return "";
+};
 const normalizeLabelText = (label: unknown): string | null => {
   if (typeof label === "string") return label.trim() || null;
   if (typeof label === "number") return String(label);
-  return null;
+  const text = extractText(label).replace(/\*/g, "").replace(/\?/g, "").trim();
+  return text || null;
 };
 
 const pathKey = (name: any): string => (Array.isArray(name) ? name.join(".") : String(name));
 const getByPath = (obj: AnyObj, name: any) => pathKey(name).split(".").reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
+const isIndexKey = (value: string) => /^\d+$/.test(value);
 const setByPath = (obj: AnyObj, name: any, value: any): AnyObj => {
   const keys = pathKey(name).split(".");
   const next = { ...obj };
   let cursor: AnyObj = next;
   for (let i = 0; i < keys.length - 1; i += 1) {
     const k = keys[i]!;
-    cursor[k] = typeof cursor[k] === "object" && cursor[k] != null ? { ...cursor[k] } : {};
-    cursor = cursor[k];
+    const nextKey = keys[i + 1]!;
+    const shouldBeArray = isIndexKey(nextKey);
+    const current = cursor[k];
+    if (shouldBeArray) {
+      cursor[k] = Array.isArray(current) ? [...current] : [];
+    } else {
+      cursor[k] = typeof current === "object" && current != null && !Array.isArray(current) ? { ...current } : {};
+    }
+    cursor = cursor[k] as AnyObj;
   }
-  cursor[keys[keys.length - 1]!] = value;
+  const leaf = keys[keys.length - 1]!;
+  if (Array.isArray(cursor) && isIndexKey(leaf)) {
+    cursor[Number(leaf)] = value;
+  } else {
+    cursor[leaf] = value;
+  }
   return next;
 };
 
@@ -98,6 +119,7 @@ const createFormInstance = <T extends AnyObj>(): FormInstance<T> => {
     },
     validateFields: async () => {
       const errors: string[] = [];
+      const errorFields: Array<{ name: any; errors: string[] }> = [];
       items.forEach((meta, name) => {
         const value: unknown = getByPath(valueRef.current as AnyObj, name);
         const fieldName = meta.labelText || name;
@@ -105,16 +127,22 @@ const createFormInstance = <T extends AnyObj>(): FormInstance<T> => {
           if (rule.required && (value == null || value === "" || (Array.isArray(value) && value.length === 0))) {
             const pickText = String(fieldName ?? "");
             const shouldPick = /类型|分类|状态|日期|车辆|对象|部门|人员|方式|结果|项目|类别|选择|单位|性质/.test(pickText);
-            errors.push(rule.message ?? `${shouldPick ? "请选择" : "请填写"}${fieldName}`);
+            const msg = rule.message ?? `${shouldPick ? "请选择" : "请填写"}${fieldName}`;
+            errors.push(msg);
+            errorFields.push({ name, errors: [msg] });
             break;
           }
           if (typeof rule.min === "number" && typeof value === "string" && value.length < rule.min) {
-            errors.push(rule.message ?? `${fieldName}长度不能少于${rule.min}个字符`);
+            const msg = rule.message ?? `${fieldName}长度不能少于${rule.min}个字符`;
+            errors.push(msg);
+            errorFields.push({ name, errors: [msg] });
             break;
           }
         }
       });
-      if (errors.length > 0) return Promise.reject(new Error(errors[0]));
+      if (errors.length > 0) {
+        return Promise.reject({ message: errors[0], errorFields });
+      }
       return valueRef.current;
     },
     __items: items,
@@ -191,7 +219,7 @@ const FormItem = ({ label, name, rules, children, noStyle, className, style, ini
   }
   if (noStyle) return <>{content}</>;
   return (
-    <div className={className ?? "mb-3"} style={style}>
+    <div className={className ?? "mb-3"} style={style} data-form-item-name={name != null ? pathKey(name) : undefined}>
       {label ? (
         <Label className="mb-1 block">{label}</Label>
       ) : null}
@@ -203,7 +231,15 @@ const FormItem = ({ label, name, rules, children, noStyle, className, style, ini
 const FormList = ({ name, children }: { name: any; children: (fields: any[], ops: any) => ReactNode }) => {
   const ctx = useContext(FormContext);
   if (!ctx) return null;
-  const arr = ctx.form.getFieldValue(name) ?? [];
+  const raw = ctx.form.getFieldValue(name);
+  const arr = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object"
+      ? Object.keys(raw)
+          .filter((k) => isIndexKey(k))
+          .sort((a, b) => Number(a) - Number(b))
+          .map((k) => (raw as AnyObj)[k])
+      : [];
   const fields = arr.map((_: any, i: number) => ({ key: i, name: i }));
   const ops = {
     add: (value: any = {}) => ctx.form.setFieldValue(name, [...arr, value]),
@@ -494,12 +530,29 @@ const Select = React.forwardRef<HTMLSelectElement, any>(({ options = [], value, 
 ));
 Select.displayName = "Select";
 
-const AutoComplete = React.forwardRef<HTMLInputElement, any>(({ options = [], value, onChange, placeholder, className }, ref) => {
+const AutoComplete = React.forwardRef<HTMLInputElement, any>(
+  ({ options = [], value, onChange, onBlur, onFocus, onSelect, placeholder, className, style, ...rest }, ref) => {
   const reactId = useId();
   const listId = `ac-${reactId.replace(/:/g, "")}`;
+  const emitChange = (next: string) => {
+    onChange?.(next);
+    const hit = (options ?? []).find((opt: any) => String(opt?.value ?? "") === next);
+    if (hit) onSelect?.(next);
+  };
   return (
     <>
-      <input ref={ref} className={cn(selectBase, className)} list={listId} value={value ?? ""} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder} />
+      <input
+        ref={ref}
+        className={cn(selectBase, className)}
+        style={style}
+        list={listId}
+        value={value ?? ""}
+        onChange={(e) => emitChange(e.target.value)}
+        onBlur={onBlur}
+        onFocus={onFocus}
+        placeholder={placeholder}
+        {...rest}
+      />
       <datalist id={listId}>
         {options.map((opt: any) => (
           <option key={opt.value} value={opt.value} />
