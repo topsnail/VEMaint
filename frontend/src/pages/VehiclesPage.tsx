@@ -15,13 +15,32 @@ import {
 } from "../hooks/vehiclesApi";
 import { PageContainer } from "../components/PageContainer";
 import { StatusPill } from "../components/StatusPill";
-import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { vehicleSubmitSchema } from "../lib/schemas";
 import { Eye, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { AttachmentViewer } from "../components/AttachmentViewer";
 import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
 import { requestOperationReason } from "../lib/operationReason";
+import {
+  buildInsurancePayload,
+  calcAnnualExpiry,
+  DEFAULT_ANNUAL_INTERVAL_MONTHS,
+  FORM_FOCUSABLE_SELECTOR,
+  type FormValidationError,
+  MAX_ATTACHMENT_KEYS,
+  normalizePositiveInteger,
+  normalizePlateNo,
+  parseInsuranceBundle,
+  tabByFieldKey,
+  toYmd,
+  validateCycleInputs,
+  validateInsuranceDraft,
+  validateVehicleCoreInputs,
+  VEHICLE_MODAL_SCROLL_WAIT_MS,
+  VIN_LENGTH,
+} from "./vehicles/helpers";
+import { buildCycleSubmitPayload, buildMergedRemark, buildVehicleSubmitPayload } from "./vehicles/submit-service";
+import { buildVehicleRemarkUpsertPayload, computeNextAttachmentMeta } from "./vehicles/attachment-service";
 
 type VehicleForm = {
   plateNo: string;
@@ -77,12 +96,6 @@ type VehicleForm = {
  */
 const DEFAULT_PLATE_NO_PREFIX = "豫A·";
 const EDIT_TAB_ORDER = ["basic", "insurance", "annual", "maint"] as const;
-const INSURANCE_SEG_SEP = "；";
-
-type InsuranceBundle = {
-  compulsory: { vendor: string; start: string; expiry: string };
-  commercial: { vendor: string; start: string; expiry: string };
-};
 
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const { message } = App.useApp();
@@ -118,7 +131,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editDirty, setEditDirty] = useState(false);
   const [vinHint, setVinHint] = useState("");
-  const [vinCountHint, setVinCountHint] = useState("0/17");
+  const [vinCountHint, setVinCountHint] = useState(`0/${VIN_LENGTH}`);
   const [engineNoHint, setEngineNoHint] = useState("");
   const [loadWeightHint, setLoadWeightHint] = useState("");
   const [dimensionsHint, setDimensionsHint] = useState("");
@@ -137,7 +150,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       .map((x) => String(x ?? "").trim())
       .filter(Boolean)
       .filter((k, idx, arr) => arr.indexOf(k) === idx)
-      .slice(0, 50);
+      .slice(0, MAX_ATTACHMENT_KEYS);
   const parseDimensionsParts = (raw: string | undefined) => {
     const parts = String(raw ?? "").split("×");
     return {
@@ -191,57 +204,20 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setRows((prev) => prev.map((x) => (x.id === vehicleId ? latestVehicle : x)));
     setCyclesByVehicleId((prev) => ({ ...prev, [vehicleId]: latestCycle }));
   };
-  const normalizePositiveInteger = (value: unknown): number | null => {
-    const text = String(value ?? "").replace(/[^\d]/g, "").trim();
-    if (!text) return null;
-    const parsed = Number(text);
-    if (!Number.isFinite(parsed)) return null;
-    return Math.max(0, Math.floor(parsed));
+  const syncInsuranceAttachmentFields = (nextCompulsory: string[], nextCommercial: string[]) => {
+    const merged = normalizeAttachmentKeys([...nextCompulsory, ...nextCommercial]);
+    form.setFieldValue("insuranceCompulsoryAttachmentKeys", nextCompulsory);
+    form.setFieldValue("insuranceCommercialAttachmentKeys", nextCommercial);
+    form.setFieldValue("insuranceAttachmentKeys", merged);
+    form.setFieldValue("insuranceAttachmentKey", merged[0] || "");
   };
-  const parseSegmentedInsurance = (raw: string | null | undefined, label: "交强险" | "商业险", allowFallback = false) => {
-    const text = String(raw ?? "").trim();
-    if (!text) return "";
-    const match = text.match(new RegExp(`${label}\\s*:\\s*([^；]+)`));
-    if (match?.[1]) return match[1].trim();
-    if (allowFallback && !text.includes("交强险:") && !text.includes("商业险:")) return text;
-    return "";
+  const appendAttachmentKeys = (fieldName: "drivingLicenseAttachmentKeys" | "insuranceCompulsoryAttachmentKeys" | "insuranceCommercialAttachmentKeys", key: string) => {
+    const prev = (form.getFieldValue(fieldName) as string[] | undefined) ?? [];
+    return normalizeAttachmentKeys([...prev, key]);
   };
-  const parseInsuranceBundle = (cycle: VehicleCycle | null | undefined): InsuranceBundle => {
-    return {
-      compulsory: {
-        vendor: parseSegmentedInsurance(cycle?.insuranceVendor, "交强险", true),
-        start: parseSegmentedInsurance(cycle?.insuranceStart, "交强险", true),
-        expiry: parseSegmentedInsurance(cycle?.insuranceExpiry, "交强险", true),
-      },
-      commercial: {
-        vendor: parseSegmentedInsurance(cycle?.insuranceVendor, "商业险"),
-        start: parseSegmentedInsurance(cycle?.insuranceStart, "商业险"),
-        expiry: parseSegmentedInsurance(cycle?.insuranceExpiry, "商业险"),
-      },
-    };
-  };
-  const buildInsurancePayload = (v: Record<string, unknown>) => {
-    const cv = String(v.insuranceCompulsoryVendor ?? "").trim();
-    const cs = String(v.insuranceCompulsoryStart ?? "").trim();
-    const ce = String(v.insuranceCompulsoryExpiry ?? "").trim();
-    const mv = String(v.insuranceCommercialVendor ?? "").trim();
-    const ms = String(v.insuranceCommercialStart ?? "").trim();
-    const me = String(v.insuranceCommercialExpiry ?? "").trim();
-    const hasCompulsory = !!(cv || cs || ce);
-    const hasCommercial = !!(mv || ms || me);
-    return {
-      hasCompulsory,
-      hasCommercial,
-      insuranceType: [hasCompulsory ? "交强险" : "", hasCommercial ? "商业险" : ""].filter(Boolean).join(" / "),
-      insuranceVendor: [hasCompulsory ? `交强险:${cv}` : "", hasCommercial ? `商业险:${mv}` : ""].filter(Boolean).join(INSURANCE_SEG_SEP),
-      insuranceStart: [hasCompulsory ? `交强险:${cs}` : "", hasCommercial ? `商业险:${ms}` : ""].filter(Boolean).join(INSURANCE_SEG_SEP),
-      insuranceExpiry: [hasCompulsory ? `交强险:${ce}` : "", hasCommercial ? `商业险:${me}` : ""].filter(Boolean).join(INSURANCE_SEG_SEP),
-    };
-  };
-  const calcAnnualExpiry = (lastDate: string, months: number) => {
-    const base = dayjs(lastDate, "YYYY-MM-DD", true);
-    if (!base.isValid() || !Number.isFinite(months) || months < 1) return "";
-    return base.add(months, "month").format("YYYY-MM-DD");
+  const getAttachmentKeys = (fieldName: "drivingLicenseAttachmentKeys" | "insuranceAttachmentKeys" | "insuranceCompulsoryAttachmentKeys" | "insuranceCommercialAttachmentKeys") => {
+    const raw = (form.getFieldValue(fieldName) as string[] | undefined) ?? [];
+    return normalizeAttachmentKeys(raw);
   };
   useEffect(() => {
     viewVehicleRef.current = viewVehicle;
@@ -337,23 +313,6 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       )
       .join("\n");
     return { ...meta, remarkBody: body };
-  };
-
-  const composeVehicleRemark = (meta: ReturnType<typeof parseRemarkMeta>) => {
-    return [
-      meta.remarkBody,
-      meta.archiveNo ? `档案编号: ${meta.archiveNo}` : "",
-      meta.ownerName ? `所有人: ${meta.ownerName}` : "",
-      meta.issueDate ? `发证日期: ${meta.issueDate}` : "",
-      meta.ownerAddress ? `住址: ${meta.ownerAddress}` : "",
-      meta.drivingLicenseAttachmentKey ? `行驶证附件Key: ${meta.drivingLicenseAttachmentKey}` : "",
-      meta.drivingLicenseAttachmentKeys.length > 0 ? `行驶证附件Keys: ${meta.drivingLicenseAttachmentKeys.join("|")}` : "",
-      meta.insuranceAttachmentKeys.length > 0 ? `保单附件Keys: ${meta.insuranceAttachmentKeys.join("|")}` : "",
-      meta.insuranceCompulsoryAttachmentKeys.length > 0 ? `交强险附件Keys: ${meta.insuranceCompulsoryAttachmentKeys.join("|")}` : "",
-      meta.insuranceCommercialAttachmentKeys.length > 0 ? `商业险附件Keys: ${meta.insuranceCommercialAttachmentKeys.join("|")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
   };
 
   const renderTextInput = (key: string, placeholder?: string) => {
@@ -623,168 +582,111 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         message.error(validated.error.issues[0]?.message ?? "表单校验失败");
         return;
       }
-      const normalizePlateNo = (value: unknown) =>
-        String(value ?? "")
-          .toUpperCase()
-          .replace(/[·•\.\-\s]/g, "")
-          .trim();
-      const normalizeDate = (value: unknown) => {
-        if (!value) return "";
-        if (typeof value === "string") return value.trim();
-        if (typeof (value as { format?: (pattern: string) => string }).format === "function") {
-          return (value as { format: (pattern: string) => string }).format("YYYY-MM-DD");
-        }
-        return "";
-      };
-      const regDate = normalizeDate(rhfValues.regDate ?? v.regDate);
-      const issueDate = normalizeDate(rhfValues.issueDate ?? v.issueDate);
+      const regDate = toYmd(rhfValues.regDate ?? v.regDate);
+      const issueDate = toYmd(rhfValues.issueDate ?? v.issueDate);
       const normalizedPlateNo = normalizePlateNo(rhfValues.plateNo);
-      if (normalizedPlateNo.length < 6) {
-        message.error("号牌号码格式不正确");
-        return;
-      }
       const vin = String(rhfValues.vin ?? "").trim().toUpperCase();
-      if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
-        message.error("车辆识别代号需为17位字母数字（不含 I/O/Q）");
-        return;
-      }
       const engineNo = String(rhfValues.engineNo ?? "").trim().toUpperCase();
-      if (engineNo && engineNo.length < 4) {
-        message.error("发动机号至少 4 位");
-        return;
-      }
       const currentMileage = Number(rhfValues.mileage ?? v.mileage ?? 0);
       const nextMaintKm = Number(rhfValues.maintNextKm ?? v.maintNextKm ?? 0);
-      if (Number.isFinite(currentMileage) && Number.isFinite(nextMaintKm) && nextMaintKm > 0 && nextMaintKm < currentMileage) {
-        message.error("下次保养里程不能小于本次保养里程");
-        return;
-      }
+      const coreValidationError = validateVehicleCoreInputs({
+        plateNo: normalizedPlateNo,
+        vin,
+        engineNo,
+        currentMileage,
+        nextMaintKm,
+      });
+      if (coreValidationError) return message.error(coreValidationError);
       const insuranceAttachmentKey = String(form.getFieldValue("insuranceAttachmentKey") ?? v.insuranceAttachmentKey ?? "").trim();
       const drivingLicenseAttachmentKey = String(rhfValues.drivingLicenseAttachmentKey ?? v.drivingLicenseAttachmentKey ?? "").trim();
-      const insuranceAttachmentKeys = ((form.getFieldValue("insuranceAttachmentKeys") as string[] | undefined) ?? [])
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean)
-        .filter((k, idx, arr) => arr.indexOf(k) === idx);
-      const insuranceCompulsoryAttachmentKeys = ((form.getFieldValue("insuranceCompulsoryAttachmentKeys") as string[] | undefined) ?? [])
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean)
-        .filter((k, idx, arr) => arr.indexOf(k) === idx);
-      const insuranceCommercialAttachmentKeys = ((form.getFieldValue("insuranceCommercialAttachmentKeys") as string[] | undefined) ?? [])
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean)
-        .filter((k, idx, arr) => arr.indexOf(k) === idx);
+      const insuranceAttachmentKeys = getAttachmentKeys("insuranceAttachmentKeys");
+      const insuranceCompulsoryAttachmentKeys = getAttachmentKeys("insuranceCompulsoryAttachmentKeys");
+      const insuranceCommercialAttachmentKeys = getAttachmentKeys("insuranceCommercialAttachmentKeys");
       const insuranceAllAttachmentKeys = normalizeAttachmentKeys([
         ...insuranceAttachmentKeys,
         ...insuranceCompulsoryAttachmentKeys,
         ...insuranceCommercialAttachmentKeys,
       ]);
-      const drivingLicenseAttachmentKeys = ((form.getFieldValue("drivingLicenseAttachmentKeys") as string[] | undefined) ?? [])
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean)
-        .filter((k, idx, arr) => arr.indexOf(k) === idx);
+      const drivingLicenseAttachmentKeys = getAttachmentKeys("drivingLicenseAttachmentKeys");
       const mergedUsageNature = [rhfValues.energyType, rhfValues.usageNature].filter(Boolean).join(" / ");
       const mergedLoadSpec = [rhfValues.loadPeople, rhfValues.loadWeight, rhfValues.dimensions].filter(Boolean).join(" / ");
       const maintIntervalDays = normalizePositiveInteger(v.maintIntervalDays);
       const maintIntervalKm = normalizePositiveInteger(v.maintIntervalKm);
       const insuranceDraft = {
         insuranceCompulsoryVendor: String(form.getFieldValue("insuranceCompulsoryVendor") ?? "").trim(),
-        insuranceCompulsoryStart: normalizeDate(form.getFieldValue("insuranceCompulsoryStart")),
-        insuranceCompulsoryExpiry: normalizeDate(form.getFieldValue("insuranceCompulsoryExpiry")),
+        insuranceCompulsoryStart: toYmd(form.getFieldValue("insuranceCompulsoryStart")),
+        insuranceCompulsoryExpiry: toYmd(form.getFieldValue("insuranceCompulsoryExpiry")),
         insuranceCommercialVendor: String(form.getFieldValue("insuranceCommercialVendor") ?? "").trim(),
-        insuranceCommercialStart: normalizeDate(form.getFieldValue("insuranceCommercialStart")),
-        insuranceCommercialExpiry: normalizeDate(form.getFieldValue("insuranceCommercialExpiry")),
+        insuranceCommercialStart: toYmd(form.getFieldValue("insuranceCommercialStart")),
+        insuranceCommercialExpiry: toYmd(form.getFieldValue("insuranceCommercialExpiry")),
       };
       const insuranceMerged = buildInsurancePayload(insuranceDraft);
-      const annualLastDate = normalizeDate(v.annualLastDate);
-      const annualExpiry = normalizeDate(v.annualExpiry);
-      const maintLastDate = normalizeDate(v.maintLastDate);
-      const maintNextDate = normalizeDate(v.maintNextDate);
-      const isAfterOrEqual = (start: string, end: string) => {
-        const left = dayjs(start, "YYYY-MM-DD", true);
-        const right = dayjs(end, "YYYY-MM-DD", true);
-        return left.isValid() && right.isValid() && (right.isSame(left, "day") || right.isAfter(left, "day"));
-      };
-      if (!insuranceMerged.hasCompulsory && !insuranceMerged.hasCommercial) {
-        message.error("请至少填写一种保险（交强险或商业险）");
-        return;
-      }
-      if (insuranceMerged.hasCompulsory) {
-        if (!insuranceDraft.insuranceCompulsoryVendor || !insuranceDraft.insuranceCompulsoryStart || !insuranceDraft.insuranceCompulsoryExpiry) {
-          message.error("交强险请填写完整：保险公司、投保日期、到期日期");
-          return;
-        }
-        if (!isAfterOrEqual(insuranceDraft.insuranceCompulsoryStart, insuranceDraft.insuranceCompulsoryExpiry)) {
-          message.error("交强险到期日期不能早于投保日期");
-          return;
-        }
-      }
-      if (insuranceMerged.hasCommercial) {
-        if (!insuranceDraft.insuranceCommercialVendor || !insuranceDraft.insuranceCommercialStart || !insuranceDraft.insuranceCommercialExpiry) {
-          message.error("商业险请填写完整：保险公司、投保日期、到期日期");
-          return;
-        }
-        if (!isAfterOrEqual(insuranceDraft.insuranceCommercialStart, insuranceDraft.insuranceCommercialExpiry)) {
-          message.error("商业险到期日期不能早于投保日期");
-          return;
-        }
-      }
-      if (annualLastDate && annualExpiry && !isAfterOrEqual(annualLastDate, annualExpiry)) {
-        message.error("年审到期日不能早于上次审车日期");
-        return;
-      }
-      if (maintLastDate && maintNextDate && !isAfterOrEqual(maintLastDate, maintNextDate)) {
-        message.error("下次保养日期不能早于上次保养日期");
-        return;
-      }
-      if (maintIntervalDays !== null && maintIntervalDays < 1) {
-        message.error("保养间隔天数需大于或等于 1");
-        return;
-      }
-      if (maintIntervalKm !== null && maintIntervalKm < 1) {
-        message.error("保养间隔里程需大于或等于 1");
-        return;
-      }
-      const mergedRemark = [
-        rhfValues.remark,
-        rhfValues.archiveNo ? `档案编号: ${rhfValues.archiveNo}` : "",
-        rhfValues.ownerName ? `所有人: ${rhfValues.ownerName}` : "",
-        issueDate ? `发证日期: ${issueDate}` : "",
-        rhfValues.ownerAddress ? `住址: ${rhfValues.ownerAddress}` : "",
-        drivingLicenseAttachmentKey ? `行驶证附件Key: ${drivingLicenseAttachmentKey}` : "",
-        (drivingLicenseAttachmentKeys.length > 0 ? `行驶证附件Keys: ${drivingLicenseAttachmentKeys.join("|")}` : ""),
-        (insuranceAllAttachmentKeys.length > 0 ? `保单附件Keys: ${insuranceAllAttachmentKeys.join("|")}` : ""),
-        (insuranceCompulsoryAttachmentKeys.length > 0 ? `交强险附件Keys: ${insuranceCompulsoryAttachmentKeys.join("|")}` : ""),
-        (insuranceCommercialAttachmentKeys.length > 0 ? `商业险附件Keys: ${insuranceCommercialAttachmentKeys.join("|")}` : ""),
-      ]
-        .filter(Boolean)
-        .join("\n");
-      const payload = {
-        ...v,
-        ...rhfValues,
-        plateNo: normalizedPlateNo,
-        regDate: regDate || null,
-        loadSpec: mergedLoadSpec || null,
-        usageNature: mergedUsageNature || null,
-        remark: mergedRemark || null,
-      };
+      const annualLastDate = toYmd(v.annualLastDate);
+      const annualExpiry = toYmd(v.annualExpiry);
+      const maintLastDate = toYmd(v.maintLastDate);
+      const maintNextDate = toYmd(v.maintNextDate);
+      const insuranceValidationError = validateInsuranceDraft({
+        hasCompulsory: insuranceMerged.hasCompulsory,
+        hasCommercial: insuranceMerged.hasCommercial,
+        compulsoryVendor: insuranceDraft.insuranceCompulsoryVendor,
+        compulsoryStart: insuranceDraft.insuranceCompulsoryStart,
+        compulsoryExpiry: insuranceDraft.insuranceCompulsoryExpiry,
+        commercialVendor: insuranceDraft.insuranceCommercialVendor,
+        commercialStart: insuranceDraft.insuranceCommercialStart,
+        commercialExpiry: insuranceDraft.insuranceCommercialExpiry,
+      });
+      if (insuranceValidationError) return message.error(insuranceValidationError);
+      const cycleValidationError = validateCycleInputs({
+        annualLastDate,
+        annualExpiry,
+        maintLastDate,
+        maintNextDate,
+        maintIntervalDays,
+        maintIntervalKm,
+      });
+      if (cycleValidationError) return message.error(cycleValidationError);
+      const mergedRemark = buildMergedRemark({
+        remark: rhfValues.remark,
+        archiveNo: rhfValues.archiveNo,
+        ownerName: rhfValues.ownerName,
+        issueDate,
+        ownerAddress: rhfValues.ownerAddress,
+        drivingLicenseAttachmentKey,
+        drivingLicenseAttachmentKeys,
+        insuranceAllAttachmentKeys,
+        insuranceCompulsoryAttachmentKeys,
+        insuranceCommercialAttachmentKeys,
+      });
+      const payload = buildVehicleSubmitPayload({
+        formValues: rhfValues as unknown as Record<string, unknown>,
+        validatedValues: v as unknown as Record<string, unknown>,
+        normalizedPlateNo,
+        regDate,
+        mergedLoadSpec,
+        mergedUsageNature,
+        mergedRemark,
+      });
       const res = await requestUpsertVehicle(editing?.id ?? null, payload);
       if (!res.ok) return message.error(res.error.message);
       const vehicleId = editing ? editing.id : res.data.id;
       if (vehicleId) {
-        const cycleRes = await requestPutVehicleCycles(vehicleId, {
-          insuranceType: insuranceMerged.insuranceType || null,
-          insuranceVendor: insuranceMerged.insuranceVendor || null,
-          insuranceStart: insuranceMerged.insuranceStart || null,
-          insuranceExpiry: insuranceMerged.insuranceExpiry || null,
-          insuranceAttachmentKey: insuranceAttachmentKey || insuranceAllAttachmentKeys[0] || null,
-          annualLastDate: annualLastDate || null,
-          annualExpiry: annualExpiry || null,
-          maintLastDate: maintLastDate || null,
-          maintIntervalDays: maintIntervalDays ?? null,
-          maintIntervalKm: maintIntervalKm ?? null,
-          maintNextDate: maintNextDate || null,
-          maintNextKm: v.maintNextKm ?? null,
-        });
+        const cycleRes = await requestPutVehicleCycles(
+          vehicleId,
+          buildCycleSubmitPayload({
+            insuranceType: insuranceMerged.insuranceType,
+            insuranceVendor: insuranceMerged.insuranceVendor,
+            insuranceStart: insuranceMerged.insuranceStart,
+            insuranceExpiry: insuranceMerged.insuranceExpiry,
+            insuranceAttachmentKey: insuranceAttachmentKey || insuranceAllAttachmentKeys[0] || "",
+            annualLastDate,
+            annualExpiry,
+            maintLastDate,
+            maintIntervalDays,
+            maintIntervalKm,
+            maintNextDate,
+            maintNextKm: v.maintNextKm,
+          }),
+        );
         if (!cycleRes.ok) {
           message.error(cycleRes.error.message || "周期信息保存失败，请重试");
           return;
@@ -832,24 +734,24 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       resetForNext();
       setEditing(null);
       await load(q);
-    } catch (err: any) {
-      const msg = String(err?.message ?? (err instanceof Error ? err.message : "") ?? "表单校验失败");
+    } catch (err: unknown) {
+      const validationErr = err as FormValidationError;
+      const msg = String(validationErr?.message ?? (err instanceof Error ? err.message : "") ?? "表单校验失败");
       message.error(msg || "表单校验失败");
-      const firstName = err?.errorFields?.[0]?.name;
+      const firstName = validationErr?.errorFields?.[0]?.name;
       if (firstName) {
         const key = Array.isArray(firstName) ? firstName.join(".") : String(firstName);
-        const tab: "basic" | "insurance" | "annual" | "maint" =
-          key.startsWith("insurance") ? "insurance" : key.startsWith("annual") ? "annual" : key.startsWith("maint") ? "maint" : "basic";
+        const tab = tabByFieldKey(key);
         setEditTab(tab);
         window.setTimeout(() => {
           const el = document.querySelector(`[data-form-item-name="${key}"]`) as HTMLElement | null;
           el?.scrollIntoView({ block: "center", behavior: "smooth" });
-          const focusTarget = el?.querySelector(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [role="combobox"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-          ) as HTMLElement | null;
+          const focusTarget = el?.querySelector(FORM_FOCUSABLE_SELECTOR) as HTMLElement | null;
           // Prevent extra scroll jumps: element already in view after scrollIntoView.
-          (focusTarget as any)?.focus?.({ preventScroll: true });
-        }, 60);
+          if (focusTarget && typeof focusTarget.focus === "function") {
+            focusTarget.focus({ preventScroll: true });
+          }
+        }, VEHICLE_MODAL_SCROLL_WAIT_MS);
       }
     }
   };
@@ -861,7 +763,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setEngineNoHint("");
     setLoadWeightHint("");
     setDimensionsHint("");
-    setVinCountHint("0/17");
+    setVinCountHint(`0/${VIN_LENGTH}`);
     setOwnerAddressTouched(false);
     form.resetFields();
     resetRhf({
@@ -922,7 +824,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     const annualIntervalMonths =
       cachedCycle?.annualLastDate && cachedCycle?.annualExpiry
         ? Math.max(1, dayjs(cachedCycle.annualExpiry).diff(dayjs(cachedCycle.annualLastDate), "month"))
-        : 12;
+        : DEFAULT_ANNUAL_INTERVAL_MONTHS;
 
     setEditing(r);
     setEditTab(tab);
@@ -932,7 +834,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setEngineNoHint("");
     setLoadWeightHint("");
     setDimensionsHint("");
-    setVinCountHint(`${(r.vin ?? "").length}/17`);
+    setVinCountHint(`${(r.vin ?? "").length}/${VIN_LENGTH}`);
     setOwnerAddressTouched(false);
     setOpen(true);
     form.setFieldsValue({
@@ -1016,7 +918,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       ownerDept: r.ownerDept,
       ownerPerson: r.ownerPerson,
       mileage: Number(r.mileage ?? 0),
-      maintNextKm: Number(cachedCycle?.maintNextKm ?? (r as any).maintNextKm ?? 0),
+      maintNextKm: Number(cachedCycle?.maintNextKm ?? 0),
       status: r.status,
       drivingLicenseAttachmentKey: meta.drivingLicenseAttachmentKey || "",
       drivingLicenseAttachmentKeys:
@@ -1052,7 +954,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         annualIntervalMonths:
           c.annualLastDate && c.annualExpiry
             ? Math.max(1, dayjs(c.annualExpiry).diff(dayjs(c.annualLastDate), "month"))
-            : 12,
+            : DEFAULT_ANNUAL_INTERVAL_MONTHS,
         maintLastDate: c.maintLastDate || "",
         maintIntervalDays: c.maintIntervalDays ?? undefined,
         maintIntervalKm: c.maintIntervalKm ?? undefined,
@@ -1074,7 +976,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       target.scrollIntoView({ block: "start", behavior: "smooth" });
       setEditScrollTarget(null);
     };
-    const t = window.setTimeout(run, 60);
+    const t = window.setTimeout(run, VEHICLE_MODAL_SCROLL_WAIT_MS);
     return () => window.clearTimeout(t);
   }, [open, editScrollTarget, editTab]);
 
@@ -1165,6 +1067,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     const currentVehicle = viewVehicleRef.current;
     if (!currentVehicle || source === "other") return true;
     const normalizedNextKeys = normalizeAttachmentKeys(nextKeys);
+    const parsed = parseRemarkMeta(currentVehicle.remark);
+    const { nextAllInsuranceKeys, nextMeta } = computeNextAttachmentMeta(parsed, source, normalizedNextKeys, normalizeAttachmentKeys);
 
     if (source === "insuranceCompulsory" || source === "insuranceCommercial") {
       let cycleSnapshot = viewCycle;
@@ -1185,7 +1089,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         insuranceVendor: cycleSnapshot.insuranceVendor || null,
         insuranceStart: cycleSnapshot.insuranceStart || null,
         insuranceExpiry: cycleSnapshot.insuranceExpiry || null,
-        insuranceAttachmentKey: normalizedNextKeys[0] || null,
+        insuranceAttachmentKey: nextAllInsuranceKeys[0] || null,
         annualLastDate: cycleSnapshot.annualLastDate || null,
         annualExpiry: cycleSnapshot.annualExpiry || null,
         maintLastDate: cycleSnapshot.maintLastDate || null,
@@ -1200,41 +1104,19 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       }
     }
 
-    const parsed = parseRemarkMeta(currentVehicle.remark);
-    const nextCompulsoryKeys = source === "insuranceCompulsory" ? normalizedNextKeys : parsed.insuranceCompulsoryAttachmentKeys;
-    const nextCommercialKeys = source === "insuranceCommercial" ? normalizedNextKeys : parsed.insuranceCommercialAttachmentKeys;
-    const nextAllInsuranceKeys = normalizeAttachmentKeys([...nextCompulsoryKeys, ...nextCommercialKeys]);
-    const nextMeta = {
-      ...parsed,
-      drivingLicenseAttachmentKeys:
-        source === "driving" ? normalizedNextKeys : parsed.drivingLicenseAttachmentKeys,
-      drivingLicenseAttachmentKey:
-        source === "driving" ? (normalizedNextKeys[0] || "") : parsed.drivingLicenseAttachmentKey,
-      insuranceAttachmentKeys: nextAllInsuranceKeys,
-      insuranceCompulsoryAttachmentKeys: nextCompulsoryKeys,
-      insuranceCommercialAttachmentKeys: nextCommercialKeys,
-    };
-    const nextRemark = composeVehicleRemark(nextMeta) || null;
-    const res = await requestUpsertVehicle(currentVehicle.id, {
-      plateNo: currentVehicle.plateNo,
-      vehicleType: currentVehicle.vehicleType,
-      brandModel: currentVehicle.brandModel,
-      vin: currentVehicle.vin,
-      engineNo: currentVehicle.engineNo,
-      regDate: currentVehicle.regDate,
-      loadSpec: currentVehicle.loadSpec,
-      usageNature: currentVehicle.usageNature,
-      ownerDept: currentVehicle.ownerDept,
-      ownerPerson: currentVehicle.ownerPerson,
-      mileage: currentVehicle.mileage,
-      purchaseDate: currentVehicle.purchaseDate,
-      purchaseCost: currentVehicle.purchaseCost,
-      serviceLifeYears: currentVehicle.serviceLifeYears,
-      scrapDate: currentVehicle.scrapDate,
-      disposalMethod: currentVehicle.disposalMethod,
-      status: currentVehicle.status,
-      remark: nextRemark,
-    });
+    const nextRemark = buildMergedRemark({
+      remark: nextMeta.remarkBody,
+      archiveNo: nextMeta.archiveNo,
+      ownerName: nextMeta.ownerName,
+      issueDate: nextMeta.issueDate,
+      ownerAddress: nextMeta.ownerAddress,
+      drivingLicenseAttachmentKey: nextMeta.drivingLicenseAttachmentKey,
+      drivingLicenseAttachmentKeys: nextMeta.drivingLicenseAttachmentKeys,
+      insuranceAllAttachmentKeys: nextMeta.insuranceAttachmentKeys,
+      insuranceCompulsoryAttachmentKeys: nextMeta.insuranceCompulsoryAttachmentKeys,
+      insuranceCommercialAttachmentKeys: nextMeta.insuranceCommercialAttachmentKeys,
+    }) || null;
+    const res = await requestUpsertVehicle(currentVehicle.id, buildVehicleRemarkUpsertPayload(currentVehicle, nextRemark));
     if (!res.ok) {
       message.error(res.error.message || "附件更新失败");
       return false;
@@ -1245,7 +1127,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
       setCyclesByVehicleId((prev) => ({
         ...prev,
         [currentVehicle.id]: prev[currentVehicle.id]
-          ? { ...prev[currentVehicle.id]!, insuranceAttachmentKey: normalizedNextKeys[0] || null }
+          ? { ...prev[currentVehicle.id]!, insuranceAttachmentKey: nextAllInsuranceKeys[0] || null }
           : prev[currentVehicle.id],
       }));
     }
@@ -1782,8 +1664,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
           const prevInsuranceAttachmentKey = viewCycle?.insuranceAttachmentKey ?? null;
 
           if (viewerSource === "insuranceCompulsory" || viewerSource === "insuranceCommercial") {
-            setViewInsuranceKeys(nextKeys);
-            setViewCycle((prev) => (prev ? { ...prev, insuranceAttachmentKey: nextKeys[0] || null } : prev));
+            const currentRemark = viewVehicleRef.current?.remark;
+            const parsed = parseRemarkMeta(currentRemark);
+            const nextCompulsory = viewerSource === "insuranceCompulsory" ? nextKeys : parsed.insuranceCompulsoryAttachmentKeys;
+            const nextCommercial = viewerSource === "insuranceCommercial" ? nextKeys : parsed.insuranceCommercialAttachmentKeys;
+            const merged = normalizeAttachmentKeys([...nextCompulsory, ...nextCommercial]);
+            setViewInsuranceKeys(merged);
+            setViewCycle((prev) => (prev ? { ...prev, insuranceAttachmentKey: merged[0] || null } : prev));
           }
           if (viewerSource === "driving") {
             setViewDrivingLicenseKeys(nextKeys);
@@ -1902,7 +1789,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                         <Controller
                           name="energyType"
                           control={control}
-                          render={({ field }) => <Select {...field} allowClear options={energyTypeOptions} placeholder="请选择能源类型" />}
+                          render={({ field }) => (
+                            <Select
+                              {...field}
+                              allowClear
+                              options={energyTypeOptions}
+                              placeholder="请选择能源类型"
+                              onChange={(next) => {
+                                field.onChange(next);
+                                form.setFieldValue("energyType", next);
+                              }}
+                            />
+                          )}
                         />
                       </Form.Item>
                     </Col>
@@ -1923,7 +1821,18 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                         <Controller
                           name="usageNature"
                           control={control}
-                          render={({ field }) => <Select {...field} allowClear options={usageNatureOptions} placeholder="如：营运/非营运" />}
+                          render={({ field }) => (
+                            <Select
+                              {...field}
+                              allowClear
+                              options={usageNatureOptions}
+                              placeholder="如：营运/非营运"
+                              onChange={(next) => {
+                                field.onChange(next);
+                                form.setFieldValue("usageNature", next);
+                              }}
+                            />
+                          )}
                         />
                       </Form.Item>
                     </Col>
@@ -1949,14 +1858,14 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             <div className="relative">
                               <Input
                                 {...field}
-                                placeholder="17 位 VIN"
-                                maxLength={17}
+                                placeholder={`${VIN_LENGTH} 位 VIN`}
+                                maxLength={VIN_LENGTH}
                                 className="pr-16"
                                 onChange={(e) => {
                                   const value = e.target.value.toUpperCase().replace(/\s+/g, "");
                                   field.onChange(value);
-                                  setVinCountHint(`${value.length}/17`);
-                                  if (value.length === 17) {
+                                  setVinCountHint(`${value.length}/${VIN_LENGTH}`);
+                                  if (value.length === VIN_LENGTH) {
                                     window.setTimeout(() => engineNoInputRef.current?.focus(), 0);
                                   }
                                   if (!value) {
@@ -1968,13 +1877,13 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                                 onBlur={(e) => {
                                   const value = (e.target.value ?? "").toUpperCase().replace(/\s+/g, "");
                                   field.onChange(value);
-                                  setVinCountHint(`${value.length}/17`);
+                                  setVinCountHint(`${value.length}/${VIN_LENGTH}`);
                                   if (!value) {
                                     setVinHint("");
                                     return;
                                   }
                                   if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(value)) {
-                                    setVinHint("VIN 必须为 17 位字母数字，且不含 I/O/Q");
+                                    setVinHint(`VIN 必须为 ${VIN_LENGTH} 位字母数字，且不含 I/O/Q`);
                                     return;
                                   }
                                   setVinHint("");
@@ -2350,10 +2259,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             onUploaded={(key) => {
                               setRhfValue("drivingLicenseAttachmentKey", key);
                               form.setFieldValue("drivingLicenseAttachmentKey", key);
-                              const prev = (form.getFieldValue("drivingLicenseAttachmentKeys") as string[] | undefined) ?? [];
-                              const next = [...prev, key].map((x) => String(x ?? "").trim()).filter(Boolean);
-                              const uniq = next.filter((k, idx) => next.indexOf(k) === idx);
-                              form.setFieldValue("drivingLicenseAttachmentKeys", uniq.slice(0, 50));
+                              const next = appendAttachmentKeys("drivingLicenseAttachmentKeys", key);
+                              form.setFieldValue("drivingLicenseAttachmentKeys", next);
                             }}
                             description="拖拽或点击上传行驶证扫描件（图片/PDF）"
                           />
@@ -2398,13 +2305,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             value={form.getFieldValue("insuranceAttachmentKey")}
                             keys={(form.getFieldValue("insuranceCompulsoryAttachmentKeys") as string[] | undefined) ?? []}
                             onUploaded={(key) => {
-                              const prevComp = (form.getFieldValue("insuranceCompulsoryAttachmentKeys") as string[] | undefined) ?? [];
-                              const nextComp = normalizeAttachmentKeys([...prevComp, key]);
+                              const nextComp = appendAttachmentKeys("insuranceCompulsoryAttachmentKeys", key);
                               const prevCom = (form.getFieldValue("insuranceCommercialAttachmentKeys") as string[] | undefined) ?? [];
-                              const merged = normalizeAttachmentKeys([...nextComp, ...prevCom]);
-                              form.setFieldValue("insuranceCompulsoryAttachmentKeys", nextComp);
-                              form.setFieldValue("insuranceAttachmentKeys", merged);
-                              form.setFieldValue("insuranceAttachmentKey", merged[0] || "");
+                              syncInsuranceAttachmentFields(nextComp, prevCom);
                             }}
                             description="拖拽或点击上传交强险附件"
                           />
@@ -2436,13 +2339,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             value={form.getFieldValue("insuranceAttachmentKey")}
                             keys={(form.getFieldValue("insuranceCommercialAttachmentKeys") as string[] | undefined) ?? []}
                             onUploaded={(key) => {
-                              const prevCom = (form.getFieldValue("insuranceCommercialAttachmentKeys") as string[] | undefined) ?? [];
-                              const nextCom = normalizeAttachmentKeys([...prevCom, key]);
+                              const nextCom = appendAttachmentKeys("insuranceCommercialAttachmentKeys", key);
                               const prevComp = (form.getFieldValue("insuranceCompulsoryAttachmentKeys") as string[] | undefined) ?? [];
-                              const merged = normalizeAttachmentKeys([...prevComp, ...nextCom]);
-                              form.setFieldValue("insuranceCommercialAttachmentKeys", nextCom);
-                              form.setFieldValue("insuranceAttachmentKeys", merged);
-                              form.setFieldValue("insuranceAttachmentKey", merged[0] || "");
+                              syncInsuranceAttachmentFields(prevComp, nextCom);
                             }}
                             description="拖拽或点击上传商业险附件"
                           />
@@ -2470,8 +2369,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             size="small"
                             className={actionBtn.secondary}
                             onClick={() => {
-                              const base = String(form.getFieldValue("annualExpiry") ?? "").trim();
-                              const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? 12;
+                              const base = toYmd(form.getFieldValue("annualExpiry"));
+                              const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? DEFAULT_ANNUAL_INTERVAL_MONTHS;
                               if (!base) return message.warning("请先填写当前年审到期日");
                               const next = calcAnnualExpiry(base, months);
                               if (!next) return message.warning("请检查到期日或周期（月）");
@@ -2485,8 +2384,8 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                             size="small"
                             className={actionBtn.secondary}
                             onClick={() => {
-                              const last = String(form.getFieldValue("annualLastDate") ?? "").trim();
-                              const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? 12;
+                              const last = toYmd(form.getFieldValue("annualLastDate"));
+                              const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? DEFAULT_ANNUAL_INTERVAL_MONTHS;
                               if (!last) return message.warning("请先填写上次审车日期");
                               const next = calcAnnualExpiry(last, months);
                               if (!next) return message.warning("请检查日期或周期（月）");
@@ -2506,7 +2405,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                           placeholder="选择上次审车日期"
                           onChange={(v) => {
                             form.setFieldValue("annualLastDate", v);
-                            const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? 12;
+                            const months = normalizePositiveInteger(form.getFieldValue("annualIntervalMonths")) ?? DEFAULT_ANNUAL_INTERVAL_MONTHS;
                             if (!v) return;
                             const next = calcAnnualExpiry(dayjs(v).format("YYYY-MM-DD"), months);
                             if (next) form.setFieldValue("annualExpiry", dayjs(next, "YYYY-MM-DD"));
@@ -2520,7 +2419,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item label="年审周期（月）" name="annualIntervalMonths" initialValue={12}>
+                      <Form.Item label="年审周期（月）" name="annualIntervalMonths" initialValue={DEFAULT_ANNUAL_INTERVAL_MONTHS}>
                         <Input
                           inputMode="numeric"
                           placeholder="默认 12"
