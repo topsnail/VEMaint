@@ -112,9 +112,14 @@ function xlsxResponse(
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   const file = XLSX.write(wb, { bookType: "xlsx", type: "array" });
 
+  const asciiFallback = filename
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/"/g, "")
+    .replace(/[\\\/]/g, "_");
+  const encodedFilename = encodeURIComponent(filename);
   const headers = new Headers();
   headers.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  headers.set("Content-Disposition", `attachment; filename="${filename}"`);
+  headers.set("Content-Disposition", `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`);
   headers.set("Cache-Control", "no-store");
   return new Response(file, { status: 200, headers });
 }
