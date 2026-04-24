@@ -1,14 +1,14 @@
-import { App, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Space, Table, Tabs, Typography } from "@/components/ui/legacy";
-import { useEffect, useState } from "react";
+import { App, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Typography } from "@/components/ui/legacy";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUser } from "../lib/auth";
+import { requestOperationReason } from "../lib/operationReason";
 import { PageContainer } from "../components/PageContainer";
 import { useConfigSettings } from "../hooks/useConfigSettings";
-import { downloadProtectedFile } from "../lib/http";
+import { apiFetch, downloadProtectedFile } from "../lib/http";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
 import { MinusCircle, Plus, Users } from "lucide-react";
-import { AttachmentViewer } from "../components/AttachmentViewer";
 
 type ConfigForm = {
   siteName: string;
@@ -26,6 +26,70 @@ type ConfigForm = {
 
 type ConfigFormValues = ConfigForm & {
   ownerDirectory: Array<{ name?: string; address?: string }>;
+};
+
+type OperationLogRow = {
+  id: string;
+  actorUserId: string | null;
+  actorUsername: string | null;
+  action: string;
+  target: string | null;
+  detail: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  reason: string | null;
+  createdAt: string;
+};
+
+type DisplayLogRow = OperationLogRow & {
+  repeatCount?: number;
+  summary?: string;
+};
+
+const LOG_ACTION_LABELS: Record<string, string> = {
+  "auth.login": "登录",
+  "auth.logout": "退出登录",
+  "vehicle.create": "新增车辆",
+  "vehicle.update": "更新车辆",
+  "vehicle.status": "修改车辆状态",
+  "vehicle.cycle.update": "更新车辆周期",
+  "maintenance.create": "新增维保",
+  "maintenance.update": "更新维保",
+  "maintenance.delete": "删除维保",
+  "user.create": "新增用户",
+  "user.role": "修改用户角色",
+  "user.password": "重置用户密码",
+  "user.disabled": "启停用户",
+  "user.delete": "删除用户",
+  "profile.password": "修改个人密码",
+};
+
+const LOG_FIELD_LABELS: Record<string, string> = {
+  id: "ID",
+  userId: "用户ID",
+  username: "用户名",
+  role: "角色",
+  disabled: "是否禁用",
+  status: "状态",
+  plateNo: "车牌号",
+  brandModel: "品牌型号",
+  vehicleId: "车辆ID",
+  equipmentName: "设备名称",
+  targetType: "关联类型",
+  maintenanceType: "维保类型",
+  itemDesc: "维保项目",
+  cost: "费用",
+  vendor: "服务商",
+  resultStatus: "结果状态",
+  ownerDept: "使用部门",
+  ownerPerson: "使用人",
+  mileage: "当前里程",
+  attachmentKey: "附件Key",
+  attachmentKeys: "附件列表",
+  before: "变更前",
+  after: "变更后",
+  old: "旧值",
+  new: "新值",
 };
 
 const FIXED_ENUMS: Array<{ key: string; label: string; options: string[] }> = [
@@ -76,7 +140,21 @@ export function ConfigPage() {
   const { fetchConfig, saveConfig } = useConfigSettings();
   const [currentDropdowns, setCurrentDropdowns] = useState<Record<string, string[]>>({});
   const [rolePermissions, setRolePermissions] = useState<RolePermissions>(() => normalizeRolePermissions(null));
-  const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsRows, setLogsRows] = useState<OperationLogRow[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logsOffset, setLogsOffset] = useState(0);
+  const [logQ, setLogQ] = useState("");
+  const [logActor, setLogActor] = useState("");
+  const [logAction, setLogAction] = useState("");
+  const [logFrom, setLogFrom] = useState("");
+  const [logTo, setLogTo] = useState("");
+  const [logRiskOnly, setLogRiskOnly] = useState(false);
+  const [logChangedOnly, setLogChangedOnly] = useState(true);
+  const [logActionGroup, setLogActionGroup] = useState<"" | "auth" | "vehicle" | "maintenance" | "user" | "config">("");
+  const [detailRow, setDetailRow] = useState<DisplayLogRow | null>(null);
+  const LOG_PAGE_SIZE = 100;
   const me = getUser();
   const nav = useNavigate();
   const canManageUsers = me ? hasPerm(me.role, "user.manage", rolePermissions) : false;
@@ -141,7 +219,9 @@ export function ConfigPage() {
         roles: normalizedPermissions,
       },
     };
-    const res = await saveConfig(payload);
+    const reason = await requestOperationReason("请输入保存系统配置的理由");
+    if (!reason) return;
+    const res = await saveConfig(payload, reason);
     if (!res.ok) return message.error(res.error.message);
     setRolePermissions(normalizedPermissions);
     message.success("保存成功");
@@ -176,9 +256,251 @@ export function ConfigPage() {
     if (!res.ok) message.error(res.error.message);
   };
 
-  const handleOpenLogs = async () => {
-    setViewerPath("/logs");
+  const loadLogs = async (nextOffset = 0, append = false) => {
+    setLogsLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("limit", String(LOG_PAGE_SIZE));
+      qs.set("offset", String(nextOffset));
+      if (logQ.trim()) qs.set("q", logQ.trim());
+      if (logActor.trim()) qs.set("actor", logActor.trim());
+      if (logAction.trim()) qs.set("action", logAction.trim());
+      if (logActionGroup.trim()) qs.set("actionPrefix", `${logActionGroup.trim()}.`);
+      if (logFrom.trim()) qs.set("from", logFrom.trim());
+      if (logTo.trim()) qs.set("to", logTo.trim());
+      if (logRiskOnly) qs.set("riskOnly", "1");
+      const res = await apiFetch<{ logs: OperationLogRow[]; total: number }>(`/logs?${qs.toString()}`);
+      if (!res.ok) {
+        message.error(res.error.message || "日志加载失败");
+        return;
+      }
+      setLogsTotal(Number(res.data.total ?? 0));
+      setLogsOffset(nextOffset + (res.data.logs?.length ?? 0));
+      setLogsRows((prev) => (append ? [...prev, ...(res.data.logs ?? [])] : res.data.logs ?? []));
+    } finally {
+      setLogsLoading(false);
+    }
   };
+
+  const handleOpenLogs = async () => {
+    setLogsOpen(true);
+  };
+
+  const resetLogFilters = () => {
+    setLogQ("");
+    setLogActor("");
+    setLogAction("");
+    setLogFrom("");
+    setLogTo("");
+    setLogRiskOnly(false);
+    setLogChangedOnly(true);
+    setLogActionGroup("");
+    setLogsRows([]);
+    setLogsOffset(0);
+  };
+
+  useEffect(() => {
+    if (!logsOpen) return;
+    const timer = window.setTimeout(() => {
+      void loadLogs(0, false);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [logsOpen, logQ, logActor, logAction, logActionGroup, logFrom, logTo, logRiskOnly]);
+
+  const actionOptions = useMemo(
+    () => [
+      { value: "", label: "全部动作" },
+      { value: "auth.login", label: "登录" },
+      { value: "auth.logout", label: "退出登录" },
+      { value: "vehicle.create", label: "新增车辆" },
+      { value: "vehicle.update", label: "更新车辆" },
+      { value: "vehicle.status", label: "修改车辆状态" },
+      { value: "vehicle.cycle.update", label: "更新车辆周期" },
+      { value: "maintenance.create", label: "新增维保" },
+      { value: "maintenance.update", label: "更新维保" },
+      { value: "maintenance.delete", label: "删除维保" },
+      { value: "user.create", label: "新增用户" },
+      { value: "user.role", label: "修改用户角色" },
+      { value: "user.password", label: "重置用户密码" },
+      { value: "user.disabled", label: "启停用户" },
+      { value: "user.delete", label: "删除用户" },
+      { value: "profile.password", label: "修改个人密码" },
+    ],
+    [],
+  );
+
+  const isRiskAction = (action: string) =>
+    action.endsWith(".delete") ||
+    action.endsWith(".password") ||
+    action.endsWith(".role") ||
+    action.endsWith(".disabled") ||
+    action.startsWith("config.");
+
+  const maskSensitive = (text: string) => {
+    return text
+      .replace(/(\"password\"\s*:\s*\")([^\"]+)(\")/gi, '$1******$3')
+      .replace(/(\"token\"\s*:\s*\")([^\"]+)(\")/gi, '$1******$3')
+      .replace(/(\"csrfToken\"\s*:\s*\")([^\"]+)(\")/gi, '$1******$3')
+      .replace(/(\"jti\"\s*:\s*\")([^\"]+)(\")/gi, '$1******$3')
+      .replace(/(\"phone\"\s*:\s*\")(\d{3})\d{4}(\d{4}\")/gi, '$1$2****$3');
+  };
+
+  const localizeFieldName = (key: string) => LOG_FIELD_LABELS[key] ?? key;
+  const localizeAction = (action: string) => LOG_ACTION_LABELS[action] ?? action;
+  const summarizeLog = (row: OperationLogRow) => {
+    const actor = row.actorUsername || "系统";
+    const act = localizeAction(row.action);
+    const target = row.target ? `（对象：${row.target}）` : "";
+    return `${actor}${act}${target}`;
+  };
+  const localizeValue = (fieldKey: string, value: unknown) => {
+    if (value == null || value === "") return "-";
+    if (typeof value === "boolean") return value ? "是" : "否";
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+    if (fieldKey === "role") {
+      if (text === "admin") return "管理员";
+      if (text === "maintainer") return "维保员";
+      if (text === "reader") return "只读";
+    }
+    if (fieldKey === "status") {
+      if (text === "normal") return "正常";
+      if (text === "repairing") return "维修中";
+      if (text === "stopped") return "停用";
+      if (text === "scrapped") return "报废";
+    }
+    if (fieldKey === "targetType") {
+      if (text === "vehicle") return "车辆";
+      if (text === "equipment") return "设备";
+      if (text === "other") return "其他";
+    }
+    if (fieldKey === "maintenanceType") {
+      if (text === "routine") return "日常保养";
+      if (text === "fault") return "故障维修";
+      if (text === "accident") return "事故维修";
+      if (text === "periodic") return "定期检修";
+    }
+    if (fieldKey === "resultStatus") {
+      if (text === "resolved") return "已修复";
+      if (text === "temporary") return "临时处理";
+      if (text === "pending") return "待复查";
+    }
+    return maskSensitive(text);
+  };
+
+  const tryParseObject = (input: unknown): Record<string, unknown> | null => {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+    return input as Record<string, unknown>;
+  };
+
+  const renderValueText = (v: unknown) => {
+    if (v == null || v === "") return "-";
+    if (typeof v === "object") return maskSensitive(JSON.stringify(v));
+    return maskSensitive(String(v));
+  };
+
+  const renderDetail = (raw: string | null) => {
+    if (!raw) return <span className="text-slate-400">-</span>;
+    const txt = String(raw);
+    try {
+      const obj = JSON.parse(txt) as Record<string, unknown>;
+      const beforeObj = tryParseObject((obj as Record<string, unknown>).before ?? (obj as Record<string, unknown>).old);
+      const afterObj = tryParseObject((obj as Record<string, unknown>).after ?? (obj as Record<string, unknown>).new);
+      if (beforeObj && afterObj) {
+        const allKeys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
+        const keys = allKeys
+          .filter((k) => {
+            if (!logChangedOnly) return true;
+            return JSON.stringify(beforeObj[k] ?? null) !== JSON.stringify(afterObj[k] ?? null);
+          })
+          .slice(0, 12);
+        if (keys.length === 0) {
+          return <span className="text-xs text-slate-500">无字段变更</span>;
+        }
+        return (
+          <div className="space-y-1">
+            {keys.map((k) => {
+              const before = beforeObj[k];
+              const after = afterObj[k];
+              const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
+              return (
+                <div
+                  key={k}
+                  className={`rounded-[6px] px-1.5 py-1 text-xs ${
+                    changed ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-slate-200 bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  <div className="mb-0.5 text-[11px] font-medium text-slate-500">{localizeFieldName(k)}</div>
+                  <div className="break-all">
+                    <span className="text-slate-500">旧：</span>
+                    <span className="font-medium">{localizeValue(k, before)}</span>
+                    <span className="mx-1 text-slate-400">→</span>
+                    <span className="text-slate-500">新：</span>
+                    <span className="font-medium">{localizeValue(k, after)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+      const keys = Object.keys(obj).slice(0, 6);
+      return (
+        <div className="space-y-0.5">
+          {keys.map((k) => (
+            <div key={k} className="text-xs text-slate-600">
+              <span className="text-slate-400">{localizeFieldName(k)}：</span>
+              <span className="break-all">{localizeValue(k, obj[k])}</span>
+            </div>
+          ))}
+        </div>
+      );
+    } catch {
+      return <span className="text-xs text-slate-600 break-all">{maskSensitive(txt)}</span>;
+    }
+  };
+
+  const jumpByLog = (row: OperationLogRow) => {
+    if (row.action.startsWith("vehicle.")) {
+      if (row.target) nav(`/vehicles?q=${encodeURIComponent(row.target)}`);
+      else nav("/vehicles");
+      return;
+    }
+    if (row.action.startsWith("maintenance.")) {
+      if (row.target) nav(`/maintenance/vehicles?q=${encodeURIComponent(row.target)}`);
+      else nav("/maintenance/vehicles");
+      return;
+    }
+    if (row.action.startsWith("user.")) {
+      nav("/users");
+      return;
+    }
+    if (row.action.startsWith("config.")) {
+      nav("/config");
+      return;
+    }
+    if (row.action.startsWith("auth.") || row.action.startsWith("profile.")) {
+      nav("/profile");
+    }
+  };
+
+  const displayLogs = useMemo<DisplayLogRow[]>(() => {
+    const out: DisplayLogRow[] = [];
+    for (const row of logsRows) {
+      const prev = out[out.length - 1];
+      if (
+        prev &&
+        prev.actorUsername === row.actorUsername &&
+        prev.action === row.action &&
+        prev.target === row.target &&
+        Math.abs(new Date(prev.createdAt).getTime() - new Date(row.createdAt).getTime()) <= 120_000
+      ) {
+        prev.repeatCount = (prev.repeatCount ?? 1) + 1;
+        continue;
+      }
+      out.push({ ...row, repeatCount: 1, summary: summarizeLog(row) });
+    }
+    return out;
+  }, [logsRows]);
 
   return (
     <PageContainer
@@ -332,13 +654,13 @@ export function ConfigPage() {
               label: "数据导出与日志",
               children: (
                 <Card size="small" title="数据导出与操作日志" className="ve-config-card">
-                  <Typography.Text type="secondary">支持导出 CSV，并查看系统操作日志。</Typography.Text>
+                  <Typography.Text type="secondary">支持导出 XLSX（已格式化列宽），并查看系统操作日志。</Typography.Text>
                   <div className="mt-1.5">
                     <Space wrap>
-                      <Button type="link" disabled={!canExportVehicles} className={actionBtn.link} onClick={() => void handleExport("/export/vehicles", "vehicles.csv")}>
+                      <Button type="link" disabled={!canExportVehicles} className={actionBtn.link} onClick={() => void handleExport("/export/vehicles", "车辆台账.xlsx")}>
                         导出车辆
                       </Button>
-                      <Button type="link" disabled={!canExportMaintenance} className={actionBtn.link} onClick={() => void handleExport("/export/maintenance", "maintenance.csv")}>
+                      <Button type="link" disabled={!canExportMaintenance} className={actionBtn.link} onClick={() => void handleExport("/export/maintenance", "维保记录.xlsx")}>
                         导出维保
                       </Button>
                       <Button type="link" disabled={!canViewLogs} className={actionBtn.link} onClick={() => void handleOpenLogs()}>
@@ -452,7 +774,219 @@ export function ConfigPage() {
           </Button>
         </div>
       </Form>
-      <AttachmentViewer open={!!viewerPath} path={viewerPath} title="操作日志" onClose={() => setViewerPath(null)} />
+      <Modal
+        open={logsOpen}
+        centered
+        title="系统操作日志"
+        width={1080}
+        onCancel={() => setLogsOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setLogsOpen(false)}>关闭</Button>
+          </Space>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded-[6px] border border-slate-200 bg-slate-50 p-2">
+            <div className="grid grid-cols-1 gap-1.5 md:grid-cols-3 lg:grid-cols-6">
+              <Input value={logQ} onChange={(e) => setLogQ(e.target.value)} placeholder="关键词（用户/动作/对象/详情）" />
+              <Input value={logActor} onChange={(e) => setLogActor(e.target.value)} placeholder="操作人" />
+              <Select options={actionOptions} value={logAction} onChange={(v) => setLogAction(String(v ?? ""))} />
+              <div className="flex flex-wrap items-center gap-1">
+                {[
+                  { key: "", label: "全部分组" },
+                  { key: "auth", label: "认证" },
+                  { key: "vehicle", label: "车辆" },
+                  { key: "maintenance", label: "维保" },
+                  { key: "user", label: "用户" },
+                  { key: "config", label: "配置" },
+                ].map((g) => (
+                  <Button
+                    key={g.key || "all"}
+                    size="small"
+                    className={`h-5 rounded-[6px] px-1.5 text-[11px] ${
+                      logActionGroup === g.key
+                        ? "border border-slate-300 bg-slate-900 text-white hover:bg-slate-800"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                    onClick={() => setLogActionGroup(g.key as typeof logActionGroup)}
+                  >
+                    {g.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox checked={logRiskOnly} onChange={(e) => setLogRiskOnly(!!e.target.checked)} />
+                <span className="text-xs text-slate-600">仅风险操作</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox checked={logChangedOnly} onChange={(e) => setLogChangedOnly(!!e.target.checked)} />
+                <span className="text-xs text-slate-600">仅看有字段变化</span>
+              </div>
+              <Input type="date" value={logFrom} onChange={(e) => setLogFrom(e.target.value)} />
+              <Input type="date" value={logTo} onChange={(e) => setLogTo(e.target.value)} />
+              <Space>
+                <Button onClick={() => void loadLogs(0, false)} loading={logsLoading} className={actionBtn.smallNeutral}>
+                  查询
+                </Button>
+                <Button onClick={() => void resetLogFilters()} className={actionBtn.smallNeutral}>
+                  重置
+                </Button>
+              </Space>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500">
+            总计 <span className="tabular-nums font-medium text-slate-700">{logsTotal}</span> 条，时间按本地时区显示（北京时间）。
+          </div>
+
+          <Table
+            size="small"
+            pagination={false}
+            rowKey={(r: DisplayLogRow) => r.id}
+            dataSource={displayLogs}
+            columns={[
+              {
+                title: "时间",
+                dataIndex: "createdAt",
+                width: 170,
+                render: (v: string) => <span className="tabular-nums text-xs">{v?.replace("T", " ").slice(0, 19) || "-"}</span>,
+              },
+              {
+                title: "操作人",
+                dataIndex: "actorUsername",
+                width: 110,
+                render: (v: string | null) => <span className="text-sm">{v || "-"}</span>,
+              },
+              {
+                title: "摘要",
+                dataIndex: "summary",
+                width: 240,
+                render: (v: string, row: DisplayLogRow) => (
+                  <span className="text-xs text-slate-700">
+                    {v}
+                    {(row.repeatCount ?? 1) > 1 ? (
+                      <span className="ml-1 inline-flex rounded-[6px] bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                        x{row.repeatCount}
+                      </span>
+                    ) : null}
+                  </span>
+                ),
+              },
+              {
+                title: "动作",
+                dataIndex: "action",
+                width: 170,
+                render: (v: string) =>
+                  isRiskAction(v) ? (
+                    <span className="inline-flex rounded-[6px] bg-red-50 px-1.5 py-0.5 text-xs text-red-700">{localizeAction(v)}</span>
+                  ) : (
+                    <span className="text-xs text-slate-700">{localizeAction(v)}</span>
+                  ),
+              },
+              {
+                title: "对象",
+                dataIndex: "target",
+                width: 170,
+                render: (v: string | null) => <span className="font-mono text-xs text-slate-600">{v || "-"}</span>,
+              },
+              {
+                title: "详情",
+                dataIndex: "detail",
+                render: (v: string | null) => renderDetail(v),
+              },
+              {
+                title: "来源",
+                width: 140,
+                render: (_: unknown, row: DisplayLogRow) => (
+                  <div className="space-y-0.5 text-[11px] text-slate-500">
+                    <div className="truncate" title={row.ip || "-"}>
+                      IP：{row.ip || "-"}
+                    </div>
+                    <div className="truncate" title={row.reason || "-"}>
+                      理由：{row.reason || "-"}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                title: "跳转",
+                width: 136,
+                className: "text-center",
+                render: (_: unknown, row: DisplayLogRow) => (
+                  <Space size={4}>
+                    <Button size="small" className={actionBtn.smallNeutral} onClick={() => jumpByLog(row)}>
+                      跳转
+                    </Button>
+                    <Button size="small" className={actionBtn.smallNeutral} onClick={() => setDetailRow(row)}>
+                      详情
+                    </Button>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+
+          {displayLogs.length < logsTotal ? (
+            <div className="flex justify-center">
+              <Button
+                onClick={() => void loadLogs(logsOffset, true)}
+                loading={logsLoading}
+                className={actionBtn.smallNeutral}
+              >
+                加载更多
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+      <Modal
+        open={!!detailRow}
+        centered
+        title="日志详情"
+        width={760}
+        onCancel={() => setDetailRow(null)}
+        footer={
+          <Space>
+            <Button onClick={() => setDetailRow(null)}>关闭</Button>
+          </Space>
+        }
+      >
+        {detailRow ? (
+          <div className="space-y-2 text-sm">
+            <div className="rounded-[6px] border border-slate-200 bg-slate-50 p-2">
+              <div className="text-xs text-slate-500">摘要</div>
+              <div className="mt-0.5 text-sm text-slate-700">{detailRow.summary}</div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="rounded-[6px] border border-slate-200 p-2">
+                <div className="text-xs text-slate-500">动作</div>
+                <div>{localizeAction(detailRow.action)}</div>
+              </div>
+              <div className="rounded-[6px] border border-slate-200 p-2">
+                <div className="text-xs text-slate-500">操作时间</div>
+                <div className="tabular-nums">{detailRow.createdAt?.replace("T", " ").slice(0, 19) || "-"}</div>
+              </div>
+              <div className="rounded-[6px] border border-slate-200 p-2">
+                <div className="text-xs text-slate-500">来源 IP</div>
+                <div className="font-mono text-xs">{detailRow.ip || "-"}</div>
+              </div>
+              <div className="rounded-[6px] border border-slate-200 p-2">
+                <div className="text-xs text-slate-500">操作理由</div>
+                <div>{detailRow.reason || "-"}</div>
+              </div>
+            </div>
+            <div className="rounded-[6px] border border-slate-200 p-2">
+              <div className="text-xs text-slate-500">User-Agent</div>
+              <div className="mt-0.5 break-all text-xs text-slate-700">{detailRow.userAgent || "-"}</div>
+            </div>
+            <div className="rounded-[6px] border border-slate-200 p-2">
+              <div className="mb-1 text-xs text-slate-500">变更详情</div>
+              {renderDetail(detailRow.detail)}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
     </PageContainer>
   );

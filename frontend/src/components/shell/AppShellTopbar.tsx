@@ -53,6 +53,8 @@ export type AppShellTopbarAccountProps = {
   username: string;
   roleLabel?: string;
   notificationCount: number;
+  notificationAriaLabel?: string;
+  notificationAcknowledged?: boolean;
   onNotificationsClick: () => void;
   onProfile: () => void;
   onLogout: () => void;
@@ -63,18 +65,29 @@ export function AppShellTopbarAccount({
   username,
   roleLabel,
   notificationCount,
+  notificationAriaLabel,
+  notificationAcknowledged = false,
   onNotificationsClick,
   onProfile,
   onLogout,
 }: AppShellTopbarAccountProps) {
+  const hasUnread = notificationCount > 0;
   return (
     <div className="flex items-center gap-2">
+      <span className="sr-only" aria-live="polite">
+        {notificationAriaLabel ?? `通知，当前 ${notificationCount} 条`}
+      </span>
       <Badge count={notificationCount} size="small" overflowCount={99} offset={[6, -4]}>
         <Button
           type="text"
           shape="circle"
           icon={<Bell className="h-5 w-5" strokeWidth={1.7} />}
-          className="!text-[20px] !text-[#6B7280] hover:!bg-[#F3F4F6] hover:!text-[#1F2937]"
+          aria-label={notificationAriaLabel ?? `通知，当前 ${notificationCount} 条`}
+          className={`h-7 w-7 !text-[20px] hover:!bg-[#F3F4F6] ${
+            hasUnread && !notificationAcknowledged
+              ? "!text-[#DC2626] ring-[0.5px] ring-red-200 hover:!text-[#B91C1C]"
+              : "!text-[#6B7280] hover:!text-[#1F2937]"
+          }`}
           onClick={onNotificationsClick}
         />
       </Badge>

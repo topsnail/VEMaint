@@ -29,21 +29,21 @@ const statusTone = (actionStatus: string | undefined): "success" | "info" | "neu
 };
 
 export const AlertItem: React.FC<AlertItemProps> = React.memo(({ item, onAction }) => (
-  <div className="border-b border-slate-100 px-3 py-1.5 transition-colors last:border-b-0 hover:bg-slate-50">
-    <div className="flex w-full flex-wrap items-center gap-1.5">
+  <div className="border-b border-slate-100 px-2.5 py-1 transition-colors last:border-b-0 hover:bg-slate-50">
+    <div className="flex min-h-8 w-full items-center gap-1.5">
       <StatusPill
         tone={levelTone(item.level)}
-        label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
+        label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内" : "30天内"}
       />
       <span className="font-medium text-slate-900">{item.plateNo}</span>
-      <span className="text-sm text-slate-500">{item.type}</span>
+      <span className="truncate text-xs text-slate-500">{item.type}</span>
       {typeof item.days === "number" && (
-        <span className="rounded-[6px] bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+        <span className="rounded-[6px] bg-slate-100 px-1.5 py-0 text-[11px] text-slate-600">
           {item.days} 天
         </span>
       )}
       {typeof item.kmLeft === "number" && (
-        <span className="rounded-[6px] bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+        <span className="rounded-[6px] bg-slate-100 px-1.5 py-0 text-[11px] text-slate-600">
           {item.kmLeft} km
         </span>
       )}
@@ -54,8 +54,8 @@ export const AlertItem: React.FC<AlertItemProps> = React.memo(({ item, onAction 
         }
       />
       <div className="ml-auto">
-        <Button variant="ghost" size="sm" onClick={onAction} className="h-6 px-2 text-blue-700 hover:bg-blue-50 hover:text-blue-800">
-        处理
+        <Button variant="ghost" size="sm" onClick={onAction} className="h-6 px-1.5 text-xs text-blue-700 hover:bg-blue-50 hover:text-blue-800">
+          处理
         </Button>
       </div>
     </div>

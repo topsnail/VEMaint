@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { validateBody } from "../lib/request";
 import { hashPassword } from "../lib/password";
 import { requireAuth } from "../middleware/require-auth";
@@ -9,10 +9,18 @@ import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 import { userCreateBodySchema, userDisabledBodySchema, userPasswordBodySchema, userRoleBodySchema } from "../lib/validation";
+import { requireOpReason } from "../lib/op-reason";
 
 export const usersRoute = new Hono<AppEnv>();
 usersRoute.use("/api/users/*", requireAuth, permitPerm("user.manage"));
 usersRoute.use("/api/users", requireAuth, permitPerm("user.manage"));
+
+function getLogMeta(c: Context<AppEnv>) {
+  const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
+  const userAgent = c.req.header("user-agent") ?? null;
+  const reason = (c.req.header("x-op-reason") ?? "").trim() || null;
+  return { ip, userAgent, reason };
+}
 
 usersRoute.get("/api/users", async (c) => {
   const rows = await listUsers(c.env.DB);
@@ -28,7 +36,7 @@ usersRoute.post("/api/users", async (c) => {
   const passwordHash = await hashPassword(password);
   try {
     const id = await createUser(c.env.DB, { username, passwordHash, role });
-    await writeOperationLog(c.env.DB, c.get("auth"), "user.create", id, { username, role });
+    await writeOperationLog(c.env.DB, c.get("auth"), "user.create", id, { username, role }, getLogMeta(c));
     return jsonOk(c, { ok: true, id }, 201);
   } catch {
     return jsonError(c, "CONFLICT", "用户名已存在", 409);
@@ -40,10 +48,12 @@ usersRoute.put("/api/users/:id/role", async (c) => {
   const parsed = await validateBody(c, userRoleBodySchema, "参数错误");
   if (!id) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
   if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   const role = parsed.data.role;
   if (id === c.get("auth").userId) return jsonError(c, "BAD_REQUEST", "不允许修改自己的角色", 400);
   await updateUserRole(c.env.DB, id, role);
-  await writeOperationLog(c.env.DB, c.get("auth"), "user.role", id, { role });
+  await writeOperationLog(c.env.DB, c.get("auth"), "user.role", id, { role }, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -52,10 +62,12 @@ usersRoute.put("/api/users/:id/password", async (c) => {
   const parsed = await validateBody(c, userPasswordBodySchema, "参数错误");
   if (!id) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
   if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   const password = parsed.data.password;
   const passwordHash = await hashPassword(password);
   await updateUserPassword(c.env.DB, id, passwordHash);
-  await writeOperationLog(c.env.DB, c.get("auth"), "user.password", id, null);
+  await writeOperationLog(c.env.DB, c.get("auth"), "user.password", id, null, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
@@ -64,19 +76,23 @@ usersRoute.put("/api/users/:id/disabled", async (c) => {
   const parsed = await validateBody(c, userDisabledBodySchema, "参数错误");
   if (!id) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
   if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   const disabled = parsed.data.disabled;
   if (id === c.get("auth").userId && disabled) return jsonError(c, "BAD_REQUEST", "不允许禁用当前登录账号", 400);
   await setUserDisabled(c.env.DB, id, disabled);
-  await writeOperationLog(c.env.DB, c.get("auth"), "user.disabled", id, { disabled });
+  await writeOperationLog(c.env.DB, c.get("auth"), "user.disabled", id, { disabled }, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
 usersRoute.delete("/api/users/:id", async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return jsonError(c, "BAD_REQUEST", "参数错误", 400);
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   if (id === c.get("auth").userId) return jsonError(c, "BAD_REQUEST", "不允许删除当前登录账号", 400);
   await deleteUser(c.env.DB, id);
-  await writeOperationLog(c.env.DB, c.get("auth"), "user.delete", id, null);
+  await writeOperationLog(c.env.DB, c.get("auth"), "user.delete", id, null, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 

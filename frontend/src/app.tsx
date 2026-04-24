@@ -1,5 +1,5 @@
 import { Bell, Car, FileText, Settings, Users, User } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import {
@@ -17,6 +17,7 @@ import { AppShellTopbarAccount, AppShellTopbarBrand, AppShellTopbarSearch } from
 import { DashboardLayout, type MobileDockItem } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { setGlobalErrorMessenger } from "./lib/errorHandler";
+import { DASHBOARD_PENDING_ALERTS_EVENT } from "./hooks/useDashboardOverview";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -45,6 +46,8 @@ function AppInner() {
   });
   const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationAcknowledged, setNotificationAcknowledged] = useState(true);
+  const prevNotificationCountRef = useRef(0);
   const [globalSearch, setGlobalSearch] = useState("");
   const nav = useNavigate();
   const loc = useLocation();
@@ -122,17 +125,19 @@ function AppInner() {
     const loadNotificationCount = async () => {
       if (!user || !canViewDashboard) {
         setNotificationCount(0);
+        setNotificationAcknowledged(true);
         return;
       }
       try {
-        const res = await apiFetch<{ kpis?: { alerts?: { total?: number } } }>("/dashboard/overview");
+        const res = await apiFetch<{ pendingAlerts?: Array<unknown> }>("/dashboard/overview");
         if (res.ok) {
-          setNotificationCount(Number(res.data.kpis?.alerts?.total ?? 0));
+          setNotificationCount(Number(res.data.pendingAlerts?.length ?? 0));
           return;
         }
         // No dashboard permission or other non-fatal errors: keep UI stable.
         if (res.error.code === "HTTP_403") {
           setNotificationCount(0);
+          setNotificationAcknowledged(true);
         }
       } catch {
         // ignore and keep existing count
@@ -140,6 +145,28 @@ function AppInner() {
     };
     void loadNotificationCount();
   }, [user, canViewDashboard]);
+
+  useEffect(() => {
+    const onPendingAlertsUpdated = (evt: Event) => {
+      const ce = evt as CustomEvent<{ count?: number }>;
+      const next = Number(ce.detail?.count ?? 0);
+      setNotificationCount(Number.isFinite(next) ? Math.max(0, next) : 0);
+    };
+    window.addEventListener(DASHBOARD_PENDING_ALERTS_EVENT, onPendingAlertsUpdated as EventListener);
+    return () => {
+      window.removeEventListener(DASHBOARD_PENDING_ALERTS_EVENT, onPendingAlertsUpdated as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (notificationCount > prevNotificationCountRef.current) {
+      // New notifications arrived since last view.
+      setNotificationAcknowledged(false);
+    } else if (notificationCount === 0) {
+      setNotificationAcknowledged(true);
+    }
+    prevNotificationCountRef.current = notificationCount;
+  }, [notificationCount]);
 
   if (!user) return <LoginPage onLoggedIn={loadMe} />;
   
@@ -211,7 +238,12 @@ function AppInner() {
       username={user.username}
       roleLabel={user.role === "admin" ? "管理员" : user.role === "maintainer" ? "维保员" : "只读"}
       notificationCount={notificationCount}
-      onNotificationsClick={() => nav("/dashboard")}
+      notificationAriaLabel={`通知，当前待处理预警 ${notificationCount > 99 ? "99+" : notificationCount} 条`}
+      notificationAcknowledged={notificationAcknowledged}
+      onNotificationsClick={() => {
+        setNotificationAcknowledged(true);
+        nav("/dashboard");
+      }}
       onProfile={() => nav("/profile")}
       onLogout={logout}
     />

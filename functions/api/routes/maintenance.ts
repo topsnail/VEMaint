@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { validateBody } from "../lib/request";
 import { jsonError, jsonOk } from "../lib/response";
 import { requireAuth } from "../middleware/require-auth";
@@ -13,10 +13,18 @@ import {
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
 import { maintenanceUpsertBodySchema } from "../lib/validation";
+import { requireOpReason } from "../lib/op-reason";
 
 export const maintenanceRoute = new Hono<AppEnv>();
 maintenanceRoute.use("/api/maintenance/*", requireAuth);
 maintenanceRoute.use("/api/maintenance", requireAuth);
+
+function getLogMeta(c: Context<AppEnv>) {
+  const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
+  const userAgent = c.req.header("user-agent") ?? null;
+  const reason = (c.req.header("x-op-reason") ?? "").trim() || null;
+  return { ip, userAgent, reason };
+}
 
 maintenanceRoute.get("/api/maintenance", async (c) => {
   const rows = await listMaintenance(c.env.DB, {
@@ -66,7 +74,7 @@ maintenanceRoute.post("/api/maintenance", permitPerm("maintenance.edit"), async 
     remark,
     attachmentKey,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.create", id, { targetType, vehicleId, equipmentName });
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.create", id, { targetType, vehicleId, equipmentName }, getLogMeta(c));
   return jsonOk(c, { id }, 201);
 });
 
@@ -102,15 +110,17 @@ maintenanceRoute.put("/api/maintenance/:id", permitPerm("maintenance.edit"), asy
     remark,
     attachmentKey,
   });
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.update", id, null);
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.update", id, null, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 
 maintenanceRoute.delete("/api/maintenance/:id", permitPerm("maintenance.delete"), async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return jsonError(c, "BAD_REQUEST", "无效 ID", 400);
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   await deleteMaintenance(c.env.DB, id);
-  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.delete", id, null);
+  await writeOperationLog(c.env.DB, c.get("auth"), "maintenance.delete", id, null, getLogMeta(c));
   return jsonOk(c, { ok: true });
 });
 

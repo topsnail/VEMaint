@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { APP_DATA_CHANGED_EVENT, type AppDataChangedDetail } from "../lib/realtimeSync";
 import { fetchSettingsSnapshot, type OwnerDirectoryEntry } from "./useSettingsDropdowns";
 import { fetchVehiclesWithCyclesMap } from "./vehiclesApi";
 import type { Vehicle, VehicleCycle } from "../types";
@@ -68,6 +69,21 @@ export function useVehiclesTableData() {
       queryFn: () => fetchVehiclesWithCyclesMap(nextSearch),
     });
   }, [queryClient]);
+
+  useEffect(() => {
+    const onAppDataChanged = (evt: Event) => {
+      const ce = evt as CustomEvent<AppDataChangedDetail>;
+      const domains = ce.detail?.domains ?? [];
+      if (domains.includes("vehicles") || domains.includes("maintenance")) {
+        void vehiclesQuery.refetch();
+      }
+      if (domains.includes("settings")) {
+        void settingsQuery.refetch();
+      }
+    };
+    window.addEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
+    return () => window.removeEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
+  }, [settingsQuery, vehiclesQuery]);
 
   return {
     rows,

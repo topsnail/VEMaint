@@ -2,7 +2,7 @@ import React from "react";
 
 import { AlertItemType } from "./AlertItem";
 import { StatusPill } from "./StatusPill";
-import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/legacy";
 
 interface PendingAlertItemProps {
   item: AlertItemType & { ownerDept?: string; ownerPerson?: string };
@@ -16,37 +16,30 @@ const levelTone = (level: string): "danger" | "warning" => {
 };
 
 export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ item, canHandleAlerts, onUpdateStatus }) => (
-  <div className="border-b border-slate-100 px-3 py-1.5 transition-colors last:border-b-0 hover:bg-slate-50">
-    <div className="flex w-full flex-wrap items-center gap-1.5">
+  <div className="border-b border-slate-100 px-2.5 py-1 transition-colors last:border-b-0 hover:bg-slate-50">
+    <div className="flex min-h-8 w-full items-center gap-1.5">
       <StatusPill
         tone={levelTone(item.level)}
-        label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内到期" : "30天内到期"}
+        label={item.level === "expired" ? "已逾期" : item.level === "within7" ? "7天内" : "30天内"}
       />
       <span className="font-medium text-slate-900">{item.plateNo}</span>
-      <span className="text-sm text-slate-500">{item.type}</span>
-      <span className="text-xs text-slate-500">
+      <span className="truncate text-xs text-slate-500">{item.type}</span>
+      <span className="truncate text-xs text-slate-500">
         {item.ownerDept ?? "-"}/{item.ownerPerson ?? "-"}
       </span>
       {canHandleAlerts && (
-        <div className="ml-auto flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onUpdateStatus("processing")}
-            disabled={item.actionStatus === "processing"}
-            className="h-6 rounded-[6px] border-blue-200 px-2 text-xs text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-          >
-            标记处理中
-          </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => onUpdateStatus("resolved")}
-            disabled={item.actionStatus === "resolved"}
-            className="h-6 rounded-[6px] px-2 text-xs disabled:opacity-60"
-          >
-            标记已处理
-          </Button>
+        <div className="ml-auto">
+          <Select
+            size="small"
+            className="h-6 w-auto min-w-[84px] text-xs"
+            value={item.actionStatus === "processing" ? "processing" : item.actionStatus === "resolved" ? "resolved" : "open"}
+            options={[
+              { value: "open", label: "待处理" },
+              { value: "processing", label: "处理中" },
+              { value: "resolved", label: "已处理" },
+            ]}
+            onChange={(v) => onUpdateStatus(v)}
+          />
         </div>
       )}
     </div>

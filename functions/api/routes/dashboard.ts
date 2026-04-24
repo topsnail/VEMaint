@@ -109,6 +109,11 @@ create table if not exists alert_actions (
 
 dashboardRoute.get("/api/dashboard/overview", async (c) => {
   await ensureAlertActionsTable(c.env.DB);
+  const rangeParam = c.req.query("range")?.trim().toLowerCase() ?? "365d";
+  const statsDays = rangeParam === "30d" ? 30 : rangeParam === "180d" ? 180 : 365;
+  /** 含起止共 statsDays 个自然日：today 往回 statsDays-1 天 */
+  const statsSinceDays = statsDays - 1;
+
   const cfg = await getSystemConfig(c.env.KV);
   const [vehicleStatus, maintKpi] = await Promise.all([
     d1First<VehicleStatusRow>(
@@ -236,14 +241,15 @@ group by v.owner_person
     `
 select date(maintenance_date) as day, count(*) as count, sum(cost) as cost
 from maintenance_records
-where date(maintenance_date) >= date('now','-29 day')
+where date(maintenance_date) >= date('now', ?1)
 group by date(maintenance_date)
 order by date(maintenance_date) asc
 `,
+    [`-${statsSinceDays} day`],
   );
   const trendMap = new Map(trendRows.map((r) => [r.day, r]));
   const trends: Array<{ day: string; count: number; cost: number }> = [];
-  for (let i = 29; i >= 0; i -= 1) {
+  for (let i = statsDays - 1; i >= 0; i -= 1) {
     const day = new Date();
     day.setDate(day.getDate() - i);
     const dayStr = day.toISOString().slice(0, 10);
@@ -263,20 +269,24 @@ select m.vehicle_id as vehicleId, v.plate_no as plateNo, v.brand_model as brandM
 from maintenance_records m
 left join vehicles v on v.id = m.vehicle_id
 where m.target_type = 'vehicle' and m.vehicle_id is not null
+  and date(m.maintenance_date) >= date('now', ?1)
 group by m.vehicle_id, v.plate_no, v.brand_model
 order by totalCost desc
 limit 5
 `,
+      [`-${statsSinceDays} day`],
     ),
     d1All<TopItemRow>(
       c.env.DB,
       `
 select item_desc as itemDesc, count(*) as recordCount, sum(cost) as totalCost
 from maintenance_records
+where date(maintenance_date) >= date('now', ?1)
 group by item_desc
 order by recordCount desc, totalCost desc
 limit 5
 `,
+      [`-${statsSinceDays} day`],
     ),
   ]);
 

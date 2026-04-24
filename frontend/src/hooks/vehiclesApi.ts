@@ -35,6 +35,6 @@ export async function requestPutVehicleCycles(vehicleId: string, body: unknown) 
   return apiFetch(`/vehicles/${vehicleId}/cycles`, { method: "PUT", body: JSON.stringify(body) });
 }
 
-export async function requestPutVehicleStatus(id: string, status: Vehicle["status"]) {
-  return apiFetch<{ ok: true }>(`/vehicles/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
+export async function requestPutVehicleStatus(id: string, status: Vehicle["status"], reason?: string | null) {
+  return apiFetch<{ ok: true }>(`/vehicles/${id}/status`, { method: "PUT", body: JSON.stringify({ status }), opReason: reason });
 }

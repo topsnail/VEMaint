@@ -26,8 +26,8 @@ export function useConfigSettings() {
     }
   }, []);
 
-  const saveConfig = useCallback(async (payload: unknown) => {
-    return apiFetch<{ ok: true }>("/settings", { method: "PUT", body: JSON.stringify(payload) });
+  const saveConfig = useCallback(async (payload: unknown, reason?: string | null) => {
+    return apiFetch<{ ok: true }>("/settings", { method: "PUT", body: JSON.stringify(payload), opReason: reason });
   }, []);
 
   return { loading, fetchConfig, saveConfig };

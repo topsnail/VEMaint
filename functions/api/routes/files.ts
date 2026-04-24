@@ -83,12 +83,18 @@ filesRoute.post("/api/files/check", async (c) => {
     .filter(Boolean)
     .filter((k, idx, arr) => arr.indexOf(k) === idx)
     .slice(0, 200);
-  const checks = await Promise.all(
-    keys.map(async (key) => {
-      const obj = await r2Get(c.env.R2, key);
-      return { key, exists: !!obj };
-    }),
-  );
+  const checks: Array<{ key: string; exists: boolean }> = [];
+  const concurrency = 20;
+  for (let i = 0; i < keys.length; i += concurrency) {
+    const chunk = keys.slice(i, i + concurrency);
+    const chunkChecks = await Promise.all(
+      chunk.map(async (key) => {
+        const obj = await r2Get(c.env.R2, key);
+        return { key, exists: !!obj };
+      }),
+    );
+    checks.push(...chunkChecks);
+  }
   return jsonOk(c, { checks });
 });
 

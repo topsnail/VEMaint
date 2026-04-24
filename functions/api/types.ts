@@ -82,6 +82,9 @@ export type OperationLog = {
   action: string;
   target: string | null;
   detail: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  reason: string | null;
   createdAt: string;
 };
 

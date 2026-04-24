@@ -5,12 +5,15 @@ import { useUsersAdmin } from "../hooks/useUsersAdmin";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { Key, Trash2 } from "lucide-react";
+import { getUser } from "../lib/auth";
+import { requestOperationReason } from "../lib/operationReason";
 
 type Model = { username: string; password: string; role: "admin" | "maintainer" | "reader" };
 type RoleTemplate = "admin" | "maintainer" | "reader";
 
 export function UsersPage() {
   const { message } = App.useApp();
+  const currentUserId = getUser()?.userId ?? "";
   const { rows, loading, load, createUser, changeRole, removeUser, setDisabled, resetPassword } = useUsersAdmin();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<Model>();
@@ -35,19 +38,26 @@ export function UsersPage() {
   };
 
   const onChangeRole = async (id: string, role: Model["role"]) => {
-    const res = await changeRole(id, role);
+    const reason = await requestOperationReason("请输入修改角色的理由");
+    if (!reason) return;
+    const res = await changeRole(id, role, reason);
     if (!res.ok) return message.error(res.error.message);
     await load();
   };
 
   const remove = async (id: string) => {
-    const res = await removeUser(id);
+    const reason = await requestOperationReason("请输入删除用户的理由");
+    if (!reason) return;
+    const res = await removeUser(id, reason);
     if (!res.ok) return message.error(res.error.message);
+    message.success("删除成功");
     await load();
   };
 
   const onSetDisabled = async (id: string, disabled: boolean) => {
-    const res = await setDisabled(id, disabled);
+    const reason = await requestOperationReason(disabled ? "请输入禁用用户的理由" : "请输入启用用户的理由");
+    if (!reason) return;
+    const res = await setDisabled(id, disabled, reason);
     if (!res.ok) return message.error(res.error.message);
     await load();
   };
@@ -61,7 +71,9 @@ export function UsersPage() {
   const submitResetPassword = async () => {
     if (!pwdUserId) return;
     const v = await pwdForm.validateFields();
-    const res = await resetPassword(pwdUserId, v.password);
+    const reason = await requestOperationReason("请输入重置密码的理由");
+    if (!reason) return;
+    const res = await resetPassword(pwdUserId, v.password, reason);
     if (!res.ok) return message.error(res.error.message);
     message.success("密码已更新");
     setPwdModalOpen(false);
@@ -136,11 +148,17 @@ export function UsersPage() {
                     <Tooltip title="重置密码">
                       <Button type="text" size="small" icon={<Key className="h-4 w-4" />} className={actionBtn.textNeutral} onClick={() => openResetPassword(r.id)} />
                     </Tooltip>
-                    <Popconfirm title="确认删除该用户？" onConfirm={() => remove(r.id)}>
-                      <Tooltip title="删除">
-                        <Button type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className={actionBtn.textDanger} />
+                    {r.id === currentUserId ? (
+                      <Tooltip title="当前登录账号不可删除">
+                        <Button type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className={actionBtn.textDanger} disabled />
                       </Tooltip>
-                    </Popconfirm>
+                    ) : (
+                      <Tooltip title="删除">
+                        <Popconfirm title="确认删除该用户？" onConfirm={() => remove(r.id)}>
+                          <Button type="text" size="small" icon={<Trash2 className="h-4 w-4" />} className={actionBtn.textDanger} />
+                        </Popconfirm>
+                      </Tooltip>
+                    )}
                   </Space>
                 ),
               },

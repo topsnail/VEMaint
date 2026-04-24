@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   action TEXT NOT NULL,
   target TEXT,
   detail TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

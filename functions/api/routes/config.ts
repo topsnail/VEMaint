@@ -8,6 +8,7 @@ import { permitPerm } from "../middleware/permit";
 import { getSystemConfig, normalizeOwnerDirectory, setSystemConfig } from "../services/config";
 import type { AppEnv } from "../types";
 import { systemConfigBodySchema } from "../lib/validation";
+import { requireOpReason } from "../lib/op-reason";
 
 export const configRoute = new Hono<AppEnv>();
 configRoute.use("/api/system/config", requireAuth);
@@ -19,6 +20,8 @@ async function getConfigHandler(c: Context<AppEnv>) {
 }
 
 async function putConfigHandler(c: Context<AppEnv>) {
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   const parsed = await validateBody(c, systemConfigBodySchema, "siteName 不能为空");
   if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
   const siteName = parsed.data.siteName;

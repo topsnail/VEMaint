@@ -21,6 +21,7 @@ import { Eye, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { AttachmentViewer } from "../components/AttachmentViewer";
 import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
+import { requestOperationReason } from "../lib/operationReason";
 
 type VehicleForm = {
   plateNo: string;
@@ -638,7 +639,9 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   };
 
   const setStatus = async (id: string, status: Vehicle["status"]) => {
-    const res = await requestPutVehicleStatus(id, status);
+    const reason = await requestOperationReason("请输入变更车辆状态的理由");
+    if (!reason) return;
+    const res = await requestPutVehicleStatus(id, status, reason);
     if (!res.ok) return message.error(res.error.message);
     message.success("状态已更新");
     await load(q);

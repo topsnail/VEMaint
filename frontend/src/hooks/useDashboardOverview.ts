@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/http";
 import { REFRESH_INTERVALS, SEARCH_CONFIG } from "../lib/config";
 import { handleApiError } from "../lib/errorHandler";
+import { APP_DATA_CHANGED_EVENT, emitAppDataChanged, type AppDataChangedDetail } from "../lib/realtimeSync";
 import type { MaintenanceRecord, Vehicle } from "../types";
+
+export const DASHBOARD_PENDING_ALERTS_EVENT = "dashboard:pending-alerts-updated";
 
 export type DashboardAlertItem = {
   alertKey: string;
@@ -56,6 +59,9 @@ export type DashboardOverview = {
   };
 };
 
+/** 趋势与 TOP5 等维保汇总：固定近一年（与后端默认 range 一致） */
+const DASHBOARD_OVERVIEW_RANGE = "365d";
+
 export function useDashboardOverview() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [search, setSearch] = useState<DashboardSearchResult>({ vehicles: [], maintenance: [] });
@@ -66,12 +72,19 @@ export function useDashboardOverview() {
   const loadOverview = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch<DashboardOverview>("/dashboard/overview");
+      const res = await apiFetch<DashboardOverview>(`/dashboard/overview?range=${encodeURIComponent(DASHBOARD_OVERVIEW_RANGE)}`);
       if (!res.ok) {
         handleApiError(res);
         return false;
       }
       setOverview(res.data);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent(DASHBOARD_PENDING_ALERTS_EVENT, {
+            detail: { count: Number(res.data.pendingAlerts?.length ?? 0) },
+          }),
+        );
+      }
       setLastUpdated(new Date().toLocaleString());
       return true;
     } catch (error) {
@@ -106,6 +119,18 @@ export function useDashboardOverview() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
+  }, [loadOverview]);
+
+  useEffect(() => {
+    const onAppDataChanged = (evt: Event) => {
+      const ce = evt as CustomEvent<AppDataChangedDetail>;
+      const domains = ce.detail?.domains ?? [];
+      if (domains.includes("dashboard") || domains.includes("maintenance") || domains.includes("vehicles")) {
+        void loadOverview();
+      }
+    };
+    window.addEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
+    return () => window.removeEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
   }, [loadOverview]);
 
   const runSearch = useCallback((q: string) => {
@@ -146,7 +171,10 @@ export function useDashboardOverview() {
           method: "PUT",
           body: JSON.stringify({ status }),
         });
-        if (res.ok) await loadOverview();
+        if (res.ok) {
+          await loadOverview();
+          emitAppDataChanged(["dashboard"], "dashboard:alert-status-updated");
+        }
         else handleApiError(res);
       } catch (error) {
         handleApiError(error);

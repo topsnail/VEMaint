@@ -6,6 +6,7 @@ import { useProfilePassword } from "../hooks/useProfilePassword";
 import { profilePasswordSchema, type ProfilePasswordInput } from "../lib/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { requestOperationReason } from "../lib/operationReason";
 
 export function ProfilePage() {
   const { submitting, changePassword } = useProfilePassword();
@@ -20,7 +21,9 @@ export function ProfilePage() {
   });
 
   const submit = async (values: ProfilePasswordInput) => {
-    const res = await changePassword(values.oldPassword, values.newPassword);
+    const reason = await requestOperationReason("请输入修改个人密码的理由");
+    if (!reason) return;
+    const res = await changePassword(values.oldPassword, values.newPassword, reason);
     if (!res.ok) {
       toast.error(res.error.message);
       return;

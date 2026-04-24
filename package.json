@@ -10,13 +10,16 @@
     "check:local": "npx tsc --noEmit && npm run build",
     "db:init:local": "wrangler d1 execute vemaint --local --file=./drizzle/0000_init.sql",
     "db:init:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/0000_init.sql",
-    "db:migrate:local": "wrangler d1 execute vemaint --local --file=./drizzle/0001_maintenance_target_type_other.sql",
-    "db:migrate:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/0001_maintenance_target_type_other.sql",
+    "db:migrate:local": "wrangler d1 execute vemaint --local --file=./drizzle/0001_maintenance_target_type_other.sql && wrangler d1 execute vemaint --local --file=./drizzle/0002_operation_logs_indexes.sql",
+    "db:migrate:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/0001_maintenance_target_type_other.sql && wrangler d1 execute vemaint --remote --file=./drizzle/0002_operation_logs_indexes.sql",
     "db:seed:local": "wrangler d1 execute vemaint --local --file=./drizzle/seed.sql",
     "db:seed:remote": "wrangler d1 execute vemaint --remote --file=./drizzle/seed.sql",
     "kv:seed:local": "wrangler kv key put --local --binding=KV sys:config:v1 --path=./drizzle/dev-system-config.json",
     "r2:seed:local": "node ./scripts/seed-r2-local.mjs",
-    "dev:reset-data:local": "npm run db:init:local && npm run db:migrate:local && npm run db:seed:local && npm run kv:seed:local && npm run r2:seed:local"
+    "dev:reset-data:local": "npm run db:init:local && npm run db:migrate:local && npm run db:seed:local && npm run kv:seed:local && npm run r2:seed:local",
+    "release:check": "npm run check:local",
+    "release:deploy": "npm run build && wrangler pages deploy dist --project-name vemaint",
+    "release:prod": "npm run release:check && npm run release:deploy"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -47,6 +50,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 import { App, Button, Form, Input, Modal, Select, Skeleton, Space, Table, Tabs } from "@/components/ui/legacy";
 import type { Dayjs } from "dayjs";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { MaintenanceBasicSection } from "../components/maintenance/MaintenanceBasicSection";
 import { MaintenanceCostSection } from "../components/maintenance/MaintenanceCostSection";
 import { PageContainer } from "../components/PageContainer";
@@ -18,6 +19,7 @@ import { maintenanceSubmitSchema } from "../lib/schemas";
 import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import type { MaintenanceRecord } from "../types";
+import { requestOperationReason } from "../lib/operationReason";
 
 type FormModel = {
   targetType: "vehicle" | "equipment" | "other";
@@ -60,6 +62,7 @@ export function MaintenancePage({
   view?: MaintenanceViewMode;
 }) {
   const { message } = App.useApp();
+  const location = useLocation();
   const currentUserName = getUser()?.username ?? "当前用户";
   const { rows, setRows, vehicles, dropdowns, loading: pageLoading, savePending, removePending, load, loadDropdowns, removeRecord, saveRecord } = useMaintenancePageData();
   const [open, setOpen] = useState(false);
@@ -128,6 +131,17 @@ export function MaintenancePage({
   }, [viewRecord]);
 
   const listView = useMaintenanceListView({ rows, view });
+  const { setSearchKeyword } = listView;
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get("q")?.trim();
+    if (!q) return;
+    setSearchKeyword(q);
+    params.delete("q");
+    const next = params.toString();
+    window.history.replaceState(null, "", `${location.pathname}${next ? `?${next}` : ""}${window.location.hash}`);
+  }, [location.pathname, location.search, setSearchKeyword]);
 
   const maintenanceTypeDefaults = ["日常保养", "故障维修", "事故维修", "定期检修"];
   const maintenanceTypeCodes: FormModel["maintenanceType"][] = ["routine", "fault", "accident", "periodic"];
@@ -276,7 +290,9 @@ export function MaintenancePage({
   };
 
   const remove = async (id: string) => {
-    const res = await removeRecord(id);
+    const reason = await requestOperationReason("请输入删除维保记录的理由");
+    if (!reason) return false;
+    const res = await removeRecord(id, reason);
     if (!res.ok) {
       message.error(res.error.message);
       return false;

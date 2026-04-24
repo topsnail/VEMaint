@@ -404,7 +404,7 @@ const Tabs: any = ({ items, activeKey, onChange }: any) => {
 const selectBase =
   "flex h-8 w-full rounded-sm border border-slate-200 bg-white px-2.5 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-slate-400";
 
-const Table: any = ({ columns = [], dataSource = [], rowKey, scroll, sticky, className, ..._rest }: any) => {
+const Table: any = ({ columns = [], dataSource = [], rowKey, scroll, sticky, className, onRow, ..._rest }: any) => {
   const wrapperStyle: React.CSSProperties = {};
   if (scroll?.y) wrapperStyle.maxHeight = scroll.y;
 
@@ -420,18 +420,51 @@ const Table: any = ({ columns = [], dataSource = [], rowKey, scroll, sticky, cla
   return (
     <div className={cn("overflow-auto rounded-sm border border-slate-200", className)} style={wrapperStyle}>
       <table className="w-full text-sm" style={tableStyle}>
+      <colgroup>
+        {columns.map((col: any) => (
+          <col
+            key={`col-${col.key ?? col.dataIndex ?? col.title}`}
+            style={
+              col.width != null
+                ? { width: typeof col.width === "number" ? `${col.width}px` : String(col.width) }
+                : undefined
+            }
+          />
+        ))}
+      </colgroup>
       <thead className={stickyHeaderClass}>
         <tr>
           {columns.map((col: any) => (
-            <th key={col.key ?? col.dataIndex ?? col.title} className="whitespace-nowrap px-3 py-1.5 text-left text-sm font-semibold text-slate-800">
+            <th
+              key={col.key ?? col.dataIndex ?? col.title}
+              className={cn("whitespace-nowrap px-3 py-1.5 text-left text-sm font-semibold text-slate-800", col.className)}
+              style={
+                col.width != null
+                  ? { width: typeof col.width === "number" ? `${col.width}px` : String(col.width) }
+                  : undefined
+              }
+            >
               {col.title}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {dataSource.map((record: any, idx: number) => (
-          <tr key={record?.[rowKey] ?? idx} className={cn("border-t border-slate-200", idx % 2 === 1 ? "bg-slate-100/70" : "bg-white")}>
+        {dataSource.map((record: any, idx: number) => {
+          const rowProps = typeof onRow === "function" ? onRow(record, idx) ?? {} : {};
+          const rk =
+            typeof rowKey === "function" ? rowKey(record, idx) : rowKey != null ? record?.[rowKey as string] : idx;
+          return (
+          <tr
+            key={rk ?? idx}
+            className={cn(
+              "border-t border-slate-200",
+              idx % 2 === 1 ? "bg-slate-100/70" : "bg-white",
+              rowProps.className,
+              rowProps.onClick ? "cursor-pointer" : undefined,
+            )}
+            onClick={rowProps.onClick}
+          >
             {columns.map((col: any) => {
               const value = col.dataIndex ? record[col.dataIndex] : undefined;
               return (
@@ -441,7 +474,8 @@ const Table: any = ({ columns = [], dataSource = [], rowKey, scroll, sticky, cla
               );
             })}
           </tr>
-        ))}
+          );
+        })}
       </tbody>
       </table>
     </div>
@@ -692,7 +726,11 @@ const Upload = { Dragger: UploadDragger };
 const List: any = ({ dataSource, renderItem }: any) => (
   <div className="space-y-2">{(dataSource ?? []).map((item: any, i: number) => <div key={i}>{renderItem(item, i)}</div>)}</div>
 );
-List.Item = ({ children, className }: any) => <div className={cn("rounded-md border border-slate-200 p-3", className)}>{children}</div>;
+List.Item = ({ children, className, ...rest }: any) => (
+  <div className={cn("rounded-md border border-slate-200 p-3", className)} {...rest}>
+    {children}
+  </div>
+);
 List.Item.Meta = ({ title, description }: any) => (
   <div>
     <div className="font-medium">{title}</div>
@@ -752,7 +790,19 @@ const Alert: any = ({ message, description, type, className }: any) => (
   </div>
 );
 
-const InputSearch: any = ({ onSearch, onChange, value, defaultValue, placeholder, className, style }: any) => {
+const InputSearch: any = ({
+  onSearch,
+  onChange,
+  value,
+  defaultValue,
+  placeholder,
+  className,
+  style,
+  allowClear,
+  id,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+}: any) => {
   const isControlled = typeof onChange === "function";
   const [internalValue, setInternalValue] = useState(() => ((value ?? defaultValue ?? "") as string));
   const currentValue = isControlled ? (value ?? "") : internalValue;
@@ -769,12 +819,46 @@ const InputSearch: any = ({ onSearch, onChange, value, defaultValue, placeholder
     }
   };
 
-  const submit = () => onSearch?.(currentValue);
+  const submit = () => onSearch?.(String(currentValue ?? ""));
+
+  const clear = () => {
+    if (isControlled) {
+      onChange?.({ target: { value: "" } } as React.ChangeEvent<HTMLInputElement>);
+    } else {
+      setInternalValue("");
+    }
+    onSearch?.("");
+  };
+
+  const showClear = Boolean(allowClear && String(currentValue ?? "").length > 0);
 
   return (
-    <div className={cn("flex gap-2", className)} style={style}>
-      <UIInput value={currentValue} onChange={handleChange} placeholder={placeholder} onKeyDown={(e) => (e.key === "Enter" ? submit() : undefined)} />
-      <UIButton type="button" variant="secondary" onClick={submit}>
+    <div className={cn("flex min-w-0 gap-2", className)} style={style}>
+      <div className="relative min-w-0 flex-1">
+        <UIInput
+          id={id}
+          aria-label={ariaLabel ?? (placeholder ? String(placeholder) : "搜索")}
+          aria-describedby={ariaDescribedBy}
+          className={cn(showClear ? "pr-9" : undefined)}
+          value={currentValue}
+          onChange={handleChange}
+          placeholder={placeholder}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+        />
+        {showClear ? (
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            onClick={clear}
+            aria-label="清除搜索内容"
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+      <UIButton type="button" variant="secondary" className="shrink-0" onClick={submit} aria-label="执行搜索">
         搜索
       </UIButton>
     </div>

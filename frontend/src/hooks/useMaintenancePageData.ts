@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../lib/http";
+import { APP_DATA_CHANGED_EVENT, emitAppDataChanged, type AppDataChangedDetail } from "../lib/realtimeSync";
 import { fetchSettingsDropdowns } from "./useSettingsDropdowns";
 import type { MaintenanceRecord, Vehicle } from "../types";
 
@@ -33,9 +34,11 @@ export function useMaintenancePageData() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (id: string) => apiFetch<{ ok: true }>(`/maintenance/${id}`, { method: "DELETE" }),
+    mutationFn: async ({ id, reason }: { id: string; reason?: string | null }) =>
+      apiFetch<{ ok: true }>(`/maintenance/${id}`, { method: "DELETE", opReason: reason }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["maintenance-page-data"] });
+      emitAppDataChanged(["maintenance", "vehicles", "dashboard"], "maintenance:deleted");
     },
   });
 
@@ -47,8 +50,24 @@ export function useMaintenancePageData() {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["maintenance-page-data"] });
+      emitAppDataChanged(["maintenance", "vehicles", "dashboard"], "maintenance:saved");
     },
   });
+
+  useEffect(() => {
+    const onAppDataChanged = (evt: Event) => {
+      const ce = evt as CustomEvent<AppDataChangedDetail>;
+      const domains = ce.detail?.domains ?? [];
+      if (domains.includes("maintenance") || domains.includes("vehicles") || domains.includes("settings")) {
+        void baseQuery.refetch();
+      }
+      if (domains.includes("settings")) {
+        void dropdownsQuery.refetch();
+      }
+    };
+    window.addEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
+    return () => window.removeEventListener(APP_DATA_CHANGED_EVENT, onAppDataChanged as EventListener);
+  }, [baseQuery, dropdownsQuery]);
 
   const rows = useMemo(() => baseQuery.data?.rows ?? [], [baseQuery.data?.rows]);
   const vehicles = useMemo(() => baseQuery.data?.vehicles ?? [], [baseQuery.data?.vehicles]);
@@ -79,7 +98,7 @@ export function useMaintenancePageData() {
     await dropdownsQuery.refetch();
   }, [dropdownsQuery]);
 
-  const removeRecord = useCallback(async (id: string) => removeMutation.mutateAsync(id), [removeMutation]);
+  const removeRecord = useCallback(async (id: string, reason?: string | null) => removeMutation.mutateAsync({ id, reason }), [removeMutation]);
 
   const saveRecord = useCallback(
     async (editingId: string | null, payload: unknown) => saveMutation.mutateAsync({ editingId, payload }),

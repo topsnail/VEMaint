@@ -10,6 +10,7 @@ import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 import { loginBodySchema, profilePasswordBodySchema } from "../lib/validation";
+import { requireOpReason } from "../lib/op-reason";
 
 export const authRoute = new Hono<AppEnv>();
 
@@ -44,7 +45,18 @@ async function loginHandler(c: Context<AppEnv>) {
   if (!ok) return jsonError(c, "INVALID_CREDENTIALS", "用户名或密码错误", 401);
 
   const { token, csrfToken } = await signAccessToken(c.env, { userId: user.id, username: user.username, role: user.role });
-  await writeOperationLog(c.env.DB, { userId: user.id, username: user.username, role: user.role, jti: "", csrfToken: "", exp: 0 }, "auth.login", user.id, null);
+  await writeOperationLog(
+    c.env.DB,
+    { userId: user.id, username: user.username, role: user.role, jti: "", csrfToken: "", exp: 0 },
+    "auth.login",
+    user.id,
+    null,
+    {
+      ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      reason: null,
+    },
+  );
   return jsonOk(c, { token, csrfToken });
 }
 
@@ -61,7 +73,11 @@ authRoute.get("/api/auth/me", requireAuth, meHandler);
 
 authRoute.post("/api/logout", requireAuth, async (c) => {
   await revokeToken(c.env, c.get("auth"));
-  await writeOperationLog(c.env.DB, c.get("auth"), "auth.logout", c.get("auth").userId, null);
+  await writeOperationLog(c.env.DB, c.get("auth"), "auth.logout", c.get("auth").userId, null, {
+    ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    reason: (c.req.header("x-op-reason") ?? "").trim() || null,
+  });
   return jsonOk(c, { ok: true });
 });
 
@@ -76,6 +92,8 @@ authRoute.post("/api/bootstrap", async (c) => {
 
 authRoute.put("/api/profile/password", requireAuth, async (c) => {
   const me = c.get("auth");
+  const reasonCheck = requireOpReason(c);
+  if (!reasonCheck.ok) return reasonCheck.response;
   const parsed = await validateBody(c, profilePasswordBodySchema, "参数错误");
   if (!parsed.ok) return jsonError(c, "BAD_REQUEST", parsed.message, 400);
   const oldPassword = parsed.data.oldPassword;
@@ -86,7 +104,11 @@ authRoute.put("/api/profile/password", requireAuth, async (c) => {
   if (!ok) return jsonError(c, "BAD_REQUEST", "旧密码错误", 400);
   const hash = await hashPassword(newPassword);
   await updateUserPassword(c.env.DB, user.id, hash);
-  await writeOperationLog(c.env.DB, me, "profile.password", me.userId, null);
+  await writeOperationLog(c.env.DB, me, "profile.password", me.userId, null, {
+    ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    reason: (c.req.header("x-op-reason") ?? "").trim() || null,
+  });
   return jsonOk(c, { ok: true });
 });
 

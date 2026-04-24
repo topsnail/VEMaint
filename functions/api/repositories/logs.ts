@@ -7,11 +7,22 @@ export async function writeOperationLog(
   action: string,
   target: string,
   detail: Record<string, unknown> | null = null,
+  meta?: { ip?: string | null; userAgent?: string | null; reason?: string | null },
 ) {
   await d1Run(
     db,
-    "insert into operation_logs (id,actor_user_id,actor_username,action,target,detail,created_at) values (?1,?2,?3,?4,?5,?6,datetime('now'))",
-    [crypto.randomUUID(), actor?.userId ?? null, actor?.username ?? null, action, target, detail ? JSON.stringify(detail) : null],
+    "insert into operation_logs (id,actor_user_id,actor_username,action,target,detail,ip,user_agent,reason,created_at) values (?1,?2,?3,?4,?5,?6,?7,?8,?9,datetime('now'))",
+    [
+      crypto.randomUUID(),
+      actor?.userId ?? null,
+      actor?.username ?? null,
+      action,
+      target,
+      detail ? JSON.stringify(detail) : null,
+      meta?.ip ?? null,
+      meta?.userAgent ?? null,
+      meta?.reason ?? null,
+    ],
   );
 }
 
@@ -19,12 +30,86 @@ export async function listOperationLogs(db: D1Database, limit = 200): Promise<Op
   return await d1All<OperationLog>(
     db,
     `
-select id,actor_user_id as actorUserId,actor_username as actorUsername,action,target,detail,created_at as createdAt
+select id,actor_user_id as actorUserId,actor_username as actorUsername,action,target,detail,ip,user_agent as userAgent,reason,created_at as createdAt
 from operation_logs
 order by created_at desc
 limit ?1
 `,
     [limit],
   );
+}
+
+type ListOperationLogsQuery = {
+  limit: number;
+  offset: number;
+  actor?: string | null;
+  action?: string | null;
+  actionPrefix?: string | null;
+  q?: string | null;
+  from?: string | null;
+  to?: string | null;
+  riskOnly?: boolean;
+};
+
+export async function searchOperationLogs(
+  db: D1Database,
+  query: ListOperationLogsQuery,
+): Promise<{ rows: OperationLog[]; total: number }> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const push = (v: unknown) => {
+    params.push(v);
+    return `?${params.length}`;
+  };
+
+  if (query.actor) {
+    const p = push(`%${query.actor.trim()}%`);
+    where.push(`ifnull(actor_username,'') like ${p}`);
+  }
+  if (query.action) {
+    const p = push(query.action.trim());
+    where.push(`action = ${p}`);
+  }
+  if (query.actionPrefix) {
+    const p = push(`${query.actionPrefix.trim()}%`);
+    where.push(`action like ${p}`);
+  }
+  if (query.q) {
+    const p = push(`%${query.q.trim()}%`);
+    where.push(
+      `(ifnull(actor_username,'') like ${p} or ifnull(action,'') like ${p} or ifnull(target,'') like ${p} or ifnull(detail,'') like ${p} or ifnull(reason,'') like ${p} or ifnull(ip,'') like ${p})`,
+    );
+  }
+  if (query.from) {
+    const p = push(query.from.trim());
+    where.push(`datetime(created_at) >= datetime(${p})`);
+  }
+  if (query.to) {
+    const p = push(`${query.to.trim()} 23:59:59`);
+    where.push(`datetime(created_at) <= datetime(${p})`);
+  }
+  if (query.riskOnly) {
+    where.push(`(action like '%.delete' or action like '%.password' or action like '%.role' or action like '%.disabled' or action like 'config.%')`);
+  }
+
+  const whereSql = where.length > 0 ? `where ${where.join(" and ")}` : "";
+  const totalSql = `select count(*) as total from operation_logs ${whereSql}`;
+  const totalRow = await d1All<{ total: number }>(db, totalSql, params);
+  const total = Number(totalRow?.[0]?.total ?? 0);
+
+  const limitParam = push(query.limit);
+  const offsetParam = push(query.offset);
+  const rows = await d1All<OperationLog>(
+    db,
+    `
+select id,actor_user_id as actorUserId,actor_username as actorUsername,action,target,detail,ip,user_agent as userAgent,reason,created_at as createdAt
+from operation_logs
+${whereSql}
+order by created_at desc
+limit ${limitParam} offset ${offsetParam}
+`,
+    params,
+  );
+  return { rows, total };
 }
 

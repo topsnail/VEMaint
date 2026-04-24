@@ -4,6 +4,7 @@ import { API_CONFIG } from "./config";
 export type ApiOk<T> = { ok: true; data: T };
 export type ApiErr = { ok: false; error: { code: string; message: string } };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
+export type ApiRequestInit = RequestInit & { opReason?: string | null };
 type ErrorEnvelope = { error?: { message?: unknown } };
 export type BlobResult = {
   blob: Blob;
@@ -31,11 +32,11 @@ function parseFilename(contentDisposition: string | null): string | null {
 }
 
 // 通用请求处理函数
-async function handleRequest<T>(path: string, init?: RequestInit): Promise<ApiResult<T>>;
-async function handleRequest(path: string, init: RequestInit | undefined, isBlob: true): Promise<ApiResult<BlobResult>>;
+async function handleRequest<T>(path: string, init?: ApiRequestInit): Promise<ApiResult<T>>;
+async function handleRequest(path: string, init: ApiRequestInit | undefined, isBlob: true): Promise<ApiResult<BlobResult>>;
 async function handleRequest<T>(
   path: string,
-  init?: RequestInit,
+  init?: ApiRequestInit,
   isBlob = false,
 ): Promise<ApiResult<T> | ApiResult<BlobResult>> {
   const token = getToken();
@@ -57,6 +58,9 @@ async function handleRequest<T>(
   }
   if (csrfToken) {
     headers.set("X-CSRF-Token", csrfToken);
+  }
+  if (init?.opReason && String(init.opReason).trim()) {
+    headers.set("X-Op-Reason", String(init.opReason).trim());
   }
 
   let res: Response;
@@ -114,7 +118,7 @@ async function handleRequest<T>(
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+export async function apiFetch<T>(path: string, init?: ApiRequestInit): Promise<ApiResult<T>> {
   return handleRequest<T>(path, init);
 }
 
@@ -217,7 +221,7 @@ export async function uploadFileWithProgress(
   });
 }
 
-export async function apiFetchBlob(path: string, init?: RequestInit): Promise<ApiResult<BlobResult>> {
+export async function apiFetchBlob(path: string, init?: ApiRequestInit): Promise<ApiResult<BlobResult>> {
   return handleRequest(path, init, true);
 }
 
