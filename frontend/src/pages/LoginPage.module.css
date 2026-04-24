@@ -160,6 +160,25 @@
   }
 }
 
+.formCard {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .rightPanel {
+    padding: 20px 12px;
+  }
+  .mobileLogo {
+    margin-bottom: 24px;
+  }
+  .formCard {
+    padding: 18px;
+  }
+  .formTitle {
+    font-size: 20px;
+  }
+}
+
 .mobileLogo {
   display: none;
   align-items: center;

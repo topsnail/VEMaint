@@ -6,7 +6,8 @@ export const TABLE_STICKY_OFFSET_HEADER = 48;
 /** 列表页：1080p 下预留 PageContainer、筛选区、分页等后的可视高度 */
 export const listTableScroll: NonNullable<TableProps<unknown>["scroll"]> = {
   x: "max-content",
-  y: "calc(100vh - 320px)",
+  // 避免在手机端出现负值/过小导致表格不可滚动
+  y: "max(280px, calc(100vh - 360px))",
 };
 
 export const listTableSticky: NonNullable<TableProps<unknown>["sticky"]> = {

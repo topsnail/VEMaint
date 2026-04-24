@@ -22,6 +22,7 @@ import { AttachmentViewer } from "../components/AttachmentViewer";
 import { AttachmentRefreshButton } from "../components/AttachmentRefreshButton";
 import { requestOperationReason } from "../lib/operationReason";
 import { normalizeDropdownOptions } from "../lib/options";
+import { useMediaQuery } from "../lib/useMediaQuery";
 import {
   buildInsurancePayload,
   calcAnnualExpiry,
@@ -100,6 +101,7 @@ const EDIT_TAB_ORDER = ["basic", "insurance", "annual", "maint"] as const;
 
 export function VehiclesPage({ canManage }: { canManage: boolean }) {
   const { message } = App.useApp();
+  const isNarrow = useMediaQuery("(max-width: 768px)");
   const initialParams = new URLSearchParams(window.location.search);
   const { rows, setRows, cyclesByVehicleId, setCyclesByVehicleId, dropdowns, ownerDirectory, loading: listLoading, load, loadDropdowns } = useVehiclesTableData();
   const [q, setQ] = useState(() => initialParams.get("q") ?? "");
@@ -1318,7 +1320,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
         centered
         onCancel={() => setViewOpen(false)}
         footer={null}
-        width={920}
+        width={isNarrow ? "calc(100vw - 16px)" : 920}
         className="ve-vehicles-modal"
       >
         {viewVehicle ? (
@@ -1712,7 +1714,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             </Button>
           </Space>
         }
-        width={920}
+        width={isNarrow ? "calc(100vw - 16px)" : 920}
         className="ve-vehicles-modal"
       >
         <div ref={editScrollWrapRef} className="max-h-[70vh] overflow-y-auto p-3 sm:p-4">

@@ -21,6 +21,7 @@ import { actionBtn } from "../lib/ui/buttonTokens";
 import type { MaintenanceRecord } from "../types";
 import { requestOperationReason } from "../lib/operationReason";
 import { normalizeDropdownOptions } from "../lib/options";
+import { useMediaQuery } from "../lib/useMediaQuery";
 
 type FormModel = {
   targetType: "vehicle" | "equipment" | "other";
@@ -63,6 +64,7 @@ export function MaintenancePage({
   view?: MaintenanceViewMode;
 }) {
   const { message } = App.useApp();
+  const isNarrow = useMediaQuery("(max-width: 768px)");
   const location = useLocation();
   const currentUserName = getUser()?.username ?? "当前用户";
   const { rows, setRows, vehicles, dropdowns, loading: pageLoading, savePending, removePending, load, loadDropdowns, removeRecord, saveRecord } = useMaintenancePageData();
@@ -530,7 +532,7 @@ export function MaintenancePage({
         title={editModalTitle}
         open={open}
         centered
-        width={920}
+        width={isNarrow ? "calc(100vw - 16px)" : 920}
         className="ve-maintenance-modal"
         onCancel={requestCloseEditModal}
         footer={
