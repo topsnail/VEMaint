@@ -1,9 +1,10 @@
-# 【项目英文/中文名称】
+# VEMaint（车辆/设备维保管理）
+
 ## 📋 项目简介
-- 项目定位：`【项目名称】` 是一个部署在 Cloudflare Pages 的车辆与设备维保管理 Web 应用，用于统一管理台账、维保记录、预警提醒、附件资料、权限与操作日志。
-- 核心场景：适用于 `【企业车队管理】`、`【设备维保登记】`、`【后勤保障管理】`、`【轻量级运维台账系统】`，目标用户包括管理员、维保人员、只读人员。
-- 技术亮点：前端基于 React + TypeScript + shadcn/ui，后端基于 Pages Functions + Hono，结合 D1/KV/R2 提供轻量全栈能力；支持角色权限、结构化表单校验、附件上传、数据导出与日志审计；依托 Cloudflare Pages 具备免费额度、全球加速、边缘部署、无服务器运维优势。
-- 部署平台：Cloudflare Pages
+
+- **用途**：车辆与设备维保管理 Web 应用（Cloudflare Pages 一体化部署），用于统一管理台账、维保记录、到期预警、附件资料、角色权限与操作日志。
+- **适用场景**：企业车队管理、设备维保登记、后勤保障管理、轻量级运维台账系统。
+- **部署形态**：前端静态站点 + Pages Functions（API）+ D1（数据库）+ KV（系统配置/黑名单等）+ R2（附件存储）。
 
 ## 🛠 技术栈
 - 前端技术：React 18、TypeScript、Vite、Tailwind CSS、shadcn/ui、React Router、TanStack Query、React Hook Form、Zod
@@ -12,9 +13,9 @@
 - 其他依赖：Hono、JOSE、Lucide React、GSAP、Sonner
 
 ## 📁 项目目录结构
-展示精简清晰的目录结构，标注核心文件/文件夹用途，突出CF Pages专属配置文件（如_headers、_redirects、functions文件夹等）
+
 ```plain text
-【项目文件夹名】
+VEMaint
 ├── frontend/                  # 前端源码（React + Vite）
 │   ├── index.html             # 前端 HTML 入口
 │   └── src/
@@ -43,78 +44,58 @@
 ```
 
 ## ⚙️ 环境准备
-1. 必备环境：安装 Node.js（LTS版本）、Git
-2. Cloudflare准备：注册Cloudflare账号、绑定域名（可选）、创建CF Pages项目
-3. 本地调试工具：全局安装Wrangler（CF官方调试工具），附安装命令
+
+- **必备**：Node.js（LTS）、Git
+- **Cloudflare**：需要 Cloudflare 账号；域名可选（不绑定也能用 `*.pages.dev`）
+- **Wrangler**：Cloudflare 官方 CLI（本地联调/部署/操作 D1/KV/R2 都要用）
+
 ```bash
 npm install -g wrangler
 ```
-4. 依赖安装：项目本地依赖安装命令
+
+- **安装依赖**
+
 ```bash
 npm install
 ```
 
 ## 🚀 本地开发与调试
-1. 克隆项目到本地（附Git克隆命令占位符）
-```bash
-git clone 【你的仓库地址】
-```
-2. 进入项目目录（附命令）
-```bash
-cd 【项目目录名】
-```
-3. 安装项目依赖（附命令）
-```bash
-npm install
-```
-4. 本地启动开发服务（附命令）
-```bash
-# 前端开发（仅界面）
-npm run dev
 
-# 前后端联调（Pages Functions + D1/KV/R2 模拟）
+- **启动方式 A（只跑前端 UI）**
+
+```bash
+npm run dev
+```
+
+- **启动方式 B（前后端联调：Pages Functions + D1/KV/R2 本地模拟）**
+
+```bash
 npm run pages:dev
 ```
-5. 本地访问地址
-- 前端开发地址：`http://127.0.0.1:5173`
-- Pages Functions 联调地址：`http://127.0.0.1:8788`
-6. Cloudflare相关资源本地调试方法
-- D1：执行 `npm run db:init:local` / `npm run db:migrate:local` / `npm run db:seed:local`
-- KV：由 Wrangler 本地模拟，绑定名需与 `wrangler.toml` 保持一致
-- R2：由 Wrangler 本地模拟，附件上传与读取依赖 `R2` 绑定
-- Functions：`npm run pages:dev` 会先构建 `dist` 再启动本地 Functions 网关
+
+- **访问地址**
+  - 前端：`http://127.0.0.1:5173`
+  - 联调（含 API）：`http://127.0.0.1:8788`
+
+- **本地数据准备（联调时建议执行）**
+
+```bash
+npm run dev:reset-data:local
+```
+
+该命令会依次初始化/迁移/导入 D1 数据，并写入本地 KV 默认配置，种子化本地 R2。
 
 ## ☁️ Cloudflare Pages 部署流程
-### Git仓库关联自动部署
-1. 代码推送至GitHub/GitLab
-- 将代码推送到 `【GitHub/GitLab 仓库】`（建议默认分支 `【main/master】`）
-2. Cloudflare Pages后台创建项目，关联对应仓库
-- 在 Cloudflare Dashboard -> Pages 创建 `【项目名称】` 并关联仓库
-3. 构建设置：构建命令、构建输出目录（按需填写，纯前端可留空）
-- 构建命令：`npm run build`
-- 构建输出目录：`dist`
-- 根目录：`/`
-4. 环境变量配置：CF后台添加项目所需环境变量
-- 添加 `AUTH_SECRET`
-- 添加 `BOOTSTRAP_ADMIN_USER`、`BOOTSTRAP_ADMIN_PASS`
-- 生产环境必须使用强随机密钥与强口令
-5. 绑定Cloudflare资源（D1/KV/R2）操作步骤
-- D1 绑定名：`DB`
-- KV 绑定名：`KV`
-- R2 绑定名：`R2`
-- 将 `【database_id】`、`【kv_namespace_id】`、`【bucket_name】` 替换为你的资源实例
-6. 完成部署，访问分配的域名
-- 部署成功后访问：`【https://your-project.pages.dev】`
-- 可在 Pages 后台继续绑定 `【自定义域名】`
+
+部署请看更详细的新手版文档：`DEPLOY.md`。
 
 ## 🔐 环境变量配置
-列出项目所有必需环境变量、含义、配置位置（CF Pages后台/本地），标注必填/可选
-
 | 变量名 | 必填 | 说明 | 本地配置位置 | Cloudflare Pages 配置位置 |
 | --- | --- | --- | --- | --- |
 | `AUTH_SECRET` | 是 | JWT 签名密钥，必须为高强度随机字符串 | `.dev.vars`（参考 `.dev.vars.example`） | Pages -> Settings -> Environment variables |
 | `BOOTSTRAP_ADMIN_USER` | 建议 | 初始化管理员用户名（系统无管理员时生效） | `.dev.vars`（参考 `.dev.vars.example`） | Pages -> Settings -> Environment variables |
 | `BOOTSTRAP_ADMIN_PASS` | 建议 | 初始化管理员密码（系统无管理员时生效） | `.dev.vars`（不建议入库） | Pages -> Settings -> Environment variables |
+| `LOG_RETENTION_DAYS` | 否 | 操作日志保留天数（默认 180，范围 30-3650） | `.dev.vars` | Pages -> Settings -> Environment variables |
 | `DB` | 是 | D1 数据库绑定名（非普通字符串变量） | `wrangler.toml` 的 `[[d1_databases]]` | Pages -> Settings -> Bindings -> D1 |
 | `KV` | 是 | KV 命名空间绑定名（配置与 token 黑名单） | `wrangler.toml` 的 `[[kv_namespaces]]` | Pages -> Settings -> Bindings -> KV |
 | `R2` | 是 | R2 存储桶绑定名（附件上传/读取） | `wrangler.toml` 的 `[[r2_buckets]]` | Pages -> Settings -> Bindings -> R2 |
