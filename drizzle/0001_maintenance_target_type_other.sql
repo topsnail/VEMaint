@@ -1,5 +1,4 @@
 PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
 
 CREATE TABLE IF NOT EXISTS maintenance_records_new (
   id TEXT PRIMARY KEY NOT NULL,
@@ -34,5 +33,4 @@ DROP TABLE maintenance_records;
 ALTER TABLE maintenance_records_new RENAME TO maintenance_records;
 CREATE INDEX IF NOT EXISTS idx_maintenance_vehicle_date ON maintenance_records(vehicle_id, maintenance_date);
 
-COMMIT;
 PRAGMA foreign_keys = ON;

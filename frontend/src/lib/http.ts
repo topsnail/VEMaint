@@ -60,7 +60,7 @@ async function handleRequest<T>(
     headers.set("X-CSRF-Token", csrfToken);
   }
   if (init?.opReason && String(init.opReason).trim()) {
-    headers.set("X-Op-Reason", String(init.opReason).trim());
+    headers.set("X-Op-Reason", encodeURIComponent(String(init.opReason).trim()));
   }
 
   let res: Response;

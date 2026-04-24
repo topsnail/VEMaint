@@ -1,6 +1,41 @@
 import { d1All, d1Run } from "../db/d1";
 import type { JwtUser, OperationLog } from "../types";
 
+type OperationLogColumns = {
+  ip: boolean;
+  userAgent: boolean;
+  reason: boolean;
+};
+
+let cachedColumns: OperationLogColumns | null = null;
+
+async function getOperationLogColumns(db: D1Database): Promise<OperationLogColumns> {
+  if (cachedColumns) return cachedColumns;
+  const cols = await d1All<{ name: string }>(db, "pragma table_info(operation_logs)");
+  const names = new Set(cols.map((c) => String(c.name)));
+  cachedColumns = {
+    ip: names.has("ip"),
+    userAgent: names.has("user_agent"),
+    reason: names.has("reason"),
+  };
+  return cachedColumns;
+}
+
+function selectColumnsSql(columns: OperationLogColumns) {
+  return [
+    "id",
+    "actor_user_id as actorUserId",
+    "actor_username as actorUsername",
+    "action",
+    "target",
+    "detail",
+    columns.ip ? "ip" : "null as ip",
+    columns.userAgent ? "user_agent as userAgent" : "null as userAgent",
+    columns.reason ? "reason" : "null as reason",
+    "created_at as createdAt",
+  ].join(",");
+}
+
 export async function writeOperationLog(
   db: D1Database,
   actor: JwtUser | null,
@@ -9,28 +44,42 @@ export async function writeOperationLog(
   detail: Record<string, unknown> | null = null,
   meta?: { ip?: string | null; userAgent?: string | null; reason?: string | null },
 ) {
+  const columns = await getOperationLogColumns(db);
+  const insertColumns = ["id", "actor_user_id", "actor_username", "action", "target", "detail"];
+  const values: unknown[] = [
+    crypto.randomUUID(),
+    actor?.userId ?? null,
+    actor?.username ?? null,
+    action,
+    target,
+    detail ? JSON.stringify(detail) : null,
+  ];
+  if (columns.ip) {
+    insertColumns.push("ip");
+    values.push(meta?.ip ?? null);
+  }
+  if (columns.userAgent) {
+    insertColumns.push("user_agent");
+    values.push(meta?.userAgent ?? null);
+  }
+  if (columns.reason) {
+    insertColumns.push("reason");
+    values.push(meta?.reason ?? null);
+  }
+  const placeholders = values.map((_, idx) => `?${idx + 1}`).join(",");
   await d1Run(
     db,
-    "insert into operation_logs (id,actor_user_id,actor_username,action,target,detail,ip,user_agent,reason,created_at) values (?1,?2,?3,?4,?5,?6,?7,?8,?9,datetime('now'))",
-    [
-      crypto.randomUUID(),
-      actor?.userId ?? null,
-      actor?.username ?? null,
-      action,
-      target,
-      detail ? JSON.stringify(detail) : null,
-      meta?.ip ?? null,
-      meta?.userAgent ?? null,
-      meta?.reason ?? null,
-    ],
+    `insert into operation_logs (${insertColumns.join(",")},created_at) values (${placeholders},datetime('now'))`,
+    values,
   );
 }
 
 export async function listOperationLogs(db: D1Database, limit = 200): Promise<OperationLog[]> {
+  const columns = await getOperationLogColumns(db);
   return await d1All<OperationLog>(
     db,
     `
-select id,actor_user_id as actorUserId,actor_username as actorUsername,action,target,detail,ip,user_agent as userAgent,reason,created_at as createdAt
+select ${selectColumnsSql(columns)}
 from operation_logs
 order by created_at desc
 limit ?1
@@ -55,6 +104,7 @@ export async function searchOperationLogs(
   db: D1Database,
   query: ListOperationLogsQuery,
 ): Promise<{ rows: OperationLog[]; total: number }> {
+  const columns = await getOperationLogColumns(db);
   const where: string[] = [];
   const params: unknown[] = [];
   const push = (v: unknown) => {
@@ -76,8 +126,16 @@ export async function searchOperationLogs(
   }
   if (query.q) {
     const p = push(`%${query.q.trim()}%`);
+    const qParts = [
+      `ifnull(actor_username,'') like ${p}`,
+      `ifnull(action,'') like ${p}`,
+      `ifnull(target,'') like ${p}`,
+      `ifnull(detail,'') like ${p}`,
+    ];
+    if (columns.reason) qParts.push(`ifnull(reason,'') like ${p}`);
+    if (columns.ip) qParts.push(`ifnull(ip,'') like ${p}`);
     where.push(
-      `(ifnull(actor_username,'') like ${p} or ifnull(action,'') like ${p} or ifnull(target,'') like ${p} or ifnull(detail,'') like ${p} or ifnull(reason,'') like ${p} or ifnull(ip,'') like ${p})`,
+      `(${qParts.join(" or ")})`,
     );
   }
   if (query.from) {
@@ -102,7 +160,7 @@ export async function searchOperationLogs(
   const rows = await d1All<OperationLog>(
     db,
     `
-select id,actor_user_id as actorUserId,actor_username as actorUsername,action,target,detail,ip,user_agent as userAgent,reason,created_at as createdAt
+select ${selectColumnsSql(columns)}
 from operation_logs
 ${whereSql}
 order by created_at desc

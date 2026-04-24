@@ -2,8 +2,18 @@ import type { Context } from "hono";
 import { jsonError } from "./response";
 import type { AppEnv } from "../types";
 
+function decodeHeaderValue(raw: string): string {
+  const text = String(raw ?? "").trim();
+  if (!text) return "";
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
 export function readOpReason(c: Context<AppEnv>): string | null {
-  const reason = (c.req.header("x-op-reason") ?? "").trim();
+  const reason = decodeHeaderValue(c.req.header("x-op-reason") ?? "").trim();
   return reason || null;
 }
 

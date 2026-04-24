@@ -9,7 +9,7 @@ import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 import { userCreateBodySchema, userDisabledBodySchema, userPasswordBodySchema, userRoleBodySchema } from "../lib/validation";
-import { requireOpReason } from "../lib/op-reason";
+import { readOpReason, requireOpReason } from "../lib/op-reason";
 
 export const usersRoute = new Hono<AppEnv>();
 usersRoute.use("/api/users/*", requireAuth, permitPerm("user.manage"));
@@ -18,7 +18,7 @@ usersRoute.use("/api/users", requireAuth, permitPerm("user.manage"));
 function getLogMeta(c: Context<AppEnv>) {
   const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
-  const reason = (c.req.header("x-op-reason") ?? "").trim() || null;
+  const reason = readOpReason(c);
   return { ip, userAgent, reason };
 }
 

@@ -10,7 +10,7 @@ import { normalizeUsername } from "../services/auth-users";
 import type { AppEnv } from "../types";
 import { writeOperationLog } from "../repositories/logs";
 import { loginBodySchema, profilePasswordBodySchema } from "../lib/validation";
-import { requireOpReason } from "../lib/op-reason";
+import { readOpReason, requireOpReason } from "../lib/op-reason";
 
 export const authRoute = new Hono<AppEnv>();
 
@@ -76,7 +76,7 @@ authRoute.post("/api/logout", requireAuth, async (c) => {
   await writeOperationLog(c.env.DB, c.get("auth"), "auth.logout", c.get("auth").userId, null, {
     ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
-    reason: (c.req.header("x-op-reason") ?? "").trim() || null,
+    reason: readOpReason(c),
   });
   return jsonOk(c, { ok: true });
 });
@@ -107,7 +107,7 @@ authRoute.put("/api/profile/password", requireAuth, async (c) => {
   await writeOperationLog(c.env.DB, me, "profile.password", me.userId, null, {
     ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
-    reason: (c.req.header("x-op-reason") ?? "").trim() || null,
+    reason: readOpReason(c),
   });
   return jsonOk(c, { ok: true });
 });

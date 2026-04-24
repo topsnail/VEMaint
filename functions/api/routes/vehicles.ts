@@ -8,7 +8,7 @@ import { getCycleByVehicleId, upsertCycle } from "../repositories/cycles";
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
 import { vehicleCycleUpsertBodySchema, vehicleStatusBodySchema, vehicleUpsertBodySchema } from "../lib/validation";
-import { requireOpReason } from "../lib/op-reason";
+import { readOpReason, requireOpReason } from "../lib/op-reason";
 
 export const vehiclesRoute = new Hono<AppEnv>();
 vehiclesRoute.use("/api/vehicles/*", requireAuth);
@@ -17,7 +17,7 @@ vehiclesRoute.use("/api/vehicles", requireAuth);
 function getLogMeta(c: Context<AppEnv>) {
   const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
-  const reason = (c.req.header("x-op-reason") ?? "").trim() || null;
+  const reason = readOpReason(c);
   return { ip, userAgent, reason };
 }
 

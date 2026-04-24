@@ -13,7 +13,7 @@ import {
 import { writeOperationLog } from "../repositories/logs";
 import type { AppEnv } from "../types";
 import { maintenanceUpsertBodySchema } from "../lib/validation";
-import { requireOpReason } from "../lib/op-reason";
+import { readOpReason, requireOpReason } from "../lib/op-reason";
 
 export const maintenanceRoute = new Hono<AppEnv>();
 maintenanceRoute.use("/api/maintenance/*", requireAuth);
@@ -22,7 +22,7 @@ maintenanceRoute.use("/api/maintenance", requireAuth);
 function getLogMeta(c: Context<AppEnv>) {
   const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
-  const reason = (c.req.header("x-op-reason") ?? "").trim() || null;
+  const reason = readOpReason(c);
   return { ip, userAgent, reason };
 }
 
