@@ -316,6 +316,7 @@ limit 5
 
   return jsonOk(c, {
     snapshotAt: new Date().toISOString(),
+    dropdowns: cfg.dropdowns ?? {},
     kpis: {
       vehicles: {
         total: Number(vehicleStatus?.total ?? 0),

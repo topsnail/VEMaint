@@ -7,6 +7,8 @@ import { listTableScroll, listTableSticky } from "../lib/tableConfig";
 import { Key, Trash2 } from "lucide-react";
 import { getUser } from "../lib/auth";
 import { requestOperationReason } from "../lib/operationReason";
+import { fetchSettingsSnapshot } from "../hooks/useSettingsDropdowns";
+import { useQuery } from "@tanstack/react-query";
 
 type Model = { username: string; password: string; role: "admin" | "maintainer" | "reader" };
 type RoleTemplate = "admin" | "maintainer" | "reader";
@@ -21,6 +23,32 @@ export function UsersPage() {
   const [pwdModalOpen, setPwdModalOpen] = useState(false);
   const [pwdUserId, setPwdUserId] = useState<string | null>(null);
   const [pwdForm] = Form.useForm<{ password: string }>();
+  const settingsQuery = useQuery({ queryKey: ["settings-snapshot"], queryFn: fetchSettingsSnapshot, refetchOnWindowFocus: false });
+  const dropdowns = settingsQuery.data?.dropdowns ?? {};
+  const roleLabels = {
+    admin: dropdowns.userRole?.[0] ?? "管理员",
+    maintainer: dropdowns.userRole?.[1] ?? "维保员",
+    reader: dropdowns.userRole?.[2] ?? "只读用户",
+  } as const;
+  const roleOptions = [
+    { value: "admin", label: roleLabels.admin },
+    { value: "maintainer", label: roleLabels.maintainer },
+    { value: "reader", label: roleLabels.reader },
+  ] as const;
+  const roleTemplateOptions = [
+    {
+      value: "admin",
+      label: `${roleLabels.admin}${dropdowns.userRoleTemplateSuffix?.[0] ?? "（全权限）"}`,
+    },
+    {
+      value: "maintainer",
+      label: `${roleLabels.maintainer}${dropdowns.userRoleTemplateSuffix?.[1] ?? "（可录入/编辑维保与周期）"}`,
+    },
+    {
+      value: "reader",
+      label: `${roleLabels.reader}${dropdowns.userRoleTemplateSuffix?.[2] ?? "（仅查看）"}`,
+    },
+  ] as const;
 
   useEffect(() => {
     void load();
@@ -115,11 +143,7 @@ export function UsersPage() {
                     className="ve-role-select"
                     style={{ width: 140 }}
                     onChange={(v) => onChangeRole(r.id, v)}
-                    options={[
-                      { value: "admin", label: "管理员" },
-                      { value: "maintainer", label: "维保员" },
-                      { value: "reader", label: "只读用户" },
-                    ]}
+                    options={roleOptions as unknown as Array<{ value: string; label: string }>}
                   />
                 ),
               },
@@ -198,22 +222,14 @@ export function UsersPage() {
                   setRoleTemplate(v);
                   form.setFieldValue("role", v);
                 }}
-                options={[
-                  { value: "admin", label: "管理员（全权限）" },
-                  { value: "maintainer", label: "维保员（可录入/编辑维保与周期）" },
-                  { value: "reader", label: "只读用户（仅查看）" },
-                ]}
+                options={roleTemplateOptions as unknown as Array<{ value: string; label: string }>}
               />
             </Form.Item>
             <Form.Item label="角色" name="role" initialValue="reader" rules={[{ required: true }]}>
               <Select
                 className="ve-select"
                 placeholder="请选择角色"
-                options={[
-                  { value: "admin", label: "管理员" },
-                  { value: "maintainer", label: "维保员" },
-                  { value: "reader", label: "只读用户" },
-                ]}
+                options={roleOptions as unknown as Array<{ value: string; label: string }>}
               />
             </Form.Item>
           </Form>

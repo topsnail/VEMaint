@@ -34,9 +34,9 @@ export const PendingAlertItem: React.FC<PendingAlertItemProps> = React.memo(({ i
             className="h-6 w-auto min-w-[84px] text-xs"
             value={item.actionStatus === "processing" ? "processing" : item.actionStatus === "resolved" ? "resolved" : "open"}
             options={[
-              { value: "open", label: "待处理" },
-              { value: "processing", label: "处理中" },
-              { value: "resolved", label: "已处理" },
+              { value: "open", label: (item as any).actionStatusLabels?.[0] ?? "待处理" },
+              { value: "processing", label: (item as any).actionStatusLabels?.[1] ?? "处理中" },
+              { value: "resolved", label: (item as any).actionStatusLabels?.[2] ?? "已处理" },
             ]}
             onChange={(v) => onUpdateStatus(v)}
           />

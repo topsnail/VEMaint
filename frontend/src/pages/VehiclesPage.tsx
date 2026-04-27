@@ -324,11 +324,17 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     return <Select allowClear showSearch options={options.map((v) => ({ label: v, value: v }))} placeholder={placeholder} />;
   };
 
+  const statusLabels = {
+    normal: dropdowns.vehicleStatus?.[0] ?? "正常",
+    repairing: dropdowns.vehicleStatus?.[1] ?? "维修中",
+    stopped: dropdowns.vehicleStatus?.[2] ?? "停用",
+    scrapped: dropdowns.vehicleStatus?.[3] ?? "报废",
+  } as const;
   const statusOptions = [
-    { label: "正常", value: "normal" },
-    { label: "维修中", value: "repairing" },
-    { label: "停用", value: "stopped" },
-    { label: "报废", value: "scrapped" },
+    { label: statusLabels.normal, value: "normal" },
+    { label: statusLabels.repairing, value: "repairing" },
+    { label: statusLabels.stopped, value: "stopped" },
+    { label: statusLabels.scrapped, value: "scrapped" },
   ] as const;
   const vehicleTypeOptions = normalizeDropdownOptions(dropdowns.vehicleType, ["轿车", "SUV", "客车", "货车", "面包车", "工程车", "特种车", "其他"]).map(
     (v) => ({ label: v, value: v }),
@@ -341,10 +347,10 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     value: v,
   }));
   const statusMeta: Record<Vehicle["status"], { color: string; label: string }> = {
-    normal: { color: "green", label: "正常" },
-    repairing: { color: "orange", label: "维修中" },
-    stopped: { color: "default", label: "停用" },
-    scrapped: { color: "red", label: "报废" },
+    normal: { color: "green", label: statusLabels.normal },
+    repairing: { color: "orange", label: statusLabels.repairing },
+    stopped: { color: "default", label: statusLabels.stopped },
+    scrapped: { color: "red", label: statusLabels.scrapped },
   };
 
   const vehicleStatusTone = (status: Vehicle["status"]): "success" | "warning" | "danger" | "neutral" => {
@@ -512,26 +518,30 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("create") !== "1" || !canManage) return;
-    setEditing(null);
-    form.resetFields();
-    resetRhf({
-      plateNo: DEFAULT_PLATE_NO_PREFIX,
-      vehicleType: "",
-      brandModel: "",
-      vin: "",
-      engineNo: "",
-      ownerDept: "",
-      ownerPerson: "",
-      mileage: 0,
-      status: "normal",
-    });
-    setEditDirty(false);
-    setOpen(true);
+    const openCreateFromQuery = async () => {
+      await loadDropdowns();
+      setEditing(null);
+      form.resetFields();
+      resetRhf({
+        plateNo: DEFAULT_PLATE_NO_PREFIX,
+        vehicleType: "",
+        brandModel: "",
+        vin: "",
+        engineNo: "",
+        ownerDept: "",
+        ownerPerson: "",
+        mileage: 0,
+        status: "normal",
+      });
+      setEditDirty(false);
+      setOpen(true);
+    };
+    void openCreateFromQuery();
     params.delete("create");
     const next = params.toString();
     const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [canManage, form]);
+  }, [canManage, form, loadDropdowns, resetRhf]);
 
   const submit = async (opts?: { continueCreate?: boolean }) => {
     try {
@@ -762,6 +772,10 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     setEditTab("basic");
     setOpen(true);
   };
+  const openCreateModal = async () => {
+    await loadDropdowns();
+    resetCreateForm();
+  };
 
   const setStatus = async (id: string, status: Vehicle["status"]) => {
     const reason = await requestOperationReason("请输入变更车辆状态的理由");
@@ -777,6 +791,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
     tab: "basic" | "insurance" | "annual" | "maint" = "basic",
     scrollTo: "insuranceUpload" | "drivingLicenseUpload" | null = null,
   ) => {
+    void loadDropdowns();
     const splitCombined = (text: string | null | undefined) => {
       const parts = (text ?? "")
         .split("/")
@@ -1119,7 +1134,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             className={actionBtn.primary}
             onClick={() => {
               setEditing(null);
-              resetCreateForm();
+              void openCreateModal();
             }}
           >
             新增车辆
@@ -1149,12 +1164,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             placeholder="状态"
             value={filterStatus || undefined}
             onChange={(v) => setFilterStatus(v ?? "")}
-            options={[
-              { label: "正常", value: "normal" },
-              { label: "维修中", value: "repairing" },
-              { label: "停用", value: "stopped" },
-              { label: "报废", value: "scrapped" },
-            ]}
+            options={statusOptions as unknown as Array<{ label: string; value: string }>}
           />
           <Select
             className="ve-vehicles-filter"
@@ -1179,10 +1189,10 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             value={filterNearDue || undefined}
             onChange={(v) => setFilterNearDue(v ?? "")}
             options={[
-              { label: "已逾期", value: "overdue" },
-              { label: "7天内", value: "within7" },
-              { label: "30天内", value: "within30" },
-              { label: "全部临期", value: "due" },
+              { label: dropdowns.vehicleDueLevel?.[0] ?? "已逾期", value: "overdue" },
+              { label: dropdowns.vehicleDueLevel?.[1] ?? "7天内", value: "within7" },
+              { label: dropdowns.vehicleDueLevel?.[2] ?? "30天内", value: "within30" },
+              { label: dropdowns.vehicleDueLevel?.[3] ?? "全部临期", value: "due" },
             ]}
           />
           <Select
@@ -1191,7 +1201,7 @@ export function VehiclesPage({ canManage }: { canManage: boolean }) {
             placeholder="台账缺项"
             value={filterIncomplete || undefined}
             onChange={(v) => setFilterIncomplete(v ?? "")}
-            options={[{ label: "仅看不完整", value: "yes" }]}
+            options={[{ label: dropdowns.vehicleIncompleteOnly?.[0] ?? "仅看不完整", value: "yes" }]}
           />
           <Button
             className={actionBtn.neutral}

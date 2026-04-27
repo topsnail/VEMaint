@@ -14,9 +14,10 @@ type MaintenanceBasicSectionProps = {
   form: FormInstance;
   vehicles: VehicleOption[];
   equipmentNameOptions: SelectOption[];
-  equipmentTypeOptions: SelectOption[];
   equipmentCategoryOptions: SelectOption[];
+  equipmentCategoryByName: Record<string, string>;
   maintenanceTypeOptions: SelectOption[];
+  maintenanceTargetTypeOptions: SelectOption[];
   fixedTargetType?: "vehicle" | "equipment";
 };
 
@@ -24,9 +25,10 @@ export function MaintenanceBasicSection({
   form,
   vehicles,
   equipmentNameOptions,
-  equipmentTypeOptions,
   equipmentCategoryOptions,
+  equipmentCategoryByName,
   maintenanceTypeOptions,
+  maintenanceTargetTypeOptions,
   fixedTargetType,
 }: MaintenanceBasicSectionProps) {
   useEffect(() => {
@@ -56,11 +58,7 @@ export function MaintenanceBasicSection({
             rules={[{ required: true }]}
           >
             <Select
-              options={[
-                { value: "vehicle", label: "车辆" },
-                { value: "equipment", label: "设备" },
-                { value: "other", label: "其他" },
-              ]}
+              options={maintenanceTargetTypeOptions}
               placeholder="请选择关联类型"
             />
           </Form.Item>
@@ -85,6 +83,20 @@ export function MaintenanceBasicSection({
                   options={equipmentNameOptions}
                   placeholder={fixedTargetType === "equipment" ? "请选择或输入设备名称" : "请选择或输入设备/其他对象名称"}
                   filterOption={(inputValue, option) => (option?.value ?? "").toString().toLowerCase().includes(inputValue.trim().toLowerCase())}
+                  onSelect={(value) => {
+                    const normalizedName = String(value ?? "").replace(/\s+/g, " ").trim();
+                    if (normalizedName) {
+                      form.setFieldValue("equipmentName", normalizedName);
+                      const nextCategory = equipmentCategoryByName[normalizedName];
+                      if (nextCategory) form.setFieldValue("equipmentCategory", nextCategory);
+                    }
+                  }}
+                  onBlur={(event) => {
+                    const normalizedName = String(event?.target?.value ?? "").replace(/\s+/g, " ").trim();
+                    form.setFieldValue("equipmentName", normalizedName);
+                    const nextCategory = equipmentCategoryByName[normalizedName];
+                    if (nextCategory) form.setFieldValue("equipmentCategory", nextCategory);
+                  }}
                 />
               </Form.Item>
             )
@@ -94,18 +106,24 @@ export function MaintenanceBasicSection({
       <Form.Item noStyle shouldUpdate>
         {({ getFieldValue }) =>
           getFieldValue("targetType") === "equipment" ? (
-            <>
-              <Col span={12}>
-                <Form.Item label="设备类型" name="equipmentType">
-                  <Select allowClear options={equipmentTypeOptions} placeholder="选择设备类型（可选）" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item label="设备分类" name="equipmentCategory">
-                  <Select allowClear options={equipmentCategoryOptions} placeholder="选择设备分类（可选）" />
-                </Form.Item>
-              </Col>
-            </>
+            <Col span={12}>
+              <Form.Item
+                label="设备分类"
+                name="equipmentCategory"
+                rules={[
+                  {
+                    validator: async (_, value) => {
+                      if (getFieldValue("targetType") !== "equipment") return Promise.resolve();
+                      return String(value ?? "").trim()
+                        ? Promise.resolve()
+                        : Promise.reject(new Error("请选择设备分类"));
+                    },
+                  },
+                ]}
+              >
+                <Select showSearch allowClear options={equipmentCategoryOptions} placeholder="请选择设备分类" />
+              </Form.Item>
+            </Col>
           ) : null
         }
       </Form.Item>

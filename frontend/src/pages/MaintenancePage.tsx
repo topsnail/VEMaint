@@ -27,7 +27,6 @@ type FormModel = {
   targetType: "vehicle" | "equipment" | "other";
   vehicleId?: string;
   equipmentName?: string;
-  equipmentType?: string;
   equipmentCategory?: string;
   maintenanceType: "routine" | "fault" | "accident" | "periodic";
   maintenanceDate: string | Dayjs;
@@ -118,17 +117,21 @@ export function MaintenancePage({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("create") !== "1" || !canEdit) return;
-    setEditing(null);
-    form.resetFields();
-    if (view === "vehicle" || view === "equipment") {
-      form.setFieldValue("targetType", view);
-    }
-    setOpen(true);
+    const openFromQuery = async () => {
+      await loadDropdowns();
+      setEditing(null);
+      form.resetFields();
+      if (view === "vehicle" || view === "equipment") {
+        form.setFieldValue("targetType", view);
+      }
+      setOpen(true);
+    };
+    void openFromQuery();
     params.delete("create");
     const next = params.toString();
     const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [canEdit, form, view]);
+  }, [canEdit, form, loadDropdowns, view]);
   useEffect(() => {
     viewRecordRef.current = viewRecord;
   }, [viewRecord]);
@@ -153,24 +156,51 @@ export function MaintenancePage({
     value: code,
     label: maintenanceTypeLabels[idx] ?? maintenanceTypeDefaults[idx],
   }));
+  const maintenanceTargetTypeOptions = [
+    { value: "vehicle", label: dropdowns.maintenanceTargetType?.[0] ?? "车辆" },
+    { value: "equipment", label: dropdowns.maintenanceTargetType?.[1] ?? "设备" },
+    { value: "other", label: dropdowns.maintenanceTargetType?.[2] ?? "其他" },
+  ];
   const itemDescOptions = [
-    { value: "保养", label: "保养" },
-    { value: "维修", label: "维修" },
-    { value: "其他", label: "其他" },
+    { value: "保养", label: dropdowns.itemDesc?.[0] ?? "保养" },
+    { value: "维修", label: dropdowns.itemDesc?.[1] ?? "维修" },
+    { value: "其他", label: dropdowns.itemDesc?.[2] ?? "其他" },
   ];
   const resultStatusOptions = [
-    { value: "resolved", label: "已修复" },
-    { value: "temporary", label: "临时处理" },
-    { value: "pending", label: "待复查" },
+    { value: "resolved", label: (dropdowns.resultStatus?.[0] ?? "已修复") },
+    { value: "temporary", label: (dropdowns.resultStatus?.[1] ?? "临时处理") },
+    { value: "pending", label: (dropdowns.resultStatus?.[2] ?? "待复查") },
   ];
   const equipmentNameOptions = normalizeDropdownOptions(dropdowns.equipmentName, ["空压机", "发电机", "液压泵", "叉车", "其他设备"]).map((v) => ({
     label: v,
     value: v,
   }));
-  const equipmentTypeOptions = normalizeDropdownOptions(dropdowns.equipmentType, ["动力设备", "液压设备", "搬运设备", "电气设备", "其他"]).map((v) => ({
-    label: v,
-    value: v,
-  }));
+  const equipmentCategoryByName = useMemo(() => {
+    const pairs = new Map<string, string>();
+    for (const row of rows) {
+      if (row.targetType !== "equipment") continue;
+      const name = String(row.equipmentName ?? "").replace(/\s+/g, " ").trim();
+      if (!name) continue;
+      const parsed = parseRemarkMeta(row.remark);
+      const category = String(parsed.equipmentCategory ?? "").trim();
+      if (!category) continue;
+      // rows 默认按更新时间排序，首次命中优先最近使用
+      if (!pairs.has(name)) pairs.set(name, category);
+    }
+    return Object.fromEntries(pairs);
+  }, [rows]);
+  const mergedEquipmentNameOptions = useMemo(() => {
+    const recentNames: string[] = [];
+    for (const row of rows) {
+      if (row.targetType !== "equipment") continue;
+      const name = String(row.equipmentName ?? "").replace(/\s+/g, " ").trim();
+      if (!name || recentNames.includes(name)) continue;
+      recentNames.push(name);
+    }
+    const merged = [...recentNames, ...equipmentNameOptions.map((x) => x.value)];
+    const uniq = merged.filter((v, i) => merged.indexOf(v) === i);
+    return uniq.map((v) => ({ label: v, value: v }));
+  }, [rows, equipmentNameOptions]);
   const equipmentCategoryOptions = normalizeDropdownOptions(dropdowns.equipmentCategory, ["生产", "保障", "检测", "安防", "其他"]).map((v) => ({
     label: v,
     value: v,
@@ -245,7 +275,6 @@ export function MaintenancePage({
           laborCost: v.laborCost,
           materialCost: effectiveMaterial,
           miscCost: v.miscCost,
-          equipmentType: v.targetType === "equipment" ? v.equipmentType : undefined,
           equipmentCategory: v.targetType === "equipment" ? v.equipmentCategory : undefined,
           resultStatus: v.resultStatus,
           partDetails: v.partDetails,
@@ -312,7 +341,6 @@ export function MaintenancePage({
         laborCost: parsed.laborCost,
         materialCost: parsed.materialCost,
         miscCost: parsed.miscCost,
-        equipmentType: parsed.equipmentType,
         equipmentCategory: parsed.equipmentCategory,
         resultStatus: parsed.resultStatus,
         partDetails: parsed.partDetails,
@@ -350,7 +378,17 @@ export function MaintenancePage({
   };
 
   const handleEditOpen = (record: MaintenanceRecord) => {
+    void loadDropdowns();
     setEditing(record);
+    setEditDirty(false);
+    setEditTab("basic");
+    setOpen(true);
+  };
+  const openCreateModal = async () => {
+    await loadDropdowns();
+    setEditing(null);
+    form.resetFields();
+    form.setFieldValue("targetType", defaultCreateTargetType);
     setEditDirty(false);
     setEditTab("basic");
     setOpen(true);
@@ -416,14 +454,7 @@ export function MaintenancePage({
           <Button
             type="primary"
             className={actionBtn.primary}
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              form.setFieldValue("targetType", defaultCreateTargetType);
-              setEditDirty(false);
-              setEditTab("basic");
-              setOpen(true);
-            }}
+            onClick={() => void openCreateModal()}
           >
             {createBtnLabel}
           </Button>
@@ -453,11 +484,7 @@ export function MaintenancePage({
               onChange={(v) => listView.setFilterTargetType(v ?? "")}
               placeholder="对象类型"
               allowClear
-              options={[
-                { label: "车辆", value: "vehicle" },
-                { label: "设备", value: "equipment" },
-                { label: "其他", value: "other" },
-              ]}
+              options={maintenanceTargetTypeOptions}
             />
           ) : null}
           <Select
@@ -506,11 +533,11 @@ export function MaintenancePage({
               <Select
                 value={String(listView.pageSize)}
                 onChange={(v) => listView.setPageSize(Number(v))}
-                options={[
-                  { label: "10 / 页", value: "10" },
-                  { label: "20 / 页", value: "20" },
-                  { label: "50 / 页", value: "50" },
-                ]}
+                options={(() => {
+                  const labels = dropdowns.pageSize?.length ? dropdowns.pageSize : ["10 / 页", "20 / 页", "50 / 页"];
+                  const values = ["10", "20", "50"];
+                  return values.map((value, idx) => ({ value, label: labels[idx] ?? `${value} / 页` }));
+                })()}
                 className="w-[110px]"
               />
               <Button className={actionBtn.smallNeutral} disabled={listView.page <= 1} onClick={() => listView.setPage((p) => Math.max(1, p - 1))}>
@@ -589,10 +616,11 @@ export function MaintenancePage({
                   <MaintenanceBasicSection
                     form={form}
                     vehicles={vehicles}
-                    equipmentNameOptions={equipmentNameOptions}
-                    equipmentTypeOptions={equipmentTypeOptions}
+                    equipmentNameOptions={mergedEquipmentNameOptions}
                     equipmentCategoryOptions={equipmentCategoryOptions}
+                    equipmentCategoryByName={equipmentCategoryByName}
                     maintenanceTypeOptions={maintenanceTypeOptions}
+                    maintenanceTargetTypeOptions={maintenanceTargetTypeOptions}
                     fixedTargetType={view === "equipment" ? "equipment" : view === "vehicle" ? "vehicle" : undefined}
                   />
                 ),

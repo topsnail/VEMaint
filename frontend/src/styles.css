@@ -1967,7 +1967,11 @@ body {
   border-radius: 6px !important;
   border: 1px solid #e2e8f0 !important;
   transition: all 0.3s ease !important;
-  resize: vertical !important;
+  /* 覆盖 Textarea 组件默认 min-h[84px]，在配置页按单行展示更紧凑 */
+  min-height: 32px !important;
+  height: 32px !important;
+  resize: none !important;
+  overflow-y: hidden !important;
 }
 
 .ve-textarea:focus {

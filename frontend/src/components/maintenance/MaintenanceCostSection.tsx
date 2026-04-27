@@ -14,7 +14,7 @@ type MaintenanceCostSectionProps = {
 export function MaintenanceCostSection({ form, currentUserName, itemDescOptions, resultStatusOptions }: MaintenanceCostSectionProps) {
   return (
     <Row gutter={16}>
-      <Col span={24}>
+      <Col span={24} className="md:col-span-2">
         <Form.Item noStyle shouldUpdate>
           {() => {
             const labor = Number(form.getFieldValue("laborCost") ?? 0);
@@ -35,23 +35,21 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
             const quickTemplates = isVehicle ? ["更换机油机滤", "更换刹车片", "四轮定位/动平衡"] : ["更换滤芯", "电路排查", "润滑保养"];
 
             return (
-              <div className="mb-4 rounded-main border border-[#e5e7eb] bg-[#fafafa] px-3 py-3">
+              <div className="mb-4 w-full min-w-0 rounded-main border border-[#e5e7eb] bg-[#fafafa] px-3 py-3">
+                <Form.Item name="itemDesc" initialValue="保养" hidden>
+                  <Input />
+                </Form.Item>
                 <Row gutter={12}>
-                  <Col span={8}>
-                    <Form.Item label="项目" name="itemDesc" rules={[{ required: true, message: "请选择维保项目" }]} className="!mb-3">
-                      <Select options={itemDescOptions} placeholder="请选择项目" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item label={materialLabel} name="materialCost" className="!mb-3">
-                      <InputNumber min={0} precision={2} className="w-full" placeholder={isVehicle ? "配件费" : "部件/耗材费"} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item label={laborLabel} name="laborCost" className="!mb-3">
-                      <InputNumber min={0} precision={2} className="w-full" placeholder={isVehicle ? "工时费" : "人工/停机工时费"} />
-                    </Form.Item>
-                  </Col>
+                  <Form.Item name="materialCost" hidden>
+                    <InputNumber />
+                  </Form.Item>
+                  {isVehicle ? (
+                    <Col span={8}>
+                      <Form.Item label={laborLabel} name="laborCost" className="!mb-3">
+                        <InputNumber min={0} precision={2} className="w-full" placeholder="工时费" />
+                      </Form.Item>
+                    </Col>
+                  ) : null}
                   <Col span={8}>
                     <Form.Item label={miscLabel} name="miscCost" className="!mb-1">
                       <InputNumber min={0} precision={2} className="w-full" placeholder="其他费" />
@@ -195,7 +193,7 @@ export function MaintenanceCostSection({ form, currentUserName, itemDescOptions,
           }}
         </Form.Item>
       </Col>
-      <Col span={24}>
+      <Col span={24} className="md:col-span-2">
         <Form.Item noStyle shouldUpdate>
           {({ getFieldValue }) =>
             getFieldValue("itemDesc") === "其他" ? (

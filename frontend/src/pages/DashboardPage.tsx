@@ -112,6 +112,11 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
 
   const alerts = overview?.alerts ?? [];
   const pendingAlerts = overview?.pendingAlerts ?? [];
+  const actionStatusLabels = useMemo(() => {
+    const dict = overview?.dropdowns?.alertActionStatus ?? null;
+    if (Array.isArray(dict) && dict.length >= 3) return dict.slice(0, 3) as string[];
+    return ["待处理", "处理中", "已处理"] as string[];
+  }, [overview?.dropdowns]);
   const filteredAlerts = alerts.filter((a) => (alertLevelFilter === "all" ? true : a.level === alertLevelFilter));
   const filteredPendingAlerts = pendingAlerts.filter((a) => {
     if (pendingStatusFilter === "all") return true;
@@ -398,7 +403,7 @@ export function DashboardPage({ canHandleAlerts = false }: { canHandleAlerts?: b
                 renderItem={(a) => (
                   <PendingAlertItem
                     key={a.alertKey}
-                    item={a}
+                    item={{ ...(a as any), actionStatusLabels }}
                     canHandleAlerts={canHandleAlerts}
                     onUpdateStatus={(status) => updateAlertStatus(a.alertKey, status)}
                   />

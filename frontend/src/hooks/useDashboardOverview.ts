@@ -29,6 +29,7 @@ export type DashboardSearchResult = {
 
 export type DashboardOverview = {
   snapshotAt: string;
+  dropdowns?: Record<string, string[] | undefined>;
   kpis: {
     vehicles: {
       total: number;

@@ -8,6 +8,7 @@ import { apiFetch, downloadProtectedFile } from "../lib/http";
 import { safeJsonParse } from "../lib/safeJson";
 import { actionBtn } from "../lib/ui/buttonTokens";
 import { hasPerm, PERMISSION_GROUPS, PERMISSION_KEYS, normalizeRolePermissions, type PermissionKey, type RolePermissions } from "../lib/permissions";
+import { emitAppDataChanged } from "../lib/realtimeSync";
 import { MinusCircle, Plus, Users } from "lucide-react";
 
 type ConfigForm = {
@@ -17,11 +18,19 @@ type ConfigForm = {
   vehicleTypeOptions: string;
   energyTypeOptions: string;
   usageNatureOptions: string;
+  vehicleStatusOptions: string;
   maintenanceTypeOptions: string;
+  resultStatusOptions: string;
+  userRoleOptions: string;
   ownerDeptOptions: string;
   equipmentNameOptions: string;
-  equipmentTypeOptions: string;
   equipmentCategoryOptions: string;
+  vehicleDueLevelOptions: string;
+  vehicleIncompleteOnlyOptions: string;
+  alertActionStatusOptions: string;
+  pageSizeOptions: string;
+  itemDescOptions: string;
+  userRoleTemplateSuffixOptions: string;
 };
 
 type ConfigFormValues = ConfigForm & {
@@ -117,8 +126,16 @@ const FIXED_ENUMS: Array<{ key: string; label: string; options: string[] }> = [
 /** 使用部门（ownerDept）默认候选项，可在配置页修改 */
 const DEFAULT_OWNER_DEPT_OPTIONS = ["综合办公室", "工程一部", "工程二部", "工程三部", "后勤保障部", "通勤车队", "仓储物流部", "销售部", "物流部", "质检中心", "安全管理部", "信息化部"];
 const DEFAULT_EQUIPMENT_NAME_OPTIONS = ["空压机", "发电机", "液压泵", "叉车", "升降机", "焊机", "水泵", "安防主机", "空调机组", "变频柜", "传送带", "除尘机", "喷涂机", "锅炉", "冷却塔"];
-const DEFAULT_EQUIPMENT_TYPE_OPTIONS = ["动力设备", "液压设备", "搬运设备", "电气设备", "安防设备", "制冷设备", "传动设备", "环保设备", "公用设施", "其他"];
 const DEFAULT_EQUIPMENT_CATEGORY_OPTIONS = ["生产", "保障", "检测", "安防", "行政", "环保", "能源", "仓储", "其他"];
+const DEFAULT_RESULT_STATUS_OPTIONS = ["已修复", "临时处理", "待复查"];
+const DEFAULT_VEHICLE_STATUS_OPTIONS = ["正常", "维修中", "停用", "报废"];
+const DEFAULT_USER_ROLE_OPTIONS = ["管理员", "维保员", "只读用户"];
+const DEFAULT_VEHICLE_DUE_LEVEL_OPTIONS = ["已逾期", "7天内", "30天内", "全部临期"];
+const DEFAULT_VEHICLE_INCOMPLETE_ONLY_OPTIONS = ["仅看不完整"];
+const DEFAULT_ALERT_ACTION_STATUS_OPTIONS = ["待处理", "处理中", "已处理"];
+const DEFAULT_PAGE_SIZE_OPTIONS = ["10 / 页", "20 / 页", "50 / 页"];
+const DEFAULT_ITEM_DESC_OPTIONS = ["保养", "维修", "其他"];
+const DEFAULT_USER_ROLE_TEMPLATE_SUFFIX_OPTIONS = ["（全权限）", "（可录入/编辑维保与周期）", "（仅查看）"];
 
 function parseOptions(text: string): string[] {
   const seen = new Set<string>();
@@ -193,11 +210,21 @@ export function ConfigPage() {
       vehicleTypeOptions: toCommaSeparatedText(dropdowns.vehicleType ?? FIXED_ENUMS[0].options),
       energyTypeOptions: toCommaSeparatedText(dropdowns.energyType ?? FIXED_ENUMS[1].options),
       usageNatureOptions: toCommaSeparatedText(dropdowns.usageNature ?? FIXED_ENUMS[2].options),
+      vehicleStatusOptions: toCommaSeparatedText(dropdowns.vehicleStatus ?? DEFAULT_VEHICLE_STATUS_OPTIONS),
       maintenanceTypeOptions: toCommaSeparatedText(dropdowns.maintenanceType ?? FIXED_ENUMS[3].options),
+      resultStatusOptions: toCommaSeparatedText(dropdowns.resultStatus ?? DEFAULT_RESULT_STATUS_OPTIONS),
+      userRoleOptions: toCommaSeparatedText(dropdowns.userRole ?? DEFAULT_USER_ROLE_OPTIONS),
       ownerDeptOptions: toCommaSeparatedText(dropdowns.ownerDept ?? DEFAULT_OWNER_DEPT_OPTIONS),
       equipmentNameOptions: toCommaSeparatedText(dropdowns.equipmentName ?? DEFAULT_EQUIPMENT_NAME_OPTIONS),
-      equipmentTypeOptions: toCommaSeparatedText(dropdowns.equipmentType ?? DEFAULT_EQUIPMENT_TYPE_OPTIONS),
       equipmentCategoryOptions: toCommaSeparatedText(dropdowns.equipmentCategory ?? DEFAULT_EQUIPMENT_CATEGORY_OPTIONS),
+      vehicleDueLevelOptions: toCommaSeparatedText(dropdowns.vehicleDueLevel ?? DEFAULT_VEHICLE_DUE_LEVEL_OPTIONS),
+      vehicleIncompleteOnlyOptions: toCommaSeparatedText(dropdowns.vehicleIncompleteOnly ?? DEFAULT_VEHICLE_INCOMPLETE_ONLY_OPTIONS),
+      alertActionStatusOptions: toCommaSeparatedText(dropdowns.alertActionStatus ?? DEFAULT_ALERT_ACTION_STATUS_OPTIONS),
+      pageSizeOptions: toCommaSeparatedText(dropdowns.pageSize ?? DEFAULT_PAGE_SIZE_OPTIONS),
+      itemDescOptions: toCommaSeparatedText((dropdowns as any).itemDesc ?? DEFAULT_ITEM_DESC_OPTIONS),
+      userRoleTemplateSuffixOptions: toCommaSeparatedText(
+        (dropdowns as any).userRoleTemplateSuffix ?? DEFAULT_USER_ROLE_TEMPLATE_SUFFIX_OPTIONS,
+      ),
     });
   };
 
@@ -223,11 +250,19 @@ export function ConfigPage() {
         vehicleType: parseOptions(values.vehicleTypeOptions),
         energyType: parseOptions(values.energyTypeOptions),
         usageNature: parseOptions(values.usageNatureOptions),
+        vehicleStatus: parseOptions(values.vehicleStatusOptions),
         maintenanceType: parseOptions(values.maintenanceTypeOptions),
+        resultStatus: parseOptions(values.resultStatusOptions),
+        userRole: parseOptions(values.userRoleOptions),
         ownerDept: parseOptions(values.ownerDeptOptions),
         equipmentName: parseOptions(values.equipmentNameOptions),
-        equipmentType: parseOptions(values.equipmentTypeOptions),
         equipmentCategory: parseOptions(values.equipmentCategoryOptions),
+        vehicleDueLevel: parseOptions(values.vehicleDueLevelOptions),
+        vehicleIncompleteOnly: parseOptions(values.vehicleIncompleteOnlyOptions),
+        alertActionStatus: parseOptions(values.alertActionStatusOptions),
+        pageSize: parseOptions(values.pageSizeOptions),
+        itemDesc: parseOptions(values.itemDescOptions),
+        userRoleTemplateSuffix: parseOptions(values.userRoleTemplateSuffixOptions),
       },
       ownerDirectory,
       permissions: {
@@ -239,6 +274,7 @@ export function ConfigPage() {
     setRolePermissions(normalizedPermissions);
     // Normalize visible rows immediately after save.
     form.setFieldValue("ownerDirectory", ownerDirectory);
+    emitAppDataChanged(["settings"], "config:saved");
     message.success("保存成功");
   };
 
@@ -581,6 +617,22 @@ export function ConfigPage() {
                       <Input.TextArea rows={1} placeholder="例如：营运,非营运,公务,生产作业" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
+                      label="车辆状态"
+                      name="vehicleStatusOptions"
+                      rules={[
+                        { required: true, message: "请输入车辆状态字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 4
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("车辆状态建议并要求配置 4 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 4 项：正常,维修中,停用,报废" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
                       label="维保类型"
                       name="maintenanceTypeOptions"
                       rules={[
@@ -595,6 +647,38 @@ export function ConfigPage() {
                       ]}
                     >
                       <Input.TextArea rows={1} placeholder="建议固定 4 项：日常保养,故障维修,事故维修,定期检修" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="处理结果"
+                      name="resultStatusOptions"
+                      rules={[
+                        { required: true, message: "请输入处理结果字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 3
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("处理结果建议并要求配置 3 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 3 项：已修复,临时处理,待复查" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="用户角色"
+                      name="userRoleOptions"
+                      rules={[
+                        { required: true, message: "请输入用户角色字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 3
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("用户角色建议并要求配置 3 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 3 项：管理员,维保员,只读用户" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
                       label="使用部门"
@@ -615,18 +699,101 @@ export function ConfigPage() {
                       <Input.TextArea rows={1} placeholder="例如：空压机,发电机,液压泵,叉车,冷却塔" className="ve-textarea" />
                     </Form.Item>
                     <Form.Item
-                      label="设备类型"
-                      name="equipmentTypeOptions"
-                      rules={[{ required: true, message: "请输入设备类型字典" }, { validator: validateCommaSeparated }]}
-                    >
-                      <Input.TextArea rows={1} placeholder="例如：动力设备,液压设备,搬运设备,电气设备,公用设施" className="ve-textarea" />
-                    </Form.Item>
-                    <Form.Item
                       label="设备分类"
                       name="equipmentCategoryOptions"
                       rules={[{ required: true, message: "请输入设备分类字典" }, { validator: validateCommaSeparated }]}
                     >
                       <Input.TextArea rows={1} placeholder="例如：生产,保障,检测,安防,能源,仓储" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="车辆到期分级"
+                      name="vehicleDueLevelOptions"
+                      rules={[
+                        { required: true, message: "请输入到期分级字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 4
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("到期分级建议并要求配置 4 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 4 项：已逾期,7天内,30天内,全部临期" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="台账缺项筛选"
+                      name="vehicleIncompleteOnlyOptions"
+                      rules={[
+                        { required: true, message: "请输入台账缺项筛选字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 1
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("台账缺项筛选建议并要求配置 1 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 1 项：仅看不完整" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="告警处理状态"
+                      name="alertActionStatusOptions"
+                      rules={[
+                        { required: true, message: "请输入告警处理状态字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 3
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("告警处理状态建议并要求配置 3 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 3 项：待处理,处理中,已处理" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="每页条数"
+                      name="pageSizeOptions"
+                      rules={[
+                        { required: true, message: "请输入每页条数字典" },
+                        { validator: validateCommaSeparated },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定：10 / 页,20 / 页,50 / 页" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="项目（成本分类）"
+                      name="itemDescOptions"
+                      rules={[
+                        { required: true, message: "请输入项目字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 3
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("项目建议并要求配置 3 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 3 项：保养,维修,其他" className="ve-textarea" />
+                    </Form.Item>
+                    <Form.Item
+                      label="用户权限模板（后缀文案）"
+                      name="userRoleTemplateSuffixOptions"
+                      rules={[
+                        { required: true, message: "请输入权限模板后缀字典" },
+                        { validator: validateCommaSeparated },
+                        {
+                          validator: (_, value?: string) =>
+                            parseOptions(value ?? "").length === 3
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("权限模板后缀建议并要求配置 3 项")),
+                        },
+                      ]}
+                    >
+                      <Input.TextArea rows={1} placeholder="建议固定 3 项：（全权限）,（可录入/编辑维保与周期）,（仅查看）" className="ve-textarea" />
                     </Form.Item>
                     <Typography.Text type="secondary" className="mt-0.5 block">
                       所有人与住址：在台账中选择“所有人”后会自动填充对应“住址”；也可手动输入未建档对象。

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../lib/http";
 import { APP_DATA_CHANGED_EVENT, emitAppDataChanged, type AppDataChangedDetail } from "../lib/realtimeSync";
-import { fetchSettingsDropdowns } from "./useSettingsDropdowns";
+import { fetchSettingsSnapshot } from "./useSettingsDropdowns";
 import type { MaintenanceRecord, Vehicle } from "../types";
 
 const MAINTENANCE_AUTO_REFRESH_MS = 45_000;
@@ -27,8 +27,8 @@ export function useMaintenancePageData() {
   });
 
   const dropdownsQuery = useQuery({
-    queryKey: ["maintenance-dropdowns"],
-    queryFn: fetchSettingsDropdowns,
+    queryKey: ["settings-snapshot"],
+    queryFn: fetchSettingsSnapshot,
     refetchInterval: MAINTENANCE_AUTO_REFRESH_MS,
     refetchOnWindowFocus: false,
   });
@@ -71,7 +71,7 @@ export function useMaintenancePageData() {
 
   const rows = useMemo(() => baseQuery.data?.rows ?? [], [baseQuery.data?.rows]);
   const vehicles = useMemo(() => baseQuery.data?.vehicles ?? [], [baseQuery.data?.vehicles]);
-  const dropdowns = useMemo(() => dropdownsQuery.data ?? {}, [dropdownsQuery.data]);
+  const dropdowns = useMemo(() => dropdownsQuery.data?.dropdowns ?? {}, [dropdownsQuery.data?.dropdowns]);
 
   const load = useCallback(async () => {
     const next = await baseQuery.refetch();
